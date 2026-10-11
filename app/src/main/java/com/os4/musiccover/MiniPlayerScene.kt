@@ -95,7 +95,6 @@ internal object MiniPlayerScene {
         fullScreenAod = fullScreen
         aodActive = active
         DateStatus.onAodChanged()
-        MiniPlayerRuntime.onAodContentModeChanged()
         if (!active) MiniPlayerRuntime.aodEnded()
         MiniPlayerRuntime.refresh()
     }

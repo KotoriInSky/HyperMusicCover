@@ -265,8 +265,6 @@
     <string name="demo_transit_island_title">解锁后的超级岛</string>
     <string name="demo_transit_ride_title">逐站提醒</string>
     <string name="demo_transit_alert_title">换乘与到站</string>
-    <string name="mini_reduce_aod_updates">息屏时减少内容刷新</string>
-    <string name="mini_reduce_aod_updates_summary">每 30 秒刷新一次，歌词改为封面</string>
     <string name="pickup_title">取餐码</string>
     <string name="pickup_cloud_refresh">刷新取餐码云端规则</string>
     <string name="pickup_cloud_date">更新于 %1$s · %2$d 个小程序</string>

@@ -252,8 +252,6 @@
     <string name="demo_transit_island_title">The super island when unlocked</string>
     <string name="demo_transit_ride_title">Stop by stop</string>
     <string name="demo_transit_alert_title">Transfers and arrival</string>
-    <string name="mini_reduce_aod_updates">Reduce content updates in AOD</string>
-    <string name="mini_reduce_aod_updates_summary">Refresh every 30 seconds, with the artwork in place of the lyrics</string>
     <string name="pickup_title">Pickup code</string>
     <string name="pickup_cloud_refresh">Refresh pickup cloud rules</string>
     <string name="pickup_cloud_date">Updated %1$s · %2$d mini programs</string>
