@@ -663,16 +663,19 @@ final class AmapTransitCard {
     /** ya.b.b: 公交或地铁到站. A subway with an exit named puts the exit where 到站 would be. */
     private static Card arrivalCard(Trip t, Leg cur, String type, List<Node> overview) {
         String stop = P(t, cur);
-        // The exit's chip is drawn in the first overview stop's colour, and only when there is
-        // one - SceneService reads it out of the same overview, so a leg with no stops between
-        // its two ends has no colour to give it and keeps the plain 到站.
-        String lineColor = overview.isEmpty() ? "" : hex(overview.get(0).color);
+        // The exit's chip is drawn in the first overview stop's colour, which is the leg's own
+        // line colour. SceneService reads it out of that overview, so a leg with no stops between
+        // its two ends has none to read and keeps the plain 到站 - 坦尾 → 如意坊, the last leg of
+        // the 10-12 trip to 永庆坊, is one stop and drew no exit. Here the exit wins instead:
+        // with the overview empty the colour comes from the leg itself.
+        String lineColor = overview.isEmpty() ? hex(color(L(cur.lineBg)))
+                : hex(overview.get(0).color);
         String exit = trim(t.exitName);
         Card c = new Card();
         c.kind = Card.KIND_ARRIVAL;
         c.rightWhite = stop;
         c.primary = stop;
-        if (!subway(type) || lineColor.isEmpty() || exit.isEmpty()) {
+        if (!subway(type) || exit.isEmpty()) {
             c.leftIcon = true;
             c.leftWhite = "到站";
             c.secondary = "已到站";

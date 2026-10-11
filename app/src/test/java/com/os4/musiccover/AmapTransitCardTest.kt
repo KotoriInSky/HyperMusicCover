@@ -200,6 +200,55 @@ class AmapTransitCardTest {
         assertEquals("walk", c.kind)
     }
 
+    // -------------------------------------------- a last leg with no stop between its two ends
+
+    private val oneStopPlan = JSONObject("""{
+        "epoi":{"name":"永庆坊"},"expensetime":"3600",
+        "segmentlist":[{"bus_key_name":"6号线","bustype":"2","color":"741D51","directionName":"香雪",
+          "on_station":{"name":"坦尾"},"off_station":{"name":"如意坊"},
+          "via_st_list":[],"footlength":"60","foottime":"51",
+          "outport":{"name":"D口","shield":"D","coord":{"lon":"113.237","lat":"23.115"}}}]}""")
+
+    private val oneStopCaps = JSONArray("""[
+        {"capsuleType":"0","icon":"bus_foot_a","text":"","subText":"16"},
+        {"capsuleType":"2","text":"6号线","bgColor":"#741D51"}]""")
+
+    private fun lastRideCard(exit: String) = JSONObject()
+        .put("title", "乘坐 地铁6号线").put("mainText", "6号线").put("arrived", false)
+        .put("titleItems", JSONArray().put(t("1站")).put(t("后")).put(t(" · ")).put(t("如意坊"))
+            .also { if (exit.isNotEmpty()) it.put(t("($exit)")) }.put(t("出站")))
+        .put("location", JSONObject().put("index", 1).put("persent", 0.9).put("remainStations", 1))
+
+    @Test fun theExitIsKeptOnALastLegWithNoStopBetweenItsTwoEnds() {
+        val plan = oneStopPlan
+        assertTrue(AmapTransitEntity.fits(plan, oneStopCaps))
+        val card = lastRideCard("D口")
+        assertEquals("D口", AmapTransitEntity.exit(card))
+        // 到站 keeps the exit. ColorOS draws its plain 到站 here: the overview it takes the chip's
+        // colour from is empty when the leg has no stop between its two ends - 坦尾 → 如意坊, the
+        // last leg of 10-12's trip to 永庆坊, is that leg (user, 10-12).
+        var c = AmapTransitCard.of(AmapTransitCard.Trip.parse(AmapTransitEntity.build(plan,
+            oneStopCaps, card, 1, AmapTransitCard.ARRIVE_LINE_DESTINATION,
+            AmapTransitEntity.Live(0, 1.0, "如意坊", subwayTimes), null,
+            AmapTransitEntity.exit(card), AmapTransitEntity.sentence(card), "t")))!!
+        assertEquals("arrival", c.kind)
+        assertEquals("如意坊", c.primary)
+        assertEquals("D口", c.leftLine)
+        assertEquals("D口", c.secondaryLine)
+
+        // A card that names no exit at all: the plan's own outport answers instead, and the chip
+        // is drawn out of that.
+        val bare = lastRideCard("")
+        assertEquals("", AmapTransitEntity.exit(bare))
+        val entity = AmapTransitEntity.build(plan, oneStopCaps, bare, 1,
+            AmapTransitCard.ARRIVE_LINE_DESTINATION,
+            AmapTransitEntity.Live(0, 1.0, "如意坊", subwayTimes), null, "", "", "t")
+        assertEquals("D口", entity.optString("exitName"))
+        c = AmapTransitCard.of(AmapTransitCard.Trip.parse(entity))!!
+        assertEquals("arrival", c.kind)
+        assertEquals("D口", c.leftLine)
+    }
+
     /** The entity for capsule [current] with [status], as AmapTransitShare builds it. */
     private fun cardFor(card: JSONObject, current: Int, status: String,
                         live: AmapTransitEntity.Live?, walkNavi: JSONObject? = null): AmapTransitCard.Card {

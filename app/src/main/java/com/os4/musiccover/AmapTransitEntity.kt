@@ -107,6 +107,11 @@ internal object AmapTransitEntity {
         if (leg != null && AmapTransitCard.busOrSubway(leg.optString("transportType"))) {
             live(leg, live, fallback, card, exit, plan != null && fits)
         }
+        // The exit named for the leg being ridden: 高德's card words when they name one, else the
+        // plan's own `outport` for the stop the ride ends at. Either source can be missing - the
+        // 7号线 leg of 10-05 named 「(B口)」 in its card with no outport in the plan - so both are
+        // asked. AmapTransitCard.arrivalCard draws the chip even where ColorOS does not.
+        val named = exit.ifEmpty { offPort(leg) }
         val epoi = if (fits) plan!!.optJSONObject("epoi") else null
         val spoi = if (fits) plan!!.optJSONObject("spoi") else null
         // Without a plan the trip's end is only named by the card for the walk to it (or the one
@@ -121,7 +126,7 @@ internal object AmapTransitEntity {
             .put("naviInfo", navi)
             .put("originStation", spoi?.optString("name")?.trim().orEmpty())
             .put("destStation", dest)
-            .put("exitName", exit)
+            .put("exitName", named)
             .put("guideInfo", guide)
             .put("deepLink", card?.optString("scheme").orEmpty())
             .put("offRoute", card?.optBoolean("offRoute", false) == true)
@@ -309,6 +314,11 @@ internal object AmapTransitEntity {
             .put("coord", coord(p.optJSONObject("coord"))))
         return out
     }
+
+    /** The name of the exit the plan gives the stop [leg] ends at, 「」 when it gives none. */
+    private fun offPort(leg: JSONObject?): String =
+        leg?.optJSONObject("off_station")?.optJSONArray("port_list")
+            ?.optJSONObject(0)?.optString("name")?.trim().orEmpty()
 
     /** 高德's {lon, lat} strings as the entity's {lat, lng}. */
     private fun coord(c: JSONObject?): JSONObject {

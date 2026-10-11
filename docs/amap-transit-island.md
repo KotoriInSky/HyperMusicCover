@@ -197,6 +197,12 @@ NativesModuleWearable ── 103 卡 / 113 计划+实时 ──┐
 到站卡 `b`（地铁有出站口时左半是出站口色块）、终点卡 `ya.a`（「已到达 X / 全程N分钟」）、偏航卡 `ya.f`、步行卡 `ya.n.f`、路由 `GaoDePtNaviSceneRouter.j`。
 文案逐字取自 SceneService 的 `gaode_pt_*` 资源。离线测试：`AmapTransitCardTest`（10-05 真实行程 + 一个换乘计划，逐步断言）。
 
+**到站卡有一处故意偏离 ColorOS**（2026-10-12）：SceneService 拿"站点概览第一项"的线路色给出站口色块，
+而概览只由途经站组成，所以**这一段没有途经站就没色、退回「到站」+图标**（`ya.b.b` + `ya.b.l` 的 else 分支，
+真机同一场景也是这个行为）。坦尾 → 如意坊 就一站，到站时出站口被这条规矩压掉（用户报的"出站口位置显示成线号"）。
+我们这边出站口优先：概览为空时色取这一段自己的线路色，照样画口；同时 `exitName` 在卡片句子没点名时
+回落到计划 `segmentlist[].outport.name`（两个来源都可能缺，见 `AmapTransitEntity.build`）。
+
 ### 6.4 焦点通知：`AmapTransitIsland.kt`
 
 | ColorOS 卡片 | 澎湃 `param_v2`（scene `template_v2`） |
