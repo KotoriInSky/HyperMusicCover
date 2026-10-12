@@ -9324,14 +9324,20 @@ private class MiniPlayerController(
         if (editButtonUp()) return null
         val d = density()
         val xy = IntArray(2).also(view::getLocationOnScreen)
-        // From just above the pill to the bottom of the screen - a thumb starts a swipe low -
-        // and across to the torch and camera, which keep their own touches.
+        // Across to the torch and camera, which keep their own touches.
         val lx = buttonEdge(left, inner = true) ?: (xy[0] - 8f * d)
         val rx = buttonEdge(right, inner = false) ?: (xy[0] + view.width + 8f * d)
-        // Down to the bottom of the screen, but not from on the fingerprint sensor, which the
-        // row is lifted off where it lies under it (#66): a finger put there is unlocking.
+        // From just above the pill down to the foot of the screen - a thumb starts a swipe low.
+        // A row lifted off the sensor has left that room, though: unlifted it ends at the foot,
+        // where the pill itself is, but lifted the region down there took swipes the row was no
+        // longer under, and the islands switched from the bottom of the screen with the pill up
+        // in the air (#81). Lifted, it ends 12dp under the pill's own bottom instead - the same
+        // margin the lift keeps from the sensor, so the sensor's own rect begins about where the
+        // region does and a finger put there is unlocking either way (#66).
+        val foot = if (fodLiftPx > 0.5f) (xy[1] + view.height + dp(FOD_MARGIN_DP)).toFloat()
+            else host.height.toFloat()
         val inside = x >= minOf(lx, xy[0].toFloat()) && x < maxOf(rx, xy[0] + view.width.toFloat())
-            && y >= xy[1] - 36f * d && y < host.height
+            && y >= xy[1] - 36f * d && y < foot
             && fingerprintInHost()?.contains(x.toInt(), y.toInt()) != true
         // The small island first: the camera's button (its shortcut_view_right_layout above
         // all) reaches well past its disc, over the small island's right half. Asked second, a
@@ -10819,13 +10825,23 @@ private class MiniPlayerController(
     }
 
     /**
+     * The row's centre with the lift applied, and how far it had to move ([fodLiftPx]): the touch
+     * region is the row's too, and it needs the second as much as the first (#81).
+     */
+    private fun clearOfFingerprint(centerY: Float, height: Int, l: FloatArray?, r: FloatArray?): Float {
+        val lifted = liftOffFingerprint(centerY, height, l, r)
+        fodLiftPx = (centerY - lifted).coerceAtLeast(0f)
+        return lifted
+    }
+
+    /**
      * The row's centre moved up off the fingerprint sensor where the two would meet
      * (MiniPlayerRuntime.fingerprintArea, #66); the torch and camera stay where they are. Only
      * the span between the buttons counts across: the row never reaches past them. Under a
      * switch (MiniPlayerConfig.FOD_LIFT); off, the row stays put and only the touches that start
      * on the sensor are still left to it.
      */
-    private fun clearOfFingerprint(centerY: Float, height: Int, l: FloatArray?, r: FloatArray?): Float {
+    private fun liftOffFingerprint(centerY: Float, height: Int, l: FloatArray?, r: FloatArray?): Float {
         if (!config.optBoolean(MiniPlayerConfig.FOD_LIFT, true)) return centerY
         val fod = fingerprintInHost() ?: return centerY
         val from = l?.get(0) ?: 0f
@@ -10844,6 +10860,12 @@ private class MiniPlayerController(
     }
 
     private var fodLiftedTo = Float.NaN
+
+    /**
+     * How far up the row actually sits off the line the buttons lay it out on, in px - 0 while
+     * nothing lifts it. From the last layout, as [pillRest] worked it out.
+     */
+    private var fodLiftPx = 0f
 
     /**
      * Where the keyguard's notifications must end for the row lifted off the sensor - the lifted
@@ -10890,7 +10912,8 @@ private class MiniPlayerController(
         val fod = fingerprintInHost()
         val rest = pillRest(smallKey != null)
         return "sensor(host)=${fod ?: "none"} row centre=${rest?.centerY} height=${rest?.height}" +
-            " lifted=${if (fodLiftedTo.isNaN()) "never" else fodLiftedTo}"
+            " lifted=${if (fodLiftedTo.isNaN()) "never" else fodLiftedTo}" +
+            " liftPx=${fodLiftPx.toInt()}"
     }
 
     /**
