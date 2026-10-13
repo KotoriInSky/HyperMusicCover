@@ -73,6 +73,8 @@ internal object PickupPark {
      * process - SystemUI's uid, not adb's - so a refusal here is the answer to that question rather
      * than a bug: it is logged, and said in the probe's reply with the exception's own text.
      */
+    // FLAGS carries a hidden flag the SDK annotation does not list; SystemUI may pass it.
+    @android.annotation.SuppressLint("WrongConstant")
     private fun ensure(): String {
         val ctx = Main.appContext() ?: return "no context"
         vd?.let { return "display ${it.display.displayId}" }
@@ -187,6 +189,8 @@ internal object PickupPark {
     }.onFailure { Xp.log(TAG + "front task not found: $it") }.getOrDefault(-1)
 
     /** [task] back in front, with no animation: it was in front a moment ago and is only kept there. */
+    // Runs in SystemUI, which holds REORDER_TASKS; this APK's manifest is not the one asked.
+    @android.annotation.SuppressLint("MissingPermission")
     private fun restore(task: Int) {
         runCatching {
             val ctx = Main.appContext() ?: return

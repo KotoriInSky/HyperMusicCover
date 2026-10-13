@@ -472,6 +472,8 @@ internal object PickupIsland {
         }
     }
 
+    // Runs in SystemUI, which holds REORDER_TASKS; this APK's manifest is not the one asked.
+    @android.annotation.SuppressLint("MissingPermission")
     private fun openNow(c: Context, tasks: List<Int>, pkg: String, scheme: String) {
         // 支付宝 runs a mini program inside its own app's task, and by the time the island is
         // tapped that task is usually not sitting on the mini program any more - so moving the

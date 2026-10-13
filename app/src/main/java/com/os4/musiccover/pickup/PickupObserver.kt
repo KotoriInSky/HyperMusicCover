@@ -273,6 +273,8 @@ internal object PickupObserver {
     // ------------------------------------------------------------------ gates
 
     /** Why this round is skipped, or null. ColorOS's order: network, lock, camera, battery. */
+    // Runs in SystemUI, which holds ACCESS_NETWORK_STATE; this APK's manifest is not the one asked.
+    @android.annotation.SuppressLint("MissingPermission")
     private fun skip(ctx: Context): String? {
         val cm = ctx.getSystemService(android.net.ConnectivityManager::class.java)
         val online = cm?.getNetworkCapabilities(cm.activeNetwork)

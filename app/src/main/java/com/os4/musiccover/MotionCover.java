@@ -393,6 +393,8 @@ final class MotionCover {
         }
     }
 
+    // Runs in SystemUI, which holds ACCESS_NETWORK_STATE; this APK's manifest is not the one asked.
+    @android.annotation.SuppressLint("MissingPermission")
     private static boolean unmetered(Context ctx) {
         try {
             ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);

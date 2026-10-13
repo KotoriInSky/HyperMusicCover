@@ -805,6 +805,9 @@ public final class AppleLyrics {
      * command a controller sends: ours is answered here and never reaches the player, which
      * would not know it. The answer goes back to the one controller that asked.
      */
+    // Inside Apple Music's process through the hook, on today's targets; the hook fails on its
+    // own terms if the platform ever blocks it.
+    @android.annotation.SuppressLint("SoonBlockedPrivateApi")
     private static void hookCommand() throws Throwable {
         Method m = android.media.session.MediaSession.class.getDeclaredMethod("dispatchCommand",
                 android.media.session.MediaSessionManager.RemoteUserInfo.class, String.class,
