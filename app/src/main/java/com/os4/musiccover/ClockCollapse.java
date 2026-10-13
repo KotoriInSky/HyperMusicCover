@@ -432,7 +432,7 @@ public final class ClockCollapse {
             sT = 1f;
             sTv = 0f;
             hold(targetY(floor, natural));
-            Main.setCardProgressFrom(1f);
+            MediaCard.setCardProgressFrom(1f);
             sGlassP = 1f;
             invalidate();
             Xp.log(TAG + "clock: cover look on (floor y=" + Main.r1(floor) + ")");
@@ -453,7 +453,7 @@ public final class ClockCollapse {
                 sDateAnchorView = LIVE.date;
             }
         }
-        sCardFrom = wake ? 1f : Main.cardProgress();
+        sCardFrom = wake ? 1f : MediaCard.cardProgress();
         sCardTo = 1f;
         sGlassFrom = sGlassP;
         sGlassTo = 1f;
@@ -485,7 +485,7 @@ public final class ClockCollapse {
             return;
         }
         captureFrom();
-        sCardFrom = Main.cardProgress();
+        sCardFrom = MediaCard.cardProgress();
         sCardTo = 0f;
         sGlassFrom = sGlassP;
         sGlassTo = 0f;
@@ -604,7 +604,7 @@ public final class ClockCollapse {
         }
         sAodHeld = false;
         sDozeSettleUnit = Float.NaN;
-        sCardFrom = Main.cardProgress();
+        sCardFrom = MediaCard.cardProgress();
         sCardTo = sCardFrom;
         sGlassFrom = sGlassP;
         sGlassTo = 0f;
@@ -2012,7 +2012,7 @@ public final class ClockCollapse {
             View gt = firstTarget();
             noteFall(m.unit, sLastToUnit, unit, gt == null ? 1f : aboveScaleY(gt));
         }
-        android.os.Trace.beginSection("MC c.card"); try { Main.setCardProgressFrom(card); } finally { android.os.Trace.endSection(); }
+        android.os.Trace.beginSection("MC c.card"); try { MediaCard.setCardProgressFrom(card); } finally { android.os.Trace.endSection(); }
         sGlassP = glass;
         android.os.Trace.beginSection("MC c.glass"); try { Main.applyGlassMorph(glass); } finally { android.os.Trace.endSection(); }
         // The colour band describes the lock screen; the AOD's layout is not that.

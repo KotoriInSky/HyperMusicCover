@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 btm_m
 package com.os4.musiccover.island
+import com.os4.musiccover.MediaCard
 import com.os4.musiccover.ClockCollapse
 import com.os4.musiccover.ClockRoomPolicy
 import com.os4.musiccover.CoverMorphMotion
@@ -1910,7 +1911,7 @@ object MiniPlayerRuntime {
         if (changed) Xp.log("MCMini: dynamic choice -> mini (out of the scene)")
     }
 
-    /** The media card dismissed, its session still alive (Main.sCardRemoved). */
+    /** The media card dismissed, its session still alive (MediaCard.sCardRemoved). */
     @JvmStatic fun mediaCardRemoved() {
         resetDynamicChoice("media card dismissed")
         live().forEach { it.onMediaCardRemoved() }

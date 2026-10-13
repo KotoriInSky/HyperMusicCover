@@ -792,7 +792,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         boolean underBig = bigWake || bigFall;
         float target = visible && current != null && (!afterBigClock || underBig)
                 && (phase == ClockCollapse.Phase.EXIT && !bigFall ? exitWithCard : !lyrics)
-                ? (inAod ? 1f : underBig ? reveal() : Main.cardProgress()) : 0f;
+                ? (inAod ? 1f : underBig ? reveal() : MediaCard.cardProgress()) : 0f;
         float response = Math.max(0.18f, Main.sClockResponse);
         // Tied to the clock's own flight on the lit screen, and to the big clock's edge on the way
         // into and out of its doze. Otherwise falling asleep it eases.

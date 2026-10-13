@@ -1,4 +1,5 @@
 package com.os4.musiccover.lyrics;
+import com.os4.musiccover.MediaCard;
 import com.os4.musiccover.ClockCollapse;
 import com.os4.musiccover.CoverCardLayer;
 import com.os4.musiccover.CoverMorphRoute;
@@ -701,7 +702,7 @@ public final class LockLyrics {
         // Only at the moment the live route is lost, so a card hidden for a whole song costs one
         // entry rather than one a frame.
         if (sBandSrc == BAND_LIVE) noteBandMiss(missReason(c, y));
-        float recorded = Main.sampledCardTop();
+        float recorded = MediaCard.sampledCardTop();
         if (!Float.isNaN(recorded)) {
             setBandSource(BAND_RECORDED);
             return recorded;
@@ -1418,7 +1419,7 @@ public final class LockLyrics {
                 + " inAod=" + inHeldAod() + " held=" + ClockCollapse.aodHeld()
                 + " still=" + sStill + " display=" + displayState()
                 + " stillLog=[" + sStillLog + "]"
-                + " cardP=" + Main.cardProgress()
+                + " cardP=" + MediaCard.cardProgress()
                 + " container=" + (c == null ? "none" : c.getAlpha() + "/shown=" + c.isShown())
                 + " card=" + (card == null ? "none" : "shown=" + card.isShown())
                 // Where the band's lower edge came from: live is the card's own top this frame,

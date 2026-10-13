@@ -1,4 +1,5 @@
 package com.os4.musiccover.lyrics;
+import com.os4.musiccover.MediaCard;
 import com.os4.musiccover.ClockCollapse;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.Xp;
@@ -900,7 +901,7 @@ final class LyricView extends View {
             centreHeld = true;
             return 0f;
         }
-        float v = clamp01(Main.cardProgress());
+        float v = clamp01(MediaCard.cardProgress());
         View c = Main.sContainer;
         if (c != null) v *= clamp01(c.getAlpha());
         return v;
