@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.island.NotificationSink;
 import android.content.Context;
 import android.view.ViewGroup;
 import java.util.List;
@@ -362,6 +363,218 @@ final class Fingerprint {
             return ((java.lang.reflect.Field) f).getBoolean(o);
         } catch (Throwable t) {
             return null;
+        }
+    }
+
+    static void hookFingerprintAnimation(final ClassLoader cl) {
+        // The fingerprint ring, when the user has asked for it to go. Two hooks, because the
+        // ring is two things: MiuiGxzwFrameAnimation plays the pulsing circle out of a list of
+        // drawables, and MiuiGxzwIconView holds the static print underneath. Hiding either one
+        // alone leaves the other on screen.
+        //
+        // The split is HyperTweak's, read off https://github.com/TakeKazeX/HyperTweak: which of
+        // these draws what, and that hiding one of the two is not enough. What this phone needed
+        // on top of that was measured here rather than taken from anyone - see CLS_FOD_ANIM_VIEW.
+        //
+        // Both install whatever the setting says and read the flag per call, so the switch takes
+        // effect on the next draw rather than on the next SystemUI restart. And both are on
+        // their own terms: a build that renamed one still gets the other.
+        //
+        // Per call is not by itself enough, because the first call can come before the module
+        // has read its settings at all - see peekHideFp, which is what both of them start with.
+        try {
+            Class<?> anim = Xp.findClass(CLS_FOD_ANIM, cl);
+            Xp.hookAll(anim, "draw", chain -> {
+                Object[] args = chain.getArgs().toArray();
+                // The print's own window is painted before the keyguard's clock container
+                // attaches, so the setting has to be fetched here rather than waited for.
+                peekHideFp();
+                // draw(int resId) is the frame. Any other overload is not ours to touch, which
+                // the argument check below says without having to name the signature.
+                if (sHideFp && args.length == 1 && args[0] instanceof Integer
+                        && isFodRing((Integer) args[0])
+                        && fodForKeyguard(fodViewOf(chain.getThisObject()))) {
+                    // Substituting the drawable rather than skipping the draw: the animation
+                    // keeps its own timing and its own lifecycle, it just paints nothing. A
+                    // skipped draw would leave whatever the OEM expects to be on that surface.
+                    sFodFrames.suppressed(chain.getThisObject(), (Integer) args[0]);
+                    args[0] = android.R.color.transparent;
+                } else if (args.length == 1 && args[0] instanceof Integer) {
+                    sFodFrames.painted(chain.getThisObject());
+                }
+                return chain.proceed(args);
+            });
+            Xp.log(Main.TAG + "fingerprint animation hooked");
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "fingerprint animation hook failed, the ring will still pulse: " + t);
+        }
+    }
+
+    static void hookFingerprintIcon(final ClassLoader cl) {
+        try {
+            Class<?> iconCls = Xp.findClass(CLS_FOD_ICON, cl);
+            Xp.hookAllConstructors(iconCls, chain -> {
+                Object result = chain.proceed();
+                try {
+                    View v = (View) chain.getThisObject();
+                    // Built before the keyguard attaches on the same builds the ring is, and
+                    // this is the one chance to dim it before it is ever seen.
+                    peekHideFp();
+                    sFodIcons.put(v, Boolean.TRUE);
+                } catch (Throwable ignored) {
+                    // A view we cannot dim is a visible print, not a broken keyguard.
+                }
+                return result;
+            });
+            // And the paint itself, where the build declares one. This view paints nothing on
+            // the phone this was measured on - its alpha sits at zero with the print still on
+            // screen - but on a build where it is the painter, a frame it never draws cannot be
+            // brought back by anything that happens between frames, which the alpha above can.
+            for (String name : new String[] {"onDraw", "draw"}) {
+                try {
+                    Xp.hookAll(iconCls, name, chain -> {
+                        peekHideFp();
+                        if (sHideFp && fodForKeyguard(chain.getThisObject())) return null;
+                        return chain.proceed();
+                    });
+                    break;
+                } catch (Throwable ignored) {
+                    // Not declared here; try the other name.
+                }
+            }
+            Xp.log(Main.TAG + "fingerprint icon hooked");
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "fingerprint icon hook failed, the static print will stay: " + t);
+        }
+    }
+
+    static void hookFingerprintPrintView(final ClassLoader cl) {
+        // The view the print is actually painted on. Its own hook because it is its own class
+        // and its own failure: the frame substitution above covers it only once the animation
+        // has run, and the first keyguard after a SystemUI start paints without it.
+        try {
+            Class<?> animView = Xp.findClass(CLS_FOD_ANIM_VIEW, cl);
+            int hooked = 0;
+            for (String name : new String[] {"onDraw", "draw", "dispatchDraw"}) {
+                try {
+                    Xp.hookAll(animView, name, chain -> {
+                        peekHideFp();
+                        // Painting nothing, rather than dimming: the alpha on this view is the
+                        // OEM's to animate, and a frame it never paints cannot be animated back.
+                        if (sHideFp && fodForKeyguard(chain.getThisObject())) return null;
+                        return chain.proceed();
+                    });
+                    hooked++;
+                } catch (Throwable ignored) {
+                    // Not declared on this build; the others still stand.
+                }
+            }
+            Xp.log(Main.TAG + "fingerprint print view hooked, " + hooked + " of its paint methods");
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "fingerprint print view hook failed: " + t);
+        }
+    }
+
+    static void hookFingerprintAvoidance(final ClassLoader cl) {
+        // Both manual and automatic sinking use the OEM's fingerprint avoidance branch.
+        // Add our policy as an input so the system recomputes and emits on its own coroutine.
+        try {
+            // Fail on the panel rather than on the lambda: "no KeyguardPanelViewController" is a
+            // different build, "no combine lambda" is a different R8 run, and the log should say
+            // which one happened.
+            Xp.findClass(Main.CLS_KG_PANEL, cl);
+            long t0 = android.os.SystemClock.uptimeMillis();
+            Class<?> combine = findAvoidCombine(cl);
+            java.lang.reflect.Method invoke = combine == null ? null : Main.invoke3(combine);
+            if (invoke == null) {
+                Xp.log(Main.TAG + "no nsslLockYPosition combine lambda on this build"
+                        + " - fingerprint avoidance cannot be overridden");
+            } else {
+                Xp.hook(invoke, chain -> {
+                    Object[] args = chain.getArgs().toArray();
+                    if (args.length == 3 && args[1] instanceof Object[]) {
+                        Object[] vals = (Object[]) args[1];
+                        // Clone before overriding: combine retains its array across emissions.
+                        Object[] effective = NotificationSink.withAvoidance(vals, sFpAvoid);
+                        args[1] = effective;
+                        Object result = chain.proceed(args);
+                        String bound;
+                        try {
+                            bound = String.valueOf(Xp.callMethod(args[0], "getValue"));
+                        } catch (Throwable t) {
+                            bound = args[0].getClass().getName() + ": " + t;
+                        }
+                        Main.sNotificationSink.record(vals, effective, bound);
+                        return result;
+                    }
+                    return chain.proceed();
+                });
+                try {
+                    Class<?> combineKt = Xp.findClass("kotlinx.coroutines.flow.internal.CombineKt", cl);
+                    Xp.hookAll(combineKt, "combineInternal", chain -> {
+                        Object[] args = chain.getArgs().toArray();
+                        // Only this panel's transform: other SystemUI combines keep their inputs.
+                        if (args.length == 5 && combine.isInstance(args[2])
+                                && args[4] instanceof Object[]) {
+                            try {
+                                args[4] = Main.sNotificationSink.attachToCombine(
+                                        args[1], (Object[]) args[4], sFpAvoid);
+                                Main.sNotificationSink.hookStatus("notification combine entered");
+                            } catch (Throwable t) {
+                                Main.sNotificationSink.hookStatus("combine attachment failed: " + t);
+                            }
+                            return chain.proceed(args);
+                        }
+                        return chain.proceed();
+                    });
+                    // The transform is $1$3; its enclosing combined Flow is $1.
+                    Class<?> combinedFlow = Xp.findClass(combine.getName().substring(0,
+                            combine.getName().length() - 2), cl);
+                    Xp.hookAll(combinedFlow, "collect", chain -> {
+                        try {
+                            if (Main.sNotificationSink.attach(chain.getThisObject(), sFpAvoid))
+                                Xp.log(Main.TAG + "notification bound policy flow attached");
+                        } catch (Throwable t) {
+                            Xp.log(Main.TAG + "notification bound policy flow unavailable: " + t);
+                        }
+                        return chain.proceed();
+                    });
+                    for (java.lang.reflect.Method method : combinedFlow.getDeclaredMethods())
+                        if ("collect".equals(method.getName())) Xp.api().deoptimize(method);
+                    // stateIn(Eagerly) starts collecting once. Attach when its sharing
+                    // coroutine executes, before collect can be inlined or started.
+                    Class<?> sharing = Xp.findClass(
+                            "kotlinx.coroutines.flow.FlowKt__ShareKt$launchSharing$1", cl);
+                    Xp.hookAll(sharing, "invokeSuspend", chain -> {
+                        try {
+                            Object upstream = Xp.getObjectField(chain.getThisObject(), "$upstream");
+                            if (combinedFlow.isInstance(upstream)
+                                    && Main.sNotificationSink.attach(upstream, sFpAvoid))
+                                Xp.log(Main.TAG + "notification bound policy flow attached before collection");
+                        } catch (Throwable t) {
+                            Xp.log(Main.TAG + "notification bound sharing attachment failed: " + t);
+                        }
+                        return chain.proceed();
+                    });
+                    // ART may inline constructors and collect. Observe the running coroutine
+                    // before its first collection, and deoptimize callers of invokeSuspend.
+                    for (java.lang.reflect.Method method : sharing.getDeclaredMethods()) {
+                        if ("invoke".equals(method.getName()) || "create".equals(method.getName())
+                                || "invokeSuspend".equals(method.getName()))
+                            Xp.api().deoptimize(method);
+                    }
+                    Main.sNotificationSink.hookStatus("sharing invokeSuspend installed");
+                    Xp.log(Main.TAG + "notification bound sharing hook installed");
+                } catch (Throwable t) {
+                    Main.sNotificationSink.hookStatus("collection failed: " + t);
+                    Xp.log(Main.TAG + "notification bound collection hook failed: " + t);
+                }
+                Xp.log(Main.TAG + "fingerprint avoidance hooked on " + combine.getName()
+                        + " in " + (android.os.SystemClock.uptimeMillis() - t0) + "ms");
+            }
+        } catch (Throwable t) {
+            Main.sNotificationSink.hookStatus("avoidance failed: " + t);
+            Xp.w(Main.TAG + "fingerprint avoidance hook failed: " + t);
         }
     }
 }
