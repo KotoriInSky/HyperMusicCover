@@ -243,7 +243,7 @@ public final class LockTaps {
         // Decided at the DOWN, because by the time this runs the centre - or the charging
         // animation - may have closed under the guard in onLockTap. See the dispatch hook for
         // the full account.
-        if (Main.sGestureOnCentre || Main.sGestureOnCharge) return;
+        if (Main.sGestureOnCentre || ChargeAnim.sGestureOnCharge) return;
         flushPendingTap();
         Runnable r = new Runnable() {
             @Override
@@ -306,7 +306,7 @@ public final class LockTaps {
         // And the charging animation, which is a full-screen view over the same region. This is
         // the second half of the pair - a tap that began before the animation was up is caught
         // here, one that began under it was caught at the DOWN.
-        if (Main.chargeAnimUp()) return;
+        if (ChargeAnim.chargeAnimUp()) return;
         // Nothing to toggle without music: the card is the switch, and this only chooses
         // whether the cover follows it.
         if (!MediaCard.sCardKnown || !MediaCard.sCardShowing) return;

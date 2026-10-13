@@ -51,7 +51,7 @@ public final class CardTouch {
         if (action == MotionEvent.ACTION_DOWN) {
             sTitleSwallow = Main.sCardTitleTapped != null
                     && Main.screenOn() && Main.keyguardShowing() && Main.onKeyguardNow()
-                    && !Main.bouncerUp() && !Main.sGestureOnCentre && !Main.sGestureOnCharge
+                    && !Main.bouncerUp() && !Main.sGestureOnCentre && !ChargeAnim.sGestureOnCharge
                     && titleInkContains(ev.getRawX(), ev.getRawY());
             if (sTitleSwallow) sTitleDownAt = android.os.SystemClock.uptimeMillis();
             return sTitleSwallow;
@@ -168,14 +168,14 @@ public final class CardTouch {
                 }
                 sCardSwipeFired = false;
                 sCardSwipeShared = false;
-                sCardSwipeSpread = !Main.sGestureOnCentre && !Main.sGestureOnCharge
+                sCardSwipeSpread = !Main.sGestureOnCentre && !ChargeAnim.sGestureOnCharge
                         && MiniPlayerRuntime.spreadCollapseAt(ev.getRawX(), ev.getRawY());
                 sCardSwipeRow = null;
                 sCardPinReleased = false;
                 boolean onCard = MiniPlayerRuntime.wantsNativeCardSwipe()
-                        && !Main.sGestureOnCentre && !Main.sGestureOnCharge
+                        && !Main.sGestureOnCentre && !ChargeAnim.sGestureOnCharge
                         && MediaCard.cardRectContains(ev.getRawX(), ev.getRawY());
-                if (!onCard && !sCardSwipeSpread && !Main.sGestureOnCentre && !Main.sGestureOnCharge) {
+                if (!onCard && !sCardSwipeSpread && !Main.sGestureOnCentre && !ChargeAnim.sGestureOnCharge) {
                     sCardSwipeRow = MiniPlayerRuntime.releasedRowAt(ev.getRawX(), ev.getRawY());
                 }
                 sCardScrollTarget = onCard || sCardSwipeSpread || sCardSwipeRow != null;
@@ -191,7 +191,7 @@ public final class CardTouch {
                 MiniPlayerRuntime.noteTouch("card down armed=" + sCardCollapse.getArmed()
                         + " top=" + atTop + " scroll=" + MiniPlayerRuntime.nativeScrollTrace()
                         + " want=" + MiniPlayerRuntime.wantsNativeCardSwipe()
-                        + " centre=" + Main.sGestureOnCentre + " charge=" + Main.sGestureOnCharge
+                        + " centre=" + Main.sGestureOnCentre + " charge=" + ChargeAnim.sGestureOnCharge
                         + " cover=" + Main.sCoverMode + " card=" + MediaCard.describeCardRect()
                         + " row=" + sCardSwipeRow);
                 return SWIPE_NONE;
