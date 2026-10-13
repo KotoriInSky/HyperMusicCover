@@ -38,7 +38,7 @@ public final class CoverPush {
      * pixels wide, and nothing at all when the artwork has not changed since the last ask.
      */
     static byte[] artThumbnail(Context ctx, int max) {
-        Bitmap b = Main.albumArt(ctx);
+        Bitmap b = AlbumArt.albumArt(ctx);
         if (b == null) return null;
         int print = artPrint(b);
         byte[] cached = sThumbJpg;
@@ -70,7 +70,7 @@ public final class CoverPush {
      * pushArtAsync() rather than calling this on the main thread.
      */
     private static void pushArtToWallpaper(Context ctx, boolean on) {
-        pushArtToWallpaper(ctx, on, on ? Main.albumArt(ctx) : null);
+        pushArtToWallpaper(ctx, on, on ? AlbumArt.albumArt(ctx) : null);
     }
 
     private static void pushArtToWallpaper(Context ctx, boolean on, Bitmap art) {
@@ -1368,7 +1368,7 @@ public final class CoverPush {
                 Bitmap art;
                 int print;
                 try {
-                    art = Main.albumArt(ctx, last || allowCard, sessionBits);
+                    art = AlbumArt.albumArt(ctx, last || allowCard, sessionBits);
                     print = art == null ? 0 : artPrint(art);
                 } finally {
                     android.os.Trace.endSection();

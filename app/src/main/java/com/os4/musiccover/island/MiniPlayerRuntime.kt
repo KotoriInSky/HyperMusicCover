@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 btm_m
 package com.os4.musiccover.island
+import com.os4.musiccover.AlbumArt
 import com.os4.musiccover.CardTouch
 import com.os4.musiccover.MediaCard
 import com.os4.musiccover.ClockCollapse
@@ -9944,7 +9945,7 @@ private class MiniPlayerController(
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
             ?: cachedCover?.takeUnless { it.isRecycled }
-            ?: (if (!nativeSuppressionRequested) Main.cardThumbnail() else null)
+            ?: (if (!nativeSuppressionRequested) AlbumArt.cardThumbnail() else null)
         if (cover != null && !cover.isRecycled) cachedCover = cover
         return cover
     }

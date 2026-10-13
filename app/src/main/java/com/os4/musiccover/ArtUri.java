@@ -27,7 +27,7 @@ import android.os.SystemClock;
  * same stub was dismissed as "same artwork as the last track" and never pushed at all.
  *
  * So: one GET, decoded no larger than the compose ever needs, cached by URL, and asked for in
- * the background so that no caller has to wait on it. Main.albumArt() takes the copy when - and
+ * the background so that no caller has to wait on it. AlbumArt.albumArt() takes the copy when - and
  * only when - the session has no bitmap of its own, which keeps the rule that a player that does
  * hand over a bitmap never has anything here touch it.
  */
@@ -154,7 +154,7 @@ final class ArtUri {
 
     /**
      * What is already in hand for this URI, or null. No I/O on any path, so this is safe to call
-     * from the main thread - which Main.albumArt() is.
+     * from the main thread - which AlbumArt.albumArt() is.
      */
     static Bitmap peek(String uri) {
         String url = readable(uri);
