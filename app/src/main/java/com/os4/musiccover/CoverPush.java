@@ -156,7 +156,7 @@ public final class CoverPush {
                 // a run of taps in and out of cover mode on one song composed the same full-screen
                 // picture every time (trace 2026-09-30), so the same key takes the last answer.
                 String tintKey = artPrint(src) + ":" + src.getWidth() + "x" + src.getHeight()
-                        + ":" + w + "x" + h + ":" + Main.sBias + ":" + Main.bandKey() + ":"
+                        + ":" + w + "x" + h + ":" + Main.sBias + ":" + AodColour.bandKey() + ":"
                         + Main.sCoverCardStyle.mode;
                 boolean reused = tintKey.equals(sTintKey);
                 if (reused) {
@@ -172,12 +172,12 @@ public final class CoverPush {
                     } finally {
                         android.os.Trace.endSection();
                     }
-                    Main.measureCover(full);
+                    AodColour.measureCover(full);
                     full.recycle();
                     sTintKey = tintKey;
                     sTintValue = Main.sCoverTint;
                 }
-                if (Main.sCoverMode) Main.recolorClock();
+                if (Main.sCoverMode) AodColour.recolorClock();
                 // The shade builds its background from the square source and keeps nothing.
                 android.os.Trace.beginSection("MC push.shade");
                 try {
@@ -217,8 +217,8 @@ public final class CoverPush {
             Xp.w(Main.TAG + "composeWallpaper failed, no cover this round: " + t);
             return;
         }
-        Main.measureCover(full);
-        if (Main.sCoverMode) Main.recolorClock();
+        AodColour.measureCover(full);
+        if (Main.sCoverMode) AodColour.recolorClock();
         if (frostTask != null) {
             // Up before the JPEG: the view is this process's own, and only reads `full`, which
             // the encode below only reads too.

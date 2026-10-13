@@ -229,14 +229,14 @@ final class ClockGlass {
                 // our album art - and that palette would repaint the clock a moment after the
                 // screen goes off. So the colour is dropped and the first lightness the doze inks
                 // with is held instead, which is what holdAodColour() holds too.
-                if (Main.sCoverMode && !Main.sScreenOn && Main.aodColourOurs() && args[0] instanceof float[]) {
+                if (Main.sCoverMode && !Main.sScreenOn && AodColour.aodColourOurs() && args[0] instanceof float[]) {
                     float[] a = (float[]) args[0];
                     if (a.length >= 42) {
                         // Luminance, not max: the palette's gold is (1.0, 0.694, 0.384), whose
                         // max is 1.0 - neutralising on that turns the clock pure white. Its
                         // luminance is 0.736, which is the neutral the doze was inking before the
                         // palette landed (measured 189/255 = 0.741 on screen).
-                        float mx = Main.luminance(a[11], a[12], a[13]);
+                        float mx = AodColour.luminance(a[11], a[12], a[13]);
                         if (Float.isNaN(Main.sAodGrey)) Main.sAodGrey = mx;
                         float[] neutral = a.clone();
                         neutral[11] = neutral[12] = neutral[13] = Main.sAodGrey;

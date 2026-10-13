@@ -251,7 +251,7 @@ public class Main extends XposedModule {
      * the status bar and 172dp is past the glyphs on every style measured so far, the point
      * being that a band that overshoots by a few rows still describes what the eye sees there.
      */
-    private static final float BAND_TOP_DP = 56f, BAND_BOT_DP = 172f;
+    static final float BAND_TOP_DP = 56f, BAND_BOT_DP = 172f;
 
     /**
      * The same strip, measured off the placement instead of written down, in screen pixels.
@@ -268,10 +268,10 @@ public class Main extends XposedModule {
      * used whenever it has been written. The constants stay as the answer for the frames before
      * the first placement, which is also the only case they were ever right for.
      */
-    private static volatile float sBandTopPx = Float.NaN, sBandBotPx = Float.NaN;
+    static volatile float sBandTopPx = Float.NaN, sBandBotPx = Float.NaN;
 
     /** Air above the date and below the clock that the band includes. */
-    private static final float BAND_PAD_DP = 8f;
+    static final float BAND_PAD_DP = 8f;
 
     /**
      * Where the date and the clock are, right now, on the screen.
@@ -1199,7 +1199,7 @@ public class Main extends XposedModule {
                     CoverCardLayer.refresh();
                     sAodGrey = Float.NaN;
                     ClockCollapse.toAod();
-                    recolorClock();
+                    AodColour.recolorClock();
                 }
                 Object result = chain.proceed();
                 if (clockHeld() && !toAod && ClockCollapse.leavingOrOff()) {
@@ -1212,7 +1212,7 @@ public class Main extends XposedModule {
                         sAodGrey = Float.NaN;
                         ClockGlass.applyGlassBrightness();
                         ClockCollapse.enter(true, true, "doAnim");
-                        recolorClock();
+                        AodColour.recolorClock();
                     }
                 }
                 return result;
@@ -2260,7 +2260,7 @@ public class Main extends XposedModule {
                             Xp.log(TAG + "cover tint forced to #"
                                     + Integer.toHexString(sCoverTintOverride));
                         }
-                        recolorClock();
+                        AodColour.recolorClock();
                     } else if ("gdata".equals(op)) {
                         pokeGlassData(i.getIntExtra("idx", -1), i.getFloatExtra("v", 0f));
                     } else if ("transit".equals(op)) {
@@ -6711,7 +6711,7 @@ public class Main extends XposedModule {
         ImmersiveHost.coverEntering();
         // The reading may predate this cover - the card can come up on art that was pushed
         // before the user ever locked the phone - and the OEM will not re-colour on its own.
-        recolorClock();
+        AodColour.recolorClock();
         // The wallpaper process cannot remember this one across a restart, and this is the
         // first moment of a transition it matters for. See pushFadeMs().
         CoverPush.pushFadeMs(sAppCtx);
@@ -6739,7 +6739,7 @@ public class Main extends XposedModule {
         // least visible.
         if (sCoverTint != 0) {
             sCoverTint = 0;
-            recolorClock();
+            AodColour.recolorClock();
         }
         armTransitionTrace("leaving cover mode");
         // The clock and the cut-out go back unless an immersive page still has the lock screen
@@ -7007,7 +7007,7 @@ public class Main extends XposedModule {
         sAodGrey = Float.NaN;
         ClockGlass.applyGlassBrightness();
         forgetSysReads();
-        recolorClock();
+        AodColour.recolorClock();
     }
 
     static boolean coverCardVisible() {
@@ -9567,104 +9567,6 @@ public class Main extends XposedModule {
         }
     }
 
-    /**
-     * Whether the doze clock's colour is ours to hold at all.
-     *
-     * Two of the three dozes are ours. A doze that KEPT the cover's clock is the lock screen's
-     * carried into sleep, so it holds the lock screen's own colour (captureAodGlass). A plain
-     * always-on display - the linkage AOD, the classic plugin one - is held at a neutral, because
-     * what it would otherwise be painted is the wallpaper's palette and in cover mode the
-     * wallpaper is the album art: that is the gold 84869b1 was written for.
-     *
-     * The third is the FULL-SCREEN doze whose clock was handed back, and its colour is the OEM's:
-     * the setting exists to say whether that clock is ours, and with it off there is no reading of
-     * ours to hold it at - the neutral is the first ink's lightness and nothing more - which comes
-     * out as a flat grey slab where the system had glass over the wallpaper. Reported 2026-09-21:
-     * "音乐封面模式开启 + 全屏息屏显示保持小时钟关闭" and the big clock came up grey. Only this
-     * one configuration is left alone; the other two are held exactly as before.
-     */
-    static boolean aodColourOurs() {
-        return ClockCollapse.aodHeld() || !ClockCollapse.aodFullScreen();
-    }
-
-    /**
-     * Holds the always-on clock's glyphs at the colour they are ours to hold.
-     *
-     * The colour lives in `glassData[11..13]` and is uploaded from the view's own field when the
-     * material is drawn - proved on a dozing keyguard by poking those three indices and watching
-     * the whole clock turn red on the next frame. So the FIELD is what has to be held, not the
-     * array handed to any one setter: on this build the OEM's palette pass reaches the glyphs by a
-     * route that goes through neither `TimeView.setGlassColor` (the tint op proved that one is
-     * dead here) nor `View.setMiGlass` (guarding that one still let the clock turn gold). Assert
-     * the field every doze frame instead, the way notifY and the depth cut-out are asserted.
-     *
-     * @return true when a glyph was rewritten and so needs the redraw
-     */
-    static boolean holdAodColour() {
-        if (!sCoverMode || sScreenOn || !aodColourOurs()) return false;
-        // A doze that kept the cover's clock is showing the LOCK SCREEN's clock, so it holds the
-        // colour and the fill the lock screen had. Read at the moment of sleep, before the doze had
-        // inked anything with its own palette. The capture is only ever taken for a held doze, so
-        // this also says whether the reading below is the lock screen's or a dead one.
-        boolean cover = ClockCollapse.aodHeld() && ClockGlass.sAodCoverGlassSet;
-        boolean wrote = false;
-        for (View root : clockRoots()) {
-            for (String id : new String[]{"hour_view", "minute_view", "colon_view"}) {
-                try {
-                    int rid = root.getContext().getResources()
-                            .getIdentifier(id, "id", "com.android.systemui");
-                    View t = rid == 0 ? null : root.findViewById(rid);
-                    if (t == null || t.getVisibility() != View.VISIBLE) continue;
-                    float[] g = (float[]) Xp.getObjectField(t, "glassData");
-                    if (g == null || g.length < 42) continue;
-                    if (cover) {
-                        if (g[11] != ClockGlass.sAodCoverGlass[0] || g[12] != ClockGlass.sAodCoverGlass[1]
-                                || g[13] != ClockGlass.sAodCoverGlass[2]) {
-                            g[11] = ClockGlass.sAodCoverGlass[0];
-                            g[12] = ClockGlass.sAodCoverGlass[1];
-                            g[13] = ClockGlass.sAodCoverGlass[2];
-                            wrote = true;
-                        }
-                        if (g[36] != ClockGlass.sAodCoverGlass[3]) {
-                            g[36] = ClockGlass.sAodCoverGlass[3];
-                            wrote = true;
-                        }
-                        if (wrote) t.invalidate();
-                        continue;
-                    }
-                    // The plain always-on display, and a held doze whose glass could not be read at
-                    // sleep. Neither has a colour of ours to be held at, and what the OEM would
-                    // paint is the wallpaper's palette - the album art, in cover mode - so the
-                    // neutral the doze first inks with is held instead. Only its lightness is kept,
-                    // so a doze caught late still ends up neutral rather than gold.
-                    if (Float.isNaN(sAodGrey)) {
-                        sAodGrey = luminance(g[11], g[12], g[13]);
-                    }
-                    if (g[11] != sAodGrey || g[12] != sAodGrey || g[13] != sAodGrey) {
-                        g[11] = sAodGrey;
-                        g[12] = sAodGrey;
-                        g[13] = sAodGrey;
-                        wrote = true;
-                    }
-                    // And solid. This is the half that was missing: the gold is not a colour at
-                    // all, it is the album-art wallpaper showing through a transparent glass
-                    // glyph - proved on one doze by the date reading (182,182,182) neutral while
-                    // the clock read (203,161,118) gold, the date being the one of the two with no
-                    // glass. The doze's own fill is 0, so the backdrop shows; the two seconds of
-                    // neutral the user saw at the start were the frames where it was still 1.
-                    if (g[36] < 0.999f) {
-                        g[36] = 1f;
-                        wrote = true;
-                    }
-                    if (wrote) t.invalidate();
-                } catch (Throwable ignored) {
-                }
-            }
-        }
-        if (wrote) ClockGlass.pushGlassFill(cover ? ClockGlass.sAodCoverGlass[3] : 1f);
-        return wrote;
-    }
-
     /** One line about the doze clock's colour state, readable from `am broadcast`. */
     private static String aodProbe() {
         boolean sbDone = false;
@@ -9750,111 +9652,6 @@ public class Main extends XposedModule {
             }
         }
         return sb.toString();
-    }
-
-    /**
-     * Averages the strip of the composed cover the clock and its date are drawn on.
-     *
-     * Sampled from the composed bitmap rather than from the album art, because the two are not
-     * the same picture where it matters: the sharp band starts below the clock at the default
-     * bias, so what is actually behind the glyphs is the mirrored blur - and on a light cover
-     * that blur is light. Costs 24 rows of getPixels on the worker that is already encoding the
-     * same bitmap.
-     */
-    /** What measureCover() reads besides the picture, for a caller that caches its answer. */
-    static String bandKey() {
-        return sBandTopPx + ":" + sBandBotPx;
-    }
-
-    static void measureCover(Bitmap full) {
-        try {
-            float d = sAppCtx.getResources().getDisplayMetrics().density;
-            float topPx = sBandTopPx, botPx = sBandBotPx;
-            if (Float.isNaN(topPx) || Float.isNaN(botPx) || botPx - topPx < 8f) {
-                topPx = BAND_TOP_DP * d;
-                botPx = BAND_BOT_DP * d;
-            } else {
-                topPx -= BAND_PAD_DP * d;
-                botPx += BAND_PAD_DP * d;
-            }
-            int top = Math.max(0, Math.round(topPx));
-            int bottom = Math.min(full.getHeight(), Math.round(botPx));
-            if (bottom - top < 8) { sCoverTint = 0; return; }
-            int stride = Math.max(1, (bottom - top) / 24);
-            int[] row = new int[full.getWidth()];
-            long sr = 0, sg = 0, sb = 0;
-            int n = 0;
-            for (int y = top; y < bottom; y += stride) {
-                full.getPixels(row, 0, row.length, 0, y, row.length, 1);
-                for (int x = 0; x < row.length; x += 8) {
-                    int c = row[x];
-                    sr += (c >> 16) & 0xff;
-                    sg += (c >> 8) & 0xff;
-                    sb += c & 0xff;
-                    n++;
-                }
-            }
-            if (n == 0) { sCoverTint = 0; return; }
-            // The plain average of the band, which the mirror-blur has already smoothed: one
-            // number describing the picture behind the glyphs rather than any one pixel of it.
-            sCoverTint = 0xff000000 | ((int) (sr / n) << 16) | ((int) (sg / n) << 8)
-                    | (int) (sb / n);
-            Xp.log(TAG + "cover tint #" + Integer.toHexString(sCoverTint) + " over " + n
-                    + "px, band " + top + ".." + bottom);
-        } catch (Throwable t) {
-            sCoverTint = 0;
-            Xp.w(TAG + "cover tint failed: " + t);
-        }
-    }
-
-    /**
-     * Asks the OEM for its clock colours again, so a cover that has just changed is judged
-     * against the new one.
-     *
-     * Nothing else will. The colour pass runs when the wallpaper's palette changes, and swapping
-     * the cover is not one - it happens behind the wallpaper's back. Without this a track change
-     * would keep the previous cover's decision, which on the way from a light cover to a dark
-     * one means a dark clock left dark on a dark picture: worse than the problem this exists to
-     * fix. The values handed over are the OEM's own, off the style it is already holding; the
-     * setter hooks are what make them come out legible.
-     */
-    static void recolorClock() {
-        final View v = sContainer;
-        if (v == null) return;
-        v.post(new Runnable() {
-            @Override
-            public void run() {
-                for (View root : clockRoots()) {
-                    try {
-                        if (!(root instanceof ViewGroup)) continue;
-                        View c = ((ViewGroup) root).getChildAt(0);
-                        if (c == null) continue;
-                        if (ClockGlass.glassGlyphs(root)) {
-                            // The glass is driven from our own morph, and re-running one frame of
-                            // it is what makes it re-colour - the same call applyGlassMorph()
-                            // makes on every frame of a collapse, so nothing new is being asked
-                            // of it. updateClockColor, which is the other path, is deliberately
-                            // NOT called here: the OEM only reaches for it on a solid style, and
-                            // it writes the glyphs' paint colour as well as their glass data.
-                            if (!Float.isNaN(ClockGlass.sAppliedGlassV)) {
-                                Xp.callMethod(c, "updateGlassValue", ClockGlass.sAppliedGlassV);
-                            }
-                        } else if (hasField(c, "mClockStyleInfo")) {
-                            Object info = Xp.getObjectField(c, "mClockStyleInfo");
-                            Xp.callMethod(c, "updateClockColor",
-                                    Xp.callMethod(info, "getPrimaryColor"),
-                                    Xp.callMethod(info, "getSecondaryColor"));
-                        } else {
-                            // Nothing to nudge on this style, and nothing to change either: its
-                            // colours are the SystemUI palette business. This used to throw,
-                            // one IllegalArgumentException per frame, which is how it was found.
-                        }
-                    } catch (Throwable t) {
-                        Xp.w(TAG + "recolor failed: " + t);
-                    }
-                }
-            }
-        });
     }
 
     /**
@@ -9999,7 +9796,7 @@ public class Main extends XposedModule {
     }
 
     /** Whether a class declares this field at all - getObjectField throws when it does not. */
-    private static boolean hasField(Object o, String name) {
+    static boolean hasField(Object o, String name) {
         try {
             for (Class<?> k = o.getClass(); k != null; k = k.getSuperclass()) {
                 k.getDeclaredField(name);
@@ -10008,33 +9805,6 @@ public class Main extends XposedModule {
         } catch (Throwable ignored) {
         }
         return false;
-    }
-
-    /**
-     * Counter-hook for HyperLight's "统一柔光玻璃" (its SoftGlassMaterialHook).
-     *
-     * HyperLight hooks {@code View.setMiGlass(float[])} and, for any view its classifier admits,
-     * rewrites the whole 42-float MiGlass array to its soft-glass preset - indices 0..36, and
-     * [34] and [36] in particular. Index 36 is the liquid-glass channel this module drives
-     * through {@code updateGlassValue -> glassData[36]}; rewriting it is what turns the clock
-     * from 液态玻璃 into plain glass ("非液态").
-     *
-     * Its classifier (gu1.o) admits a view whose setMiGlass happens with a
-     * notification/shade/control-centre frame on the stack, which is exactly the media-card ->
-     * cover-mode transition - which is why the clock comes up liquid after a restart and loses it
-     * a moment after music starts, rather than immediately.
-     *
-     * The crucial asymmetry: HyperLight rewrites the COPY handed to setMiGlass, never the view's
-     * own {@code glassData} field, so the field still holds the OEM's liquid values. Handing the
-     * field back for the clock's own glyphs is the whole fix.
-     *
-     * Armed from the clock container's onAttachedToWindow rather than at onPackageLoaded - that
-     * event reliably fires after both modules are loaded, so this hook registers AFTER HyperLight's
-     * and runs last in the chain, where the last writer to args[0] is what the original receives.
-     */
-    /** Rec. 709 luminance of a glass colour triple, which is what an even grey has to match. */
-    static float luminance(float r, float g, float b) {
-        return 0.2126f * r + 0.7152f * g + 0.0722f * b;
     }
 
     /**

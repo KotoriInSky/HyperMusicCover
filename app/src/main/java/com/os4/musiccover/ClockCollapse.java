@@ -74,7 +74,7 @@ public final class ClockCollapse {
      * the setting off is asking for the system's clock there, colour included; a colour of ours on
      * it is invented out of nothing and reads as a grey slab (reported 2026-09-21). Every other
      * doze is held at a neutral, which is what stopped the plain AOD turning gold - see
-     * Main.holdAodColour(). Latched rather than read live: `Main.fullAodOn()` reflects into the
+     * AodColour.holdAodColour(). Latched rather than read live: `Main.fullAodOn()` reflects into the
      * interfaces manager and is not something to ask on a per-frame path.
      */
     private static boolean sAodFullScreen;
@@ -350,12 +350,12 @@ public final class ClockCollapse {
         return sPhase;
     }
 
-    /** Whether this doze is keeping the cover's clock - for Main.holdAodColour(). */
+    /** Whether this doze is keeping the cover's clock - for AodColour.holdAodColour(). */
     public static boolean aodHeld() {
         return sAodHeld;
     }
 
-    /** Whether this doze is the full-screen one - for Main.holdAodColour(). */
+    /** Whether this doze is the full-screen one - for AodColour.holdAodColour(). */
     static boolean aodFullScreen() {
         return sAodFullScreen;
     }
@@ -1824,7 +1824,7 @@ public final class ClockCollapse {
                 // lock screen's timeWidth/timeHeight, AnimationHelper re-runs the whole AOD
                 // animation once a minute, and both move the box this maps from. The transforms
                 // themselves survive all of it - nothing in the full-AOD path writes time_group.
-                Main.holdAodColour();
+                AodColour.holdAodColour();
                 // Back on the lock screen's squeeze, so the OEM draws its glyphs in the face the
                 // lock screen was showing rather than the doze's own - see sAodHoldY. Cheap: hold()
                 // only reaches the OEM when the value is news, so this is one notifStateChange.
@@ -1875,7 +1875,7 @@ public final class ClockCollapse {
                 }
                 sAodPendTop = m.inkTop;
                 sAodPendUnit = m.unit;
-                Main.holdAodColour();
+                AodColour.holdAodColour();
                 return;
             }
         }
