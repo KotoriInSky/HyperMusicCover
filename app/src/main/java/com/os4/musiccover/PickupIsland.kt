@@ -422,10 +422,6 @@ internal object PickupIsland {
      * altogether (2026-10-08, the top the module saw right after a tap was com.miui.home/.launcher).
      */
     private fun open(c: Context, i: Intent) {
-        // Tapping the island is the user going into the mini program: nothing is parked again for
-        // [NO_PARK] while they are in there. See [left] - the front flickers through the launcher as
-        // they move about it, and parking on that flicker takes it away from them mid-use.
-        PickupCodeIsland.tapped()
         // Where the tap should go, in order of how much it is *this* card's: the task the card was
         // posted for, then the task this process is tracking, then nothing.
         //
@@ -445,8 +441,10 @@ internal object PickupIsland {
         Xp.log(TAG + "tap: pkg=$pkg tasks=$tasks scheme=${scheme.isNotEmpty()} known=${page != null}")
         if (PickupPark.isParked(tapped)) {
             // §6.5: the task goes back to the display the user can see before it is brought to the
-            // front - moved to the front while parked, it would come up on the hidden one.
-            PickupObserver.end(tapped, "the island was tapped", front = true) { openNow(c, tasks, pkg, scheme) }
+            // front - moved to the front while parked, it would come up on the hidden one. The wait on
+            // the order goes on: the user looking in is not the order being over (ColorOS keeps its
+            // task through it), and once they are out again its next round moves the page back.
+            PickupObserver.handBack(tapped, "the island was tapped") { openNow(c, tasks, pkg, scheme) }
         } else {
             openNow(c, tasks, pkg, scheme)
         }

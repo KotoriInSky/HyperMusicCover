@@ -61,8 +61,6 @@ internal object PickupCodeIsland {
     private const val SLOW = 30_000L
     /** How long a task is read on after the mini program leaves the front before it is let go. */
     private const val LEFT = 2 * 60_000L
-    /** How long a task stays unparked after the island was tapped. */
-    private const val NO_PARK = 5 * 60_000L
     /** How long the front has to stay off the mini program before its task is parked (see [left]). */
     private const val PARK_SETTLE = 1_500L
     /** Reads of one stay in front, at most: an hour at [EVERY]. */
@@ -78,6 +76,8 @@ internal object PickupCodeIsland {
      */
     private val READ = Any()
     private val TRACK = Any()
+    /** [nudge]'s wait for the front to settle: the observer's, not the tracker's, so [stop] leaves it. */
+    private val NUDGE = Any()
 
     /** The mini programs read, matched in the task label. */
     private val BRANDS = listOf(
@@ -120,8 +120,6 @@ internal object PickupCodeIsland {
     private var host = WECHAT
     /** Whether the tracked mini program is the front activity, which sets how often it is read. */
     private var inFront = false
-    /** Until when the task is not parked again, set when the island is tapped (see [left]). */
-    private var noParkUntil = 0L
     private var brand = ""
     /** The mini program the page being read belongs to, out of its own launch intent. */
     private var program: PickupAssist.Program? = null
@@ -135,7 +133,7 @@ internal object PickupCodeIsland {
     /** The read waiting on its answer, so a late answer after its timeout is not a second loop. */
     private var readSeq = 0
     private var inFlight = false
-    /** When [lastTop] last changed, so that a park waits for the front to settle (see [maybePark]). */
+    /** When [lastTop] last changed, so that a park waits for the front to settle (see [nudge]). */
     private var lastTopAt = 0L
     /** The user the tracked task runs as: 0 for 微信 itself, another for its clone. */
     private var taskUser = 0
@@ -152,6 +150,8 @@ internal object PickupCodeIsland {
     private var lastRead = ""
     /** The front page's first texts when no code was found, for the probe only (not logged). */
     private var lastHead = ""
+    /** The last order not observed and why, so that a read every few seconds says it once. */
+    private var lastNoObserve = ""
 
     fun install(cl: ClassLoader) {
         runCatching {
@@ -269,7 +269,7 @@ internal object PickupCodeIsland {
 
     /**
      * Where [task] - one of [host]'s - is: gone (closed, or its app killed), with the user (in front,
-     * its app in front, the front not settled yet, or just tapped), or away and free to be parked.
+     * its app in front, or the front not settled yet), or away and free to be parked.
      */
     fun whereIs(task: Int, host: String): Where {
         val ctx = Main.appContext() ?: return Where.WITH_USER
@@ -279,7 +279,7 @@ internal object PickupCodeIsland {
         if (running.none { it.taskId == task }) return Where.GONE
         if ((task == taskId && inFront) || lastTop?.packageName == host) return Where.WITH_USER
         val now = SystemClock.uptimeMillis()
-        if (now - lastTopAt < PARK_SETTLE || now < noParkUntil) return Where.WITH_USER
+        if (now - lastTopAt < PARK_SETTLE) return Where.WITH_USER
         return Where.AWAY
     }
 
@@ -297,11 +297,6 @@ internal object PickupCodeIsland {
 
     /** The task the front mini program is being read from, -1 for none (the probe's `do vdtest`). */
     fun trackedTask(): Int = taskId
-
-    /** The island was tapped: the user is going into the mini program, so it is not parked for [NO_PARK]. */
-    fun tapped() {
-        noParkUntil = SystemClock.uptimeMillis() + NO_PARK
-    }
 
     /** The card's tap receiver, in place as soon as this process has a Context ([PickupIsland.wake]). */
     fun wake(ctx: Context) = PickupIsland.wake(ctx)
@@ -471,6 +466,7 @@ internal object PickupCodeIsland {
      * pages are worth being read over, the phone in a pocket is not.
      */
     private fun left(top: ComponentName?) {
+        nudge()
         if (taskId < 0) {
             stop()
             return
@@ -482,7 +478,7 @@ internal object PickupCodeIsland {
         // And read once more, now: ColorOS asks for the page again as its app is left
         // (`eventSource = appexit`). The page is still there, and what it showed last is what the
         // user walked away with - a code that came out a moment before the swipe goes up at once,
-        // and the park below is decided on it, instead of on the read in front up to [EVERY] ago.
+        // and the wait on the order is made from it, instead of from the read in front up to [EVERY] ago.
         if (!inFlight && !PickupPark.isParked(taskId)) {
             val t = taskId
             val g = gen
@@ -493,7 +489,6 @@ internal object PickupCodeIsland {
         val ctx = Main.appContext()
         val last = lastCode
         if (ctx != null && last != null && finished(ctx, last)) PickupIsland.takeDown(taskId, "left an order that is over")
-        maybePark("left")
         // A task that ends up observed is not stopped by this: the observer is what ends it. One timer
         // at a time - one left over from an earlier visit stopped the tracking two minutes after
         // *that* visit, while the user had only just left again (2026-10-13).
@@ -504,58 +499,51 @@ internal object PickupCodeIsland {
     }
 
     /**
-     * The tracked task onto the hidden display, if the user is out of it and its order is worth
-     * waiting on. Asked when the mini program is left, and again whenever a read made while it is
-     * left finds a code: the code can come out only after the user has gone - 益禾堂's order page
-     * was still loading behind 微信's pay sheet when the user swiped home, its 制作中 code was read
-     * ten seconds later, and with the park decided only at the moment of leaving it was never made
-     * (2026-10-13).
+     * The order on the tracked page waited on, from the moment a code is read on the page that shows
+     * it - ColorOS makes its task on recognition, with the user still looking. It used to be made only
+     * as the user left, and only if they left for somewhere other than the app and not within five
+     * minutes of tapping the island: a 蜜雪冰城 order was never waited on at all that way, its card
+     * stuck at 制作中 while the drink was ready (2026-10-13, tapped at 18:05:13, left two seconds
+     * later). Where the user is now decides each round, not whether there is a wait (PickupObserver).
+     *
+     * Only from the page that shows the order. ColorOS makes its task on that page, remembers it, and
+     * sends the mini program back to it every round with wx.reLaunch; with no way back here, a task
+     * made on any other page reads that page for half an hour - 益禾堂's menu, with the island stuck
+     * at 制作中 while the drink was ready (2026-10-13). And not at all unless the rules ask for it:
+     * `use_observer` is ColorOS's own switch for the polling the observer is.
      */
-    private fun maybePark(why: String) {
-        if (inFront || taskId < 0) return
-        if (taskUser != android.os.Process.myUserHandle().hashCode()) {
-            Xp.log(TAG + "$why: not observed - a clone's task (user $taskUser)")
+    private fun observe(r: PickupParse.Result) {
+        if (taskId < 0 || !codeOnFront || !waiting()) return
+        val why = when {
+            taskUser != android.os.Process.myUserHandle().hashCode() -> "a clone's task (user $taskUser)"
+            !observes() -> "use_observer is off"
+            else -> null
+        }
+        if (why != null) {
+            if (lastNoObserve != "${r.code}|$why") Xp.log(TAG + "${r.code}: not observed - $why")
+            lastNoObserve = "${r.code}|$why"
             return
         }
-        // Whether the page is kept off-screen is the one thing about this path that the card cannot
-        // show, and it decides whether the order is read at all from here on: unparked, the task is
-        // let go after [LEFT] and the card freezes at whatever it last read - the state a drink that
-        // was still being made then never leaves (2026-10-10).
-        //
-        // And only from the page that shows the order. ColorOS makes its task on that page, remembers
-        // it, and sends the mini program back to it every round with wx.reLaunch; with no way back
-        // here, a task made on any other page reads that page for half an hour - 益禾堂's menu, with
-        // the island stuck at 制作中 while the drink was ready (2026-10-13).
-        val parkable = lastTop?.packageName != host && waiting() && codeOnFront && observes() &&
-            SystemClock.uptimeMillis() >= noParkUntil
-        Xp.log(TAG + "$why: park=" + parkable + " (waiting=" + waiting() + " onFront=" + codeOnFront +
-            " observes=" + observes() +
-            " noParkFor=" + ((noParkUntil - SystemClock.uptimeMillis()).coerceAtLeast(0) / 1000) + "s)")
-        // Out of the app altogether: the order is worth waiting on, so the task goes onto the hidden
-        // display where the mini program keeps its own page current (PickupPark, §6). Not while the
-        // app itself is in front: a mini program started from its own list would come back on a
-        // display nobody can see, and the app coming to the front releases it for the same reason.
-        // Not right after the island was tapped either: the user is in the mini program, and the
-        // front flickers through the launcher as they move about it - parking on that flicker took
-        // the mini program away from them mid-use (2026-10-08). And not at all unless the rules ask
-        // for it: `use_observer` is ColorOS's own switch for the polling this park is.
-        //
-        // And not on the spot: the front turns to the launcher as the swipe home *starts*, and the
-        // task moved then is the one the swipe's own animation is running on - a park in the middle
-        // of a swipe from one app to the next handed the swipe 微信 instead (2026-10-13). So the
-        // front has to have stayed put for [PARK_SETTLE], out of the mini program and its app.
-        if (parkable) settleThenObserve(taskId, gen)
+        PickupObserver.start(PickupIsland.Page(taskId, host, shownBrand(), oemRule, program?.scheme.orEmpty()),
+            r.code, r.status)
     }
 
-    private fun settleThenObserve(t: Int, g: Int) {
+    /**
+     * The front changed away from the mini program: once it has stayed put for [PARK_SETTLE], the
+     * orders waited on have their rounds now (PickupObserver.kickAway), which moves the ones the user
+     * is out of onto the hidden display. Each change starts the wait over.
+     *
+     * Not on the spot: the front turns to the launcher as the swipe home *starts*, and the task moved
+     * then is the one the swipe's own animation is running on - a park in the middle of a swipe from
+     * one app to the next handed the swipe 微信 instead (2026-10-13). The settle is also what keeps a
+     * flicker through the launcher, as the user moves about the mini program, from taking it away
+     * from them mid-use (2026-10-08) - which a five-minute hold after a tap used to stand in for.
+     */
+    private fun nudge() {
+        bg.removeCallbacksAndMessages(NUDGE)
         bg.postDelayed({
-            if (g != gen || t != taskId || inFront || lastTop?.packageName == host) return@postDelayed
-            val still = SystemClock.uptimeMillis() - lastTopAt
-            if (still < PARK_SETTLE) return@postDelayed settleThenObserve(t, g)
-            val r = lastCode ?: return@postDelayed
-            PickupObserver.start(PickupIsland.Page(t, host, shownBrand(), oemRule, program?.scheme.orEmpty()),
-                r.code, r.status)
-        }, TRACK, PARK_SETTLE)
+            if (SystemClock.uptimeMillis() - lastTopAt >= PARK_SETTLE) PickupObserver.kickAway()
+        }, NUDGE, PARK_SETTLE + 50)
     }
 
     /**
@@ -680,7 +668,8 @@ internal object PickupCodeIsland {
                     } else {
                         askXiaoai(ctx, r)
                         PickupIsland.show(enrich(r), PickupIsland.Page(task, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
-                        if (!inFront) maybePark("code read while away")
+                        if (inFront) PickupObserver.saw(task, r)
+                        observe(r)
                     }
                 } else if (nodes != null) {
                     val front = nodes.maxOfOrNull { it.page } ?: -1

@@ -12,7 +12,12 @@ import android.os.SystemClock
  *   gates     the task ends when it has run [DURATION] or the phone is at [MAX_TEMP]; a round is
  *             skipped while the phone is locked, offline, filming, or low on battery with the saver
  *             on and no charger (ColorOS's `ce.a.e()` gates, the ones this process can see).
- *   onNavi    the task is on the hidden display (PickupPark) - ColorOS moves it there for the round.
+ *   onNavi    the task is on the hidden display (PickupPark) - ColorOS moves it there for the round;
+ *             with the user on the page (ColorOS's FRONT_MAIN_SCREEN) it is not moved, and the round
+ *             is the tracker's read in front ([saw]).
+ *   lifetime  the task is made on recognition and outlives the user going in and out: a tap on the
+ *             island hands the page back ([handBack]) without ending it, and the user settling
+ *             elsewhere brings its round forward ([kickAway]) - ColorOS's PickupCodeTask callbacks.
  *   onCollect the page is reloaded and read [REFRESH_WAIT] later.
  *   onExtract the front page's code, by the same recognizer the island uses.
  *   onDispatch the order's state, only ever forward; [EMPTY_MAX] rounds in a row without the order
@@ -66,6 +71,8 @@ internal object PickupObserver {
         var empty = 0
         var parkTries = 0
         var last = ""
+        /** A round is between its move and its read: not to be started over by [kickAway]. */
+        var busy = false
         /** What this order's rounds are queued under, so that ending it takes back its own and no others. */
         val token = Any()
     }
@@ -76,14 +83,23 @@ internal object PickupObserver {
     fun observing(t: Int) = t >= 0 && tasks.containsKey(t)
 
     /**
-     * The order [code] on [p]'s task waited on, its state as of now [now]. The task is moved onto the
-     * hidden display and the first round runs once it is there - ColorOS schedules its first at 0.
-     * An order already waited on is only put back on the display; a fourth is not taken.
+     * The order [code] on [p]'s task waited on, its state as of now [now]. Made as soon as the order
+     * page shows a code, with the user still on it - ColorOS's task is made on recognition, not on
+     * the user leaving - and its first round runs at once, as ColorOS schedules its first at 0. Each
+     * round decides for itself whether the page is moved: not while the user is on it ([round]).
+     *
+     * An order already waited on takes the newer page and, if the page now shows another order, that
+     * one's code; a fourth is not taken.
      */
     fun start(p: PickupIsland.Page, code: String, now: String?) {
         tasks[p.task]?.let { o ->
             o.page = p
-            if (!PickupPark.isParked(o.task)) PickupPark.parkFrom(o.task)
+            if (code.isNotEmpty() && code != o.code) {
+                Xp.log(TAG + "task ${p.task}: now waiting on $code ($now), was ${o.code}")
+                o.code = code
+                o.status = now
+                o.empty = 0
+            }
             return
         }
         if (tasks.size >= MAX_TASKS) {
@@ -93,8 +109,41 @@ internal object PickupObserver {
         val o = Obs(p.task, p, code, now)
         tasks[p.task] = o
         Xp.log(TAG + "observing task ${p.task} for ${code.ifEmpty { "a code to come" }} ($now), ${tasks.size} in all")
-        PickupPark.parkFrom(p.task)
-        bg.postDelayed({ round(o) }, o.token, NAVI_WAIT)
+        bg.post { round(o) }
+    }
+
+    /**
+     * The island tapped on [task]: its page goes back to the user, over what they are in, and [then]
+     * runs after. The wait goes on - ColorOS's task outlives the user looking in, and reads the page
+     * in place while they do; the next round once they are out of it again moves it back.
+     */
+    fun handBack(task: Int, why: String, then: () -> Unit) {
+        tasks[task]?.let { Xp.log(TAG + "task $task handed back: $why (waited on still)") }
+        PickupPark.releaseFrom(task, why, front = true, then)
+    }
+
+    /**
+     * The user has settled somewhere that is not these orders' pages: each one off the display and
+     * between rounds has its round now, rather than at the end of the gap it took while the user was
+     * on it - ColorOS's applet-to-background callback. A round under way is left to finish.
+     */
+    fun kickAway() {
+        tasks.values.filter { !it.busy && !PickupPark.isParked(it.task) }.forEach { o ->
+            if (PickupCodeIsland.whereIs(o.task, o.page.host) != PickupCodeIsland.Where.AWAY) return@forEach
+            bg.removeCallbacksAndMessages(o.token)
+            round(o)
+        }
+    }
+
+    /**
+     * The page read in front by the tracker, while [task] is waited on: ColorOS's front-screen round,
+     * which reads in place and counts as a success. Only forward, as the rounds' own reads.
+     */
+    fun saw(task: Int, r: PickupParse.Result) {
+        val o = tasks[task] ?: return
+        if (r.code != o.code) return
+        o.empty = 0
+        if (rank(r.status) >= rank(o.status)) o.status = r.status
     }
 
     /**
@@ -154,7 +203,8 @@ internal object PickupObserver {
                 PickupCodeIsland.Where.AWAY -> {
                     if (++o.parkTries > PARK_TRIES) return end(o.task, "not put back on the hidden display")
                     PickupPark.parkFrom(o.task)
-                    bg.postDelayed({ round(o) }, o.token, NAVI_WAIT)
+                    o.busy = true
+                    bg.postDelayed({ o.busy = false; round(o) }, o.token, NAVI_WAIT)
                     return
                 }
             }
@@ -164,6 +214,7 @@ internal object PickupObserver {
             o.last = "skipped: $why"
             return next(o)
         }
+        o.busy = true
         PickupPark.cycleFrom {
             bg.postDelayed({ extract(o) }, o.token, REFRESH_WAIT)
         }
@@ -172,6 +223,7 @@ internal object PickupObserver {
     private fun extract(o: Obs) {
         if (!live(o)) return
         PickupCodeIsland.readOnce(o.task, frontOnly = true, rule = o.page.rule) { r, texts ->
+            o.busy = false
             if (live(o)) dispatch(o, r, texts)
         }
     }
