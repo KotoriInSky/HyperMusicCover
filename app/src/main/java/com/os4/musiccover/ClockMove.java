@@ -263,11 +263,11 @@ final class ClockMove {
               .append(" top=").append(Main.r1(lastTop))
               .append(" src=").append(src);
         }
-        sb.append(" ease=").append(Main.easeRunning() ? 1 : 0)
-          .append(" shown=").append(Main.r1(Main.easeShown()))
+        sb.append(" ease=").append(ClockRoom.easeRunning() ? 1 : 0)
+          .append(" shown=").append(Main.r1(ClockRoom.easeShown()))
           .append(" raw=").append(Main.r1(Main.easeRaw()))
           .append(" jump=").append(lastJump ? 1 : 0);
-        if (Main.easeSoft() > 0f) sb.append(" soft=").append(Main.r1(Main.easeSoft()));
+        if (ClockRoom.easeSoft() > 0f) sb.append(" soft=").append(Main.r1(ClockRoom.easeSoft()));
         if (nSize > 0) sb.append(" sz=").append(Main.r2(lastSize));
         if (nWeight > 0) sb.append(" wt=").append(Main.r2(lastWeight));
         if (nReassert > 0) {

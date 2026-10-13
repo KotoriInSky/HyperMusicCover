@@ -185,7 +185,7 @@ public class Main extends XposedModule {
      */
     private static volatile Class<?> sTypeCls;
     /** notifStateChange(float, boolean, NotificationTopChangeType), or null if it is gone. */
-    private static volatile Method sNotifStateChange;
+    static volatile Method sNotifStateChange;
     private static boolean sReceiverRegistered;
     /** The result code an op is answered with; the app sends 0. See ModuleBridge.OP_ACK. */
     private static final int OP_ACK = 1;
@@ -200,8 +200,6 @@ public class Main extends XposedModule {
     static volatile float sLastSystemY = Float.NaN;
     /** Set while our own frame is inside setNotifY, so we don't read it back as the system's. */
     private static volatile boolean sSelfDriving;
-    /** Room re-evaluation uses the OEM's animation channel without replacing its source Y. */
-    private static boolean sRoomReasserting;
     /** Per-frame setNotifY logging floods logcat at 8ms intervals; off unless asked for. */
     private static volatile boolean sVerbose;
     /**
@@ -1714,10 +1712,10 @@ public class Main extends XposedModule {
                 // Not our own writes, which are not what the system asked for. The system's
                 // re-assertions while we hold ARE: they carry where the notifications start, and
                 // the small clock gives way to them off this number.
-                if (!sSelfDriving && !sRoomReasserting) sLastSystemY = requested;
+                if (!sSelfDriving && !ClockRoom.sRoomReasserting) sLastSystemY = requested;
                 Float hold = sHoldY;
                 if (hold != null && requested != hold) args[0] = hold;
-                else if (hold == null) args[0] = roomForRows(requested);
+                else if (hold == null) args[0] = ClockRoom.roomForRows(requested);
                 ClockMove.noteState(requested, args[1], (Float) args[0]);
                 return chain.proceed(args);
             });
@@ -1844,10 +1842,10 @@ public class Main extends XposedModule {
                 float requested = (Float) args[0];
                 // Only the system's own emissions tell us where the clock really
                 // belongs; our own frames must not be mistaken for that.
-                if (!sSelfDriving && !sRoomReasserting) sLastSystemY = requested;
+                if (!sSelfDriving && !ClockRoom.sRoomReasserting) sLastSystemY = requested;
                 Float hold = sHoldY;
                 if (hold != null && requested != hold) args[0] = hold;
-                else if (hold == null && !sSelfDriving) args[0] = roomForRows(requested);
+                else if (hold == null && !sSelfDriving) args[0] = ClockRoom.roomForRows(requested);
                 ClockMove.noteNotifY(requested, (Float) args[0]);
                 // The coerced Y has to reach the original, which is what proceed(args) is for:
                 // this is the one hook whose whole purpose is rewriting an argument.
@@ -4720,232 +4718,9 @@ public class Main extends XposedModule {
         return out[0];
     }
 
-    /**
-     * The clock gives way to the notifications only as far as they really reach: the stack's
-     * own figure keeps room for one big notification whatever is there (NotificationStacking
-     * Interactor.calculateKeyguardNotifTop), so a single short row by the pill shrank a clock
-     * it never came near (filmed 2026-09-25). Never higher than the system asked: rows that do
-     * reach up still push it as they always did.
-     */
-    static float roomForRows(float requested) {
-        float room = roomForRowsNow(requested);
-        // An empty stack must immediately give back the edited clock position. Easing from
-        // an old notification constraint across a doze can otherwise retain a squeezed pose.
-        if (sRoomUnobstructed) return resetClockRoom(room);
-        return easeRoom(room);
-    }
-
-    /** roomForRows at once, for a caller that eases its own way there (ClockCollapse.exitY). */
-    static float roomForRowsNow(float requested) {
-        sRoomUnobstructed = requested >= Float.MAX_VALUE / 2f;
-        if (Float.isNaN(requested) || requested >= Float.MAX_VALUE / 2f) return requested;
-        float top;
-        try {
-            top = MiniPlayerRuntime.stackContentTop();
-        } catch (Throwable t) {
-            return requested;
-        }
-        boolean nativeEmpty = systemClockUnobstructed();
-        sRoomUnobstructed = nativeEmpty || top == Float.MAX_VALUE;
-        float out = nativeEmpty ? requested : ClockRoomPolicy.resolve(
-                requested, top, top == Float.MAX_VALUE ? unobstructedClockY() : Float.NaN);
-        ClockMove.noteRoom(requested, top, out);
-        return out;
-    }
-
-    private static boolean systemClockUnobstructed() {
-        try {
-            Object it = sContainer == null ? null : Xp.getObjectField(sContainer, "keyguardClockNotifInteractor");
-            return it != null && ((Number) Xp.getObjectField(it, "rawNotifY")).floatValue() == Float.MAX_VALUE;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    /** Same empty-notification boundary as the OEM's correctYValue, including edited clocks. */
-    private static float unobstructedClockY() {
-        try {
-            View v = sContainer;
-            if (v == null) return Float.NaN;
-            Object it = Xp.getObjectField(v, "keyguardClockNotifInteractor");
-            Rect rect = (Rect) Xp.getObjectField(it, "maxEditRect");
-            if (rect != null && rect.bottom > 0)
-                return (float) rect.bottom + ((Number) Xp.getObjectField(it, "clockNotificationMargin")).floatValue();
-            return v.getResources().getDisplayMetrics().heightPixels;
-        } catch (Throwable ignored) {
-            return Float.NaN;
-        }
-    }
-
-    private static float resetClockRoom(float y) {
-        if (sRoomEasing) android.view.Choreographer.getInstance().removeFrameCallback(ROOM_FRAME);
-        sRoomShown = sRoomRaw = y;
-        sRoomEasing = false;
-        sRoomSoft = 0f;
-        return y;
-    }
-
-    /**
-     * The room given to the clock, eased when it jumps. What is given replaces whatever the
-     * clock's own animation was carrying (setNotifY is where it lands), so the OEM's easing
-     * never reached our changes: a card switched in or out cut the clock from one size to the
-     * other in a frame (2026-09-26). A jump - the rows changing under it, not the OEM's own
-     * animation stepping, which moves it a little a frame - is followed over ~300ms instead,
-     * the clock asked again every frame meanwhile (reassertClockRoom) until it is there.
-     *
-     * Except for the first stretch of a jump that GIVES the clock room back, which is walked
-     * slowly instead (SOFT_STEP_PX). The clock only answers to the last ~40px of the y before it
-     * is fully open, and an exponential ease is fastest at the start - so pulling the media island
-     * back down, those 40px went by in a single frame while the same 40px on the way up took 22
-     * (measured 2026-09-29, `op clockmove`). Entering that band never had the problem: the ease is
-     * slowest where it ends, which is where the band is. So only the growing direction is changed,
-     * and only its opening: what is walked slowly up there is invisible either way, because the
-     * clock is already fully open until the y comes back down to it.
-     */
-    private static float easeRoom(float raw) {
-        if (Float.isNaN(raw) || raw >= Float.MAX_VALUE / 2f || !sScreenOn) {
-            sRoomShown = raw;
-            sRoomRaw = raw;
-            sRoomEasing = false;
-            sRoomSoft = 0f;
-            return raw;
-        }
-        long now = android.os.SystemClock.uptimeMillis();
-        if (Float.isNaN(sRoomShown) || Float.isNaN(sRoomRaw)) {
-            sRoomShown = raw;
-            sRoomRaw = raw;
-            return raw;
-        }
-        boolean jump = Math.abs(raw - sRoomRaw) > ROOM_JUMP_PX;
-        ClockMove.noteEase(jump);
-        sRoomRaw = raw;
-        if (!sRoomEasing) {
-            if (!jump) {
-                sRoomShown = raw;
-                return raw;
-            }
-            sRoomEasing = true;
-            sRoomAt = now;
-            // Only a jump that gives room back starts slowly; see the note above.
-            sRoomSoft = raw > sRoomShown ? SOFT_START_PX : 0f;
-            android.view.Choreographer.getInstance().removeFrameCallback(ROOM_FRAME);
-            android.view.Choreographer.getInstance().postFrameCallback(ROOM_FRAME);
-            return sRoomShown;
-        }
-        float dt = Math.min(50f, now - sRoomAt);
-        sRoomAt = now;
-        float step = (raw - sRoomShown) * (1f - (float) Math.exp(-dt / ROOM_TAU_MS));
-        if (sRoomSoft > 0f) {
-            float soft = Math.min(Math.abs(step), Math.min(SOFT_STEP_PX, sRoomSoft));
-            sRoomShown += Math.signum(raw - sRoomShown) * soft;
-            sRoomSoft -= soft;
-        } else {
-            sRoomShown += step;
-        }
-        if (Math.abs(raw - sRoomShown) < 1f) {
-            sRoomShown = raw;
-            sRoomEasing = false;
-            sRoomSoft = 0f;
-        }
-        return sRoomShown;
-    }
-
-    /**
-     * How much of a jump that gives room back is walked at SOFT_STEP_PX a frame.
-     *
-     * Sized for the band measured here - 40px - with a little over. It is a distance, not a
-     * duration, so on a style whose band is wider it covers part of it and the rest is left to
-     * the ease as before: a partial fix, never a worse one. And a style whose band is narrower
-     * spends the extra only where the clock is already fully open, which is time and nothing else.
-     */
-    private static final float SOFT_START_PX = 60f;
-    private static final float SOFT_STEP_PX = 5f;
-    private static float sRoomSoft;
-
-    /** The ease's own state, for the clockmove probe. */
-    static boolean easeRunning() {
-        return sRoomEasing;
-    }
-
-    static float easeShown() {
-        return sRoomShown;
-    }
-
     static float easeRaw() {
-        return sRoomRaw;
+        return ClockRoom.sRoomRaw;
     }
-
-    /** How much of the soft start is still to be walked, for the clockmove probe. */
-    static float easeSoft() {
-        return sRoomSoft;
-    }
-
-    private static float sRoomShown = Float.NaN, sRoomRaw = Float.NaN;
-    private static boolean sRoomUnobstructed;
-    private static long sRoomAt;
-    private static boolean sRoomEasing;
-    /** A change of room bigger than this in one go is a jump, eased (easeRoom). */
-    private static final float ROOM_JUMP_PX = 24f;
-    /** The ease's time constant: nine tenths of the way in ~160ms, there by ~300ms. */
-    private static final float ROOM_TAU_MS = 70f;
-
-    /** Every frame of an ease: the clock asked again, which brings it the next step. */
-    private static final android.view.Choreographer.FrameCallback ROOM_FRAME =
-            new android.view.Choreographer.FrameCallback() {
-        @Override
-        public void doFrame(long frameTimeNanos) {
-            if (!sRoomEasing) return;
-            if (sHoldY != null || !sScreenOn) {
-                sRoomEasing = false;
-                return;
-            }
-            reassertClockRoom();
-            if (sRoomEasing) android.view.Choreographer.getInstance().postFrameCallback(this);
-        }
-    };
-
-    /**
-     * Re-evaluate room through the clock's animation channel, with the source Y left intact.
-     * A small nudge passes its equal-value early-out; roomForRows supplies the current boundary.
-     */
-    public static void reassertClockRoom() {
-        if (sHoldY != null) return;
-        if (systemClockUnobstructed()) {
-            resetClockRoom(sLastSystemY);
-            return;
-        }
-        final View v = sContainer;
-        if (v == null || sNotifStateChange == null) return;
-        try {
-            Object interactor = Xp.getObjectField(v, "keyguardClockNotifInteractor");
-            Object flow = interactor == null ? null : Xp.getObjectField(interactor, "_notificationYState");
-            if (flow == null) return;
-            Object triple = Xp.callMethod(flow, "getValue");
-            if (triple == null) return;
-            float y = ((Number) Xp.callMethod(triple, "getFirst")).floatValue();
-            if (!(y < Float.MAX_VALUE / 2f)) return;
-            sRoomNudge = -sRoomNudge;
-            // Its second is whether the clock jumps (ClockBaseAnimation.notifStateChange: true
-            // -> Folme setTo, false -> doNotifyHeightChangeAnimation). Copied from the system's
-            // last, which follows the stack's list scroll frame by frame and so says jump, the
-            // clock cut from one size to the other on every switch between the stack island's
-            // list and a card (2026-09-26). Ours is always a change of rows: animated.
-            // Do not publish a fabricated notification position to the shared StateFlow.
-            // Its other consumers and the next sleep/wake must retain the system's own Y.
-            boolean wasReasserting = sRoomReasserting;
-            sRoomReasserting = true;
-            try {
-                sNotifStateChange.invoke(v, y + sRoomNudge, false, Xp.callMethod(triple, "getThird"));
-            } finally {
-                sRoomReasserting = wasReasserting;
-            }
-            ClockMove.noteReassert(y, true);
-        } catch (Throwable t) {
-            ClockMove.noteReassert(Float.NaN, false);
-        }
-    }
-
-    private static float sRoomNudge = 0.01f;
 
     /** Prefer the pixels visible in the card; some OEM drawables expose no BitmapDrawable. */
     static Bitmap coverMorphSource() {

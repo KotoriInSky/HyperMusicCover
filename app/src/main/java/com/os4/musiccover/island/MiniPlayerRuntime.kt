@@ -4,6 +4,7 @@ package com.os4.musiccover.island
 import com.os4.musiccover.CardTouch
 import com.os4.musiccover.MediaCard
 import com.os4.musiccover.ClockCollapse
+import com.os4.musiccover.ClockRoom
 import com.os4.musiccover.ClockRoomPolicy
 import com.os4.musiccover.CoverMorphMotion
 import com.os4.musiccover.Main
@@ -2191,7 +2192,7 @@ private class MiniPlayerController(
         liveMetadata = c?.metadata
         liveFor = c?.sessionToken
     }
-    /** The stack's content top the clock was last given room by (Main.roomForRows). */
+    /** The stack's content top the clock was last given room by (ClockRoom.roomForRows). */
     private var clockTopAsked = Float.NaN
 
     private val preDraw = ViewTreeObserver.OnPreDrawListener { android.os.Trace.beginSection("MC islandsPreDraw"); try {
@@ -2202,7 +2203,7 @@ private class MiniPlayerController(
         val top = stackContentTop()
         if (top.isNaN() != clockTopAsked.isNaN() || kotlin.math.abs(top - clockTopAsked) > 2f) {
             clockTopAsked = top
-            Main.reassertClockRoom()
+            ClockRoom.reassertClockRoom()
         }
         updateVisibility()
         if (player?.visibility == View.VISIBLE) {

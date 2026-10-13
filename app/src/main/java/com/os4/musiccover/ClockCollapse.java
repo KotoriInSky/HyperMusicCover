@@ -868,13 +868,13 @@ public final class ClockCollapse {
 
     /**
      * Where the clock goes out of the cover: the OEM's y, given the room the rows really leave
-     * (Main.roomForRows). The OEM's own figure keeps room for one big notification whatever is
+     * (ClockRoom.roomForRows). The OEM's own figure keeps room for one big notification whatever is
      * there, so the exit landed on a squeezed clock and it grew again once let go - out of the
      * music card into a focus notification, the clock shrank and came back (2026-09-26).
      */
     private static float exitY(float natural) {
         // At once: the exit eases toward it on its own (0.25 of the way a frame).
-        return Float.isNaN(natural) ? natural : Main.roomForRowsNow(natural);
+        return Float.isNaN(natural) ? natural : ClockRoom.roomForRowsNow(natural);
     }
 
     /** The share of the way to a moved exit end taken each frame. */
