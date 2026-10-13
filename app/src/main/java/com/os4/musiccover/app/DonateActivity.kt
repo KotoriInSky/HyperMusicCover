@@ -1,24 +1,20 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.app
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
-import com.os4.musiccover.ui.screen.features.ShadePageView
+import com.os4.musiccover.ui.screen.donate.DonatePageContent
 import com.os4.musiccover.ui.theme.AppTheme
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 
 /**
- * The notification shade's settings, as a screen of its own.
+ * The payment codes, reached from the home page.
  *
- * See [CoverActivity] for why this is an Activity rather than a page inside the features tab;
- * the reasoning is [LicenseActivity]'s and it is the transition that decides it.
+ * A screen of its own, like [LicenseActivity] and [CoverActivity]: the platform supplies the
+ * transition and the back handling, and nothing here has to imitate either.
  */
-class ShadeActivity : ComponentActivity() {
+class DonateActivity : ComponentActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         val language = LocaleHelper.getSavedLanguage(newBase)
@@ -35,25 +31,14 @@ class ShadeActivity : ComponentActivity() {
         } catch (_: Exception) {
             ColorSchemeMode.System
         }
-        val isBlurEnabled = savedSettings.isBlurEnabled
 
         setContent {
             AppTheme(themeMode = themeMode) {
-                ShadePageView(
-                    isBlurEnabled = isBlurEnabled,
-                    refreshKey = resumes,
+                DonatePageContent(
                     onBack = { finish() },
+                    isBlurEnabled = savedSettings.isBlurEnabled,
                 )
             }
         }
-    }
-
-    // See CoverActivity: asked again each time the screen comes back to the front.
-    private var resumes by mutableIntStateOf(0)
-    private var resumedOnce = false
-
-    override fun onResume() {
-        super.onResume()
-        if (resumedOnce) resumes++ else resumedOnce = true
     }
 }

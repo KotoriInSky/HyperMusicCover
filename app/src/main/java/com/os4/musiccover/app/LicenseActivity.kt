@@ -1,21 +1,21 @@
-package com.os4.musiccover
-
+/*
+ * Adapted from HyperNavBar (https://github.com/HyperNavBar/HyperNavBar),
+ * licensed under the Apache License, Version 2.0.
+ *
+ * Changes in HyperMusicCover: package renamed, project links and strings replaced,
+ * and the pieces this project does not use removed.
+ */
+package com.os4.musiccover.app
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.os4.musiccover.ui.screen.donate.DonatePageContent
+import com.os4.musiccover.ui.screen.about.LicensePageContent
 import com.os4.musiccover.ui.theme.AppTheme
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 
-/**
- * The payment codes, reached from the home page.
- *
- * A screen of its own, like [LicenseActivity] and [CoverActivity]: the platform supplies the
- * transition and the back handling, and nothing here has to imitate either.
- */
-class DonateActivity : ComponentActivity() {
+class LicenseActivity : ComponentActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         val language = LocaleHelper.getSavedLanguage(newBase)
@@ -32,13 +32,11 @@ class DonateActivity : ComponentActivity() {
         } catch (_: Exception) {
             ColorSchemeMode.System
         }
+        val isBlurEnabled = savedSettings.isBlurEnabled
 
         setContent {
             AppTheme(themeMode = themeMode) {
-                DonatePageContent(
-                    onBack = { finish() },
-                    isBlurEnabled = savedSettings.isBlurEnabled,
-                )
+                LicensePageContent(onBack = { finish() }, isBlurEnabled = isBlurEnabled)
             }
         }
     }

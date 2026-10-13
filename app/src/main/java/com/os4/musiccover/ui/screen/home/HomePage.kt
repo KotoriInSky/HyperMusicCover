@@ -49,9 +49,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.os4.musiccover.BuildConfig
-import com.os4.musiccover.DonateActivity
-import com.os4.musiccover.LsposedService
-import com.os4.musiccover.ModuleBridge
+import com.os4.musiccover.app.DonateActivity
+import com.os4.musiccover.app.LsposedService
+import com.os4.musiccover.app.ModuleBridge
 import com.os4.musiccover.R
 import com.os4.musiccover.ui.component.DropdownItem
 import com.os4.musiccover.ui.component.MenuPopupDefaults

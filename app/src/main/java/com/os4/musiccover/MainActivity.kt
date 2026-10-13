@@ -1,5 +1,12 @@
 package com.os4.musiccover
 
+import com.os4.musiccover.app.AppNightMode
+import com.os4.musiccover.app.AppSettings
+import com.os4.musiccover.app.CreditsActivity
+import com.os4.musiccover.app.LaunchBackground
+import com.os4.musiccover.app.LicenseActivity
+import com.os4.musiccover.app.LocaleHelper
+import com.os4.musiccover.app.LsposedService
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.ColorDrawable

@@ -17,7 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.os4.musiccover.ModuleBridge
+import com.os4.musiccover.app.ModuleBridge
 import com.os4.musiccover.R
 import com.os4.musiccover.ui.util.PageScaffold
 import top.yukonga.miuix.kmp.basic.Card

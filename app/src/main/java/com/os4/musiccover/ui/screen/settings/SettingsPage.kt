@@ -22,12 +22,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.os4.musiccover.LauncherIcon
-import com.os4.musiccover.LocaleHelper
+import com.os4.musiccover.app.LocaleHelper
 import com.os4.musiccover.LogLevel
-import com.os4.musiccover.LsposedService
+import com.os4.musiccover.app.LsposedService
 import com.os4.musiccover.R
-import com.os4.musiccover.SettingsBackup
-import com.os4.musiccover.ThemeActivity
+import com.os4.musiccover.app.SettingsBackup
+import com.os4.musiccover.app.ThemeActivity
 import kotlinx.coroutines.launch
 import com.os4.musiccover.ui.util.PageScaffold
 import top.yukonga.miuix.kmp.basic.Card

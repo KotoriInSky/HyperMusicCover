@@ -99,14 +99,14 @@
         </receiver>
 
         <activity
-            android:name=".LicenseActivity"
+            android:name=".app.LicenseActivity"
             android:exported="false"
             android:label="@string/third_party_licenses_title"
             android:theme="@style/Theme.HyperMusicCover" />
 
         <!-- The credits, opened from the About page's row under the licence list. -->
         <activity
-            android:name=".CreditsActivity"
+            android:name=".app.CreditsActivity"
             android:exported="false"
             android:label="@string/about_credits"
             android:theme="@style/Theme.HyperMusicCover" />
@@ -115,25 +115,25 @@
              an Activity each, so the platform supplies the transition and the back handling
              rather than the features page imitating both. -->
         <activity
-            android:name=".CoverActivity"
+            android:name=".app.CoverActivity"
             android:exported="false"
             android:label="@string/features_cover_title"
             android:theme="@style/Theme.HyperMusicCover" />
 
         <activity
-            android:name=".ShadeActivity"
+            android:name=".app.ShadeActivity"
             android:exported="false"
             android:label="@string/features_shade_title"
             android:theme="@style/Theme.HyperMusicCover" />
 
         <activity
-            android:name=".MiniPlayerActivity"
+            android:name=".app.MiniPlayerActivity"
             android:exported="false"
             android:label="@string/features_mini_title"
             android:theme="@style/Theme.HyperMusicCover" />
 
         <activity
-            android:name=".TransitActivity"
+            android:name=".app.TransitActivity"
             android:exported="false"
             android:label="@string/features_transit_title"
             android:theme="@style/Theme.HyperMusicCover" />
@@ -143,14 +143,14 @@
              and the back handling - gesture, button and predictive back - rather than the
              settings page imitating all three. -->
         <activity
-            android:name=".ThemeActivity"
+            android:name=".app.ThemeActivity"
             android:exported="false"
             android:label="@string/settings_theme"
             android:theme="@style/Theme.HyperMusicCover" />
 
         <!-- The payment codes, opened from the home page's donate card. -->
         <activity
-            android:name=".DonateActivity"
+            android:name=".app.DonateActivity"
             android:exported="false"
             android:label="@string/donate_title"
             android:theme="@style/Theme.HyperMusicCover" />

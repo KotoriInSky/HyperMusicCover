@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 btm_m
-package com.os4.musiccover
-
+package com.os4.musiccover.app
+import com.os4.musiccover.MiniPlayerConfig
+import com.os4.musiccover.R
 import com.os4.musiccover.ui.util.FoldUnder
 import android.content.Context
 import android.os.Bundle

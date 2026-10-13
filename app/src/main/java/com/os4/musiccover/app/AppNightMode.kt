@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.app
 import android.app.UiModeManager
 import android.content.Context
 import androidx.core.content.edit

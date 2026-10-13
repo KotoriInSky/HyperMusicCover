@@ -36,7 +36,7 @@ import android.os.Process;
  * sends SystemUI. An anonymous broadcast carrying that token is the open registration's; one
  * without it is still adb's.
  */
-final class ProbeGuard {
+public final class ProbeGuard {
 
     private ProbeGuard() {
     }
@@ -45,14 +45,14 @@ final class ProbeGuard {
     private static final int SHELL_UID = 2000;
 
     /** The options every probe broadcast goes out with: the sender's identity, for the check. */
-    static Bundle options() {
+    public static Bundle options() {
         BroadcastOptions o = BroadcastOptions.makeBasic();
         o.setShareIdentityEnabled(true);
         return o.toBundle();
     }
 
     /** A probe broadcast, sent the way the receivers will take it. */
-    static void send(Context ctx, Intent intent) {
+    public static void send(Context ctx, Intent intent) {
         stamp(intent);
         ctx.sendBroadcast(intent, null, options());
     }

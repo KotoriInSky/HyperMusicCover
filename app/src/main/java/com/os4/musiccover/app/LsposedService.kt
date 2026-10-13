@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.app
+import com.os4.musiccover.LogLevel
 import android.content.Context
 import androidx.core.content.edit
 import io.github.libxposed.service.HookedTarget

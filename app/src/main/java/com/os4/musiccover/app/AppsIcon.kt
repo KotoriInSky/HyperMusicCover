@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.app
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat

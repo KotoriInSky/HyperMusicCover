@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.app
+import com.os4.musiccover.R
 import com.os4.musiccover.ui.util.nextCard
 import com.os4.musiccover.ui.util.firstCard
 import com.os4.musiccover.ui.util.FoldUnder

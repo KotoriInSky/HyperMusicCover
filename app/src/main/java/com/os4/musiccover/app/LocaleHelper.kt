@@ -5,8 +5,7 @@
  * Changes in HyperMusicCover: package renamed, project links and strings replaced,
  * and the pieces this project does not use removed.
  */
-package com.os4.musiccover
-
+package com.os4.musiccover.app
 import android.content.Context
 import android.content.res.Configuration
 import java.util.Locale
