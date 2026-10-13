@@ -1,4 +1,5 @@
 package com.os4.musiccover.transit;
+import com.os4.musiccover.ClockViews;
 import com.os4.musiccover.ClockCollapse;
 import com.os4.musiccover.immersive.CountdownScene;
 import com.os4.musiccover.Http;
@@ -1018,7 +1019,7 @@ public final class AmapTransitScene implements ImmersiveScene {
      * The clock is where it rests in the lock screen's own pixels (ClockCollapse
      * .contentBottomOnScreen: the small clock's ink and any signature bar it carries), not where
      * it is drawn: through a doze HyperOS holds keyguard_root_view at 0.95 and the clock is drawn
-     * lower, and words that followed it jumped up as the screen came on. Main.glyphBox is no
+     * lower, and words that followed it jumped up as the screen came on. ClockViews.glyphBox is no
      * substitute - it is the clock before it is made small, 240px further down. With no small
      * clock of ours, the date line, unzoomed the same way. A clock that seems to reach past the
      * middle of the screen is a measurement to distrust, not a clock.
@@ -1027,7 +1028,7 @@ public final class AmapTransitScene implements ImmersiveScene {
         float top = h * WORDS_TOP;
         try {
             float clock = ClockCollapse.contentBottomShown();
-            View d = Main.visibleDate();
+            View d = ClockViews.visibleDate();
             if (d != null && d.isShown() && d.getAlpha() > 0.01f) {
                 int[] at = new int[2];
                 d.getLocationOnScreen(at);

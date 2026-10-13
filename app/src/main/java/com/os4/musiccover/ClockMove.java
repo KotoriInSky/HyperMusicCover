@@ -323,7 +323,7 @@ final class ClockMove {
             // The ink box: what the eye is tracking, and the only reading that can show a glyph
             // size change, because the clock's view bounds do not move with the variable font.
             try {
-                sb.append(" box=").append(Main.boxOf(Main.measureLiveBox()));
+                sb.append(" box=").append(ClockViews.boxOf(Main.measureLiveBox()));
             } catch (Throwable t) {
                 sb.append(" box=?");
             }
@@ -422,7 +422,7 @@ final class ClockMove {
             sChain[i] = up;
             up = up != null && up.getParent() instanceof View ? (View) up.getParent() : null;
         }
-        sDate = Main.visibleDate();
+        sDate = ClockViews.visibleDate();
         // `clock_animation_container` is the date's parent and the clock's, and it is the view
         // the OEM translates - the one thing here that cannot be read off `sContainer`, whose
         // own translation is always 0. Asked of the date first, of the clock tree if the date

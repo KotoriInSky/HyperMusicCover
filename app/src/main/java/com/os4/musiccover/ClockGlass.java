@@ -157,7 +157,7 @@ final class ClockGlass {
         // Nothing on the walk answered. Asked of the tree instead: all_in_one is the family whose
         // clock is built this way, and it is the one that answers `time_group`. The date used to
         // be the view that landed here; it is no longer coloured at all. See anchoredStyle().
-        return Main.anchoredStyle();
+        return ClockViews.anchoredStyle();
     }
 
     /**
@@ -324,7 +324,7 @@ final class ClockGlass {
      */
     static boolean clockHasGlass() {
         for (View root : Main.clockRoots()) {
-            View clock = Main.clockViewOf(root);
+            View clock = ClockViews.clockViewOf(root);
             if (clock == null) continue;
             for (Class<?> k = clock.getClass(); k != null && k != Object.class;
                  k = k.getSuperclass()) {

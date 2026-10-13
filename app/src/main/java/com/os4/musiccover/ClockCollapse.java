@@ -282,7 +282,7 @@ public final class ClockCollapse {
      */
     static float contentBottomDrawn() {
         View g = firstTarget();
-        RectF box = Main.glyphBox(true);
+        RectF box = ClockViews.glyphBox(true);
         if (g == null || box == null || box.height() <= 0f) return Float.NaN;
         float bottom = drawnY(g, box.centerX(), box.bottom);
         Live m = LIVE;
@@ -1525,9 +1525,9 @@ public final class ClockCollapse {
             if (g.getScaleY() != 1f) g.setScaleY(1f);
             if (g.getTranslationY() != 0f) g.setTranslationY(0f);
         }
-        View date = Main.sDateView;
+        View date = ClockViews.sDateView;
         if (date != null && date.getTranslationY() != 0f) date.setTranslationY(0f);
-        for (View v : Main.signatureViews()) {
+        for (View v : ClockViews.signatureViews()) {
             if (v.getTranslationY() != 0f) v.setTranslationY(0f);
         }
     }
@@ -1734,13 +1734,13 @@ public final class ClockCollapse {
     private static boolean measure(Live m) {
         View g = firstTarget();
         if (g == null) return false;
-        RectF box = Main.glyphBox(true);
+        RectF box = ClockViews.glyphBox(true);
         if (box == null || box.height() <= 0f) return false;
         m.box = box;
-        m.unit = Main.glyphUnit(box);
+        m.unit = ClockViews.glyphUnit(box);
         m.inkTop = parentTop(g) + g.getTop() + box.top;
-        m.anchored = Main.anchoredStyle();
-        View date = Main.visibleDate();
+        m.anchored = ClockViews.anchoredStyle();
+        View date = ClockViews.visibleDate();
         Main.noteDateView(date);
         m.date = date;
         if (date != null) {
@@ -1757,9 +1757,9 @@ public final class ClockCollapse {
         m.sig = SIGS;
         m.sigN = 0;
         for (Sig s : SIGS) s.v = null;
-        for (View v : Main.signatureViews()) {
+        for (View v : ClockViews.signatureViews()) {
             if (m.sigN >= SIGS.length) break;
-            if (!Main.signatureShows(v)) continue;
+            if (!ClockViews.signatureShows(v)) continue;
             Sig s = SIGS[m.sigN++];
             s.v = v;
             s.top = parentTop(v) + v.getTop();
