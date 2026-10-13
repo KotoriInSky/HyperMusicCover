@@ -415,7 +415,7 @@ public final class MediaCard {
         long now = android.os.SystemClock.uptimeMillis();
         if (now - sMediaCardRadiusTriedAt < MEDIA_CARD_RADIUS_RETRY_MS) return;
         sMediaCardRadiusTriedAt = now;
-        View cardView = Main.cardShotRoot(Main.findSysuiView("mi_media_controls"));
+        View cardView = PreviewShots.cardShotRoot(Main.findSysuiView("mi_media_controls"));
         View bg = cardView == null ? null : Main.findByName(cardView, "media_bg");
         float r = bg == null ? 0f : Main.outlineRadius(bg);
         if (r <= 0f) return;
