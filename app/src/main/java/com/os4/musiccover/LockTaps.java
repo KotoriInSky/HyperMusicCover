@@ -1,5 +1,7 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.island.MiniPlayerRuntime;
+import java.util.List;
 import com.os4.musiccover.immersive.ImmersiveHost;
 import android.content.Context;
 import android.view.GestureDetector;
@@ -332,6 +334,109 @@ public final class LockTaps {
             Main.exitFromTap("tap at y=" + y);
         } else if (Main.sTapSuppressed) {
             Main.enterFromTap("tap at y=" + y);
+        }
+    }
+
+    static void hookLockScreenTap(final ClassLoader cl) {
+        // A tap on the cover puts the wallpaper back.
+        //
+        // Hooked on the shade window's dispatch rather than given a view of our own: anything
+        // clickable added over the keyguard swallows the ACTION_DOWN in its region, and
+        // swipe-to-unlock is a drag that begins with exactly that ACTION_DOWN. Here the events
+        // are only observed - the detector's answer is thrown away and proceed() runs
+        // unconditionally - so every gesture still reaches the OEM as it did before.
+        try {
+            Class<?> shade = Xp.findClass(
+                    "com.android.systemui.shade.NotificationShadeWindowView", cl);
+            Xp.hookAll(shade, "dispatchTouchEvent", chain -> {
+                MotionEvent ev = null;
+                try {
+                    java.util.List<Object> a = chain.getArgs();
+                    if (!a.isEmpty() && a.get(0) instanceof MotionEvent) {
+                        ev = (MotionEvent) a.get(0);
+                    }
+                } catch (Throwable ignored) {
+                }
+                if (ev != null) {
+                    // A touch on the lit lock screen counts as the user being there.
+                    Main.touchKeepsAwake();
+                    // Whether this gesture began on the control centre, decided at the DOWN and
+                    // nowhere else.
+                    //
+                    // onLockTap's own controlCentreUp() guard is evaluated a double-tap window
+                    // later, and by then the centre can be gone: swiping up to dismiss it takes
+                    // the centre out from under the check, so it read false and the tap went
+                    // through as a tap on the cover. Measured symptom - dragging up at the clock
+                    // and date left cover mode instead of closing the centre.
+                    //
+                    // At the DOWN the answer is unambiguous: a finger that lands while the centre
+                    // is open is aimed at the centre, whatever the gesture turns out to be.
+                    if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                        Main.sGestureOnCentre = Main.controlCenterUp();
+                        if (Main.sGestureOnCentre) cancelPendingTap("gesture began on the control centre");
+                        // The charging animation, for the same reason and at the same point: a
+                        // tap on it is what dismisses it, and asking later would be asking after
+                        // it had gone. See chargeAnimUp.
+                        ChargeAnim.sGestureOnCharge = ChargeAnim.chargeAnimUp();
+                        if (ChargeAnim.sGestureOnCharge) cancelPendingTap("gesture began on the charging animation");
+                    }
+                    // A tap on the open immersive page's own target in its row - 高德's turn
+                    // arrow - is the page's, and the row must not see it. See
+                    // ImmersiveHost.routeTouch.
+                    try {
+                        if (ImmersiveHost.routeTouch(ev)) return Boolean.TRUE;
+                    } catch (Throwable ignored) {
+                    }
+                    // The one case this hook does more than watch. Returning true without
+                    // proceeding takes the gesture out of the dispatch entirely, which is the
+                    // only way the artwork can mean something other than "open the player".
+                    // A gesture that starts on the mini player is the mini player's alone: its
+                    // swipe up would otherwise also be swipe-to-unlock.
+                    try {
+                        if (MiniPlayerRuntime.routeTouch(ev)) return Boolean.TRUE;
+                    } catch (Throwable ignored) {
+                    }
+                    // A downward swipe on the media card folds it back into the mini player. Seen
+                    // before the art tap, which it overrides; the moment it is recognised the
+                    // rest of the tree gets a CANCEL, so the shade does not also start opening.
+                    try {
+                        int swipe = CardTouch.cardSwipe(ev);
+                        if (swipe == CardTouch.SWIPE_FIRED) {
+                            MotionEvent cancel = MotionEvent.obtain(ev);
+                            cancel.setAction(MotionEvent.ACTION_CANCEL);
+                            try {
+                                chain.proceed(new Object[]{cancel});
+                            } finally {
+                                cancel.recycle();
+                            }
+                            return Boolean.TRUE;
+                        }
+                        if (swipe == CardTouch.SWIPE_HELD) return Boolean.TRUE;
+                    } catch (Throwable t) {
+                        MiniPlayerRuntime.noteTouch("card swipe failed: " + t);
+                    }
+                    // The card's page button, ahead of the artwork for no reason but that the two
+                    // never overlap. Taken whole for the same reason the artwork's is: under it
+                    // is the card, whose own click opens the player.
+                    try {
+                        if (Main.swallowPageTap(ev)) return Boolean.TRUE;
+                    } catch (Throwable ignored) {
+                    }
+                    try {
+                        if (CardTouch.swallowTitleTap(ev)) return Boolean.TRUE;
+                    } catch (Throwable ignored) {
+                    }
+                    try {
+                        if (Main.swallowArtTap(ev)) return Boolean.TRUE;
+                    } catch (Throwable ignored) {
+                    }
+                    feedTap(ev);
+                }
+                return chain.proceed();
+            });
+            Xp.log(Main.TAG + "lock screen tap hooked");
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "lock screen tap hook failed: " + t);
         }
     }
 }
