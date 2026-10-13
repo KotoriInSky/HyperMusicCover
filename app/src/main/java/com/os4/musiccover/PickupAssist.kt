@@ -144,4 +144,45 @@ internal object PickupAssist {
         for (i in 0 until st.windowNodeCount) walk(st.getWindowNodeAt(i).rootViewNode, -1)
         return out
     }
+
+    /**
+     * The structure's web pages as DOM trees, one per `#document`, in tree order - for the brands'
+     * CSS rules ([PickupCss]). XWeb puts each DOM node's tag and attributes in its `HtmlInfo`, and
+     * a text node is a child whose tag is empty; views that are not part of a page (no `HtmlInfo`)
+     * are walked through. Only `class` and `id` are kept: the rules ask for nothing else, and the
+     * other attributes include whole images as data URLs.
+     */
+    fun dom(st: AssistStructure): List<PickupCss.El> {
+        val docs = ArrayList<PickupCss.El>()
+        fun text(into: PickupCss.El, t: CharSequence?) {
+            if (t != null && t.isNotBlank()) into.add(PickupCss.El("", own = t.toString()))
+        }
+        fun walk(n: AssistStructure.ViewNode, into: PickupCss.El?) {
+            var here = into
+            val html = n.htmlInfo
+            val tag = html?.tag.orEmpty()
+            when {
+                tag == "#document" -> here = PickupCss.El(tag).also { docs += it }
+                into == null -> {}
+                html == null || tag.isEmpty() -> text(into, n.text)
+                else -> {
+                    var cls = ""
+                    var id = ""
+                    html.attributes?.forEach { a ->
+                        when (a.first) {
+                            "class" -> cls = a.second.orEmpty()
+                            "id" -> id = a.second.orEmpty()
+                        }
+                    }
+                    val el = PickupCss.El(tag.lowercase(), cls.split(' ', '\t', '\n').filter { it.isNotEmpty() }.toSet(), id)
+                    into.add(el)
+                    text(el, n.text)
+                    here = el
+                }
+            }
+            for (i in 0 until n.childCount) walk(n.getChildAt(i), here)
+        }
+        for (i in 0 until st.windowNodeCount) walk(st.getWindowNodeAt(i).rootViewNode, null)
+        return docs
+    }
 }

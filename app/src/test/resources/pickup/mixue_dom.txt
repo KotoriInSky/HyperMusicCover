@@ -1,0 +1,626 @@
+<#document>
+  <body>
+<#document>
+  <wx-tab-bar-wrapper>
+    <wx-view .tab-bar-index--tab-bar>
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "首页"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "点餐"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "周边商城"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "订单"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "我的"
+  <body>
+    <wx-swiper .ad-banner.ad-index--ad-banner.index-ad>
+      <div .wx-swiper-wrapper>
+        "可横向滚动"
+        <div .wx-swiper-slides>
+          <div .wx-swiper-slide-frame>
+            <wx-swiper-item .flex.ad-index--flex>
+              <wx-image .ad-img.ad-index--ad-img>
+            <wx-swiper-item .flex.ad-index--flex>
+              <wx-image .ad-img.ad-index--ad-img>
+            <wx-swiper-item .flex.ad-index--flex>
+              <wx-image .ad-img.ad-index--ad-img>
+            <wx-swiper-item .flex.ad-index--flex>
+              <wx-image .ad-img.ad-index--ad-img>
+        <div .wx-swiper-dots.wx-swiper-dots-horizontal>
+    <wx-view .custom-info.flex-sb>
+      <wx-image .avatar.avatar-bg>
+      <wx-view .level-info>
+        <wx-text .fb6.mx-ellipsis.f14>
+          "138******00"
+        <wx-text .level-tag.level-3>
+          "大雪人会员"
+        <wx-view .progress-bar-index--progress-bar>
+          <wx-view .progress-bar-index--progress-bar_active>
+        <wx-text .c-theme>
+          "163"
+        <wx-text .c-aaa>
+          "/349"
+      <wx-view .coin-box>
+        <wx-text .fb.f14.coin-text.mx-ellipsis>
+          "2136"
+        <wx-view .f11.c-aaa.mt2>
+          "雪王币"
+        <wx-view .coupon-tag.f9.c-theme.b-theme-light>
+          "即将过期"
+      <wx-view .coupon-box>
+        <wx-text .fb.f14.coupon-text.mx-ellipsis>
+          "0"
+        <wx-view .f11.c-aaa.mt2>
+          "优惠券"
+    <wx-view .to-order>
+      <wx-image>
+      <wx-image>
+    <wx-view .magnet.flex.mx-hairline--top>
+      <wx-image .magnet-img>
+      <wx-image .magnet-img>
+      <wx-image .magnet-img>
+      <wx-image .magnet-img>
+    <wx-image .tile-area__img.index--tile-area__img.tile-area__img--three-main.index--tile-area__img--three-main>
+    <wx-image .tile-area__img.index--tile-area__img.tile-area__img--three-sub.index--tile-area__img--three-sub>
+    <wx-image .tile-area__img.index--tile-area__img.tile-area__img--three-sub.index--tile-area__img--three-sub>
+    <wx-swiper .task-index--task-area.task-index--mb12.task-index--mzhd-banner-view-anchor>
+      <div .wx-swiper-wrapper>
+        "可横向滚动"
+        <div .wx-swiper-slides>
+          <div .wx-swiper-slide-frame>
+            <wx-swiper-item>
+              <wx-image .medal-task-icon.zone-index--medal-task-icon.mr12.zone-index--mr12>
+              <wx-view .medal-task-name.zone-index--medal-task-name.mx-ellipsis.zone-index--mx-ellipsis.f14.zone-index--f14.c-333.zone-index--c-333.fb.zone-index--fb>
+                "捐赠雪王币得【教育同行者】徽章"
+              <wx-text .c-theme.zone-index--c-theme>
+                "0/1"
+              <wx-button .task-btn.zone-index--task-btn.b-theme.zone-index--b-theme.c-fff.zone-index--c-fff.f12.zone-index--f12>
+                <wx-text>
+                  "马上点亮"
+            <wx-swiper-item>
+              <wx-image .medal-task-icon.zone-index--medal-task-icon.mr12.zone-index--mr12>
+              <wx-view .medal-task-name.zone-index--medal-task-name.mx-ellipsis.zone-index--mx-ellipsis.f14.zone-index--f14.c-333.zone-index--c-333.fb.zone-index--fb>
+                "再消耗555雪王币可得【雪王币小当家】徽章"
+              <wx-text .c-theme.zone-index--c-theme>
+                "445/1000"
+              <wx-button .task-btn.zone-index--task-btn.b-theme.zone-index--b-theme.c-fff.zone-index--c-fff.f12.zone-index--f12>
+                <wx-text>
+                  "马上点亮"
+        <div .wx-swiper-dots.wx-swiper-dots-horizontal>
+    <wx-view .hot-suggest.pl12.pt12.pb12.mb20>
+      <wx-image .suggest-bg>
+      <wx-view .f16.fb.mx-ellipsis>
+        "大家都在喝"
+      <wx-view .mx-ellipsis.f13.mt8.mb8>
+        ""
+        "示例食堂店-No.100000"
+      <wx-view .suggest-goods>
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "黑糖珍珠撞奶"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥8"
+        <wx-text .c-aaa.origin-price>
+          "¥9"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "雪王大圣代(黑糖珍珠味)"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥6"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "黄桃果霸"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥7"
+        <wx-text .c-aaa.origin-price>
+          "¥8"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "冰鲜柠檬水"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥4"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "棒打鲜橙"
+        "¥5.4省钱卡专享价"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥6"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "芋圆葡萄"
+        "¥7省钱卡专享价"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥8"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "珍珠奶茶"
+        "¥5.4省钱卡专享价"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥6"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+        <wx-view .suggest-goods-img-wrapper>
+          <wx-image .suggest-goods-img.no-bg>
+        <wx-view .mx-ellipsis.f12.mt4.mb4>
+          "蜜桃四季春"
+        <wx-text .c-aaa.product-price.product-price-active>
+          "¥7"
+        <wx-text .iconfont.icon-add.f22.c-theme>
+          ""
+    <wx-view .f16.fb.c-333>
+      "甜蜜资讯"
+    <wx-view .pt12.pb17>
+      <wx-swiper .ad-banner.ad-index--ad-banner.sweet-news-ad>
+        <div .wx-swiper-wrapper>
+          "可横向滚动"
+          <div .wx-swiper-slides>
+            <div .wx-swiper-slide-frame>
+              <wx-swiper-item .flex.ad-index--flex>
+                <wx-image .ad-img.ad-index--ad-img>
+              <wx-swiper-item .flex.ad-index--flex>
+                <wx-image .ad-img.ad-index--ad-img>
+              <wx-swiper-item .flex.ad-index--flex>
+                <wx-image .ad-img.ad-index--ad-img>
+          <div .wx-swiper-dots.wx-swiper-dots-horizontal>
+    <wx-mx-dialog>
+    <wx-mx-new-luck-pack>
+<#document>
+  <wx-tab-bar-wrapper>
+    <wx-view .tab-bar-index--tab-bar>
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "首页"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "点餐"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "周边商城"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "订单"
+      <wx-image .tab-bar-index--tab-icon>
+      <wx-text>
+        "我的"
+  <body>
+    <wx-view .top-wrap>
+      <wx-view .tabs.tab-index--tabs.f15.tab-index--f15>
+        <wx-view .tabs-item.tab-index--tabs-item.flex-center.tab-index--flex-center.fb5.tab-index--fb5>
+          <wx-text>
+            "门店订单"
+          <wx-view .tabs-underline.tab-index--tabs-underline>
+        <wx-view .tabs-item.tab-index--tabs-item.flex-center.tab-index--flex-center.c-777.tab-index--c-777>
+          <wx-text>
+            "次卡订单"
+        <wx-view .tabs-item.tab-index--tabs-item.flex-center.tab-index--flex-center.c-777.tab-index--c-777>
+          <wx-text>
+            "礼品卡订单"
+        <wx-view .tabs-item.tab-index--tabs-item.flex-center.tab-index--flex-center.c-777.tab-index--c-777>
+          <wx-text>
+            "充值订单"
+        <wx-view .tabs-item.tab-index--tabs-item.flex-center.tab-index--flex-center.c-777.tab-index--c-777>
+          <wx-text>
+            "付费会员订单"
+    <wx-view .list-container>
+      <wx-scroll-view .scroll-list>
+        <div .wx-scroll-view>
+          <div .wx-scroll-view>
+            <div .wx--refresher--container--private>
+              <div>
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "南门店-No.927639"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg.no-bg.component-order-item-index--no-bg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-08-22 19:33:52"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 8.01"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "宝能新都荟店-No.952704"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg.no-bg.component-order-item-index--no-bg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-08-21 20:30:21"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 7"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "南门店-No.927639"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg.no-bg.component-order-item-index--no-bg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-08-11 16:50:37"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 9"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "示例食堂店-No.100000"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-07-11 18:43:26"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 6.99"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "金洲地铁站店-No.921214"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-05-30 14:51:01"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 7"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "蜜雪冰城（示例食堂店）-No.100000"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-05-04 11:20:55"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 2"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "蜜雪冰城（示例食堂店）-No.100000"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-05-03 18:18:41"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共2件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 11"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "蜜雪冰城（示例食堂店）-No.100000"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已取消"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-05-03 18:17:42"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 5"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "蜜雪冰城（深圳工业园店）-No.951861"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-04-23 17:40:23"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 8"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .cell>
+              <wx-mx-order-item .order-card-body>
+                <wx-text .out.component-order-item-index--out>
+                  "自提"
+                <wx-text .shopName.component-order-item-index--shopName>
+                  "蜜雪冰城（深圳工业园店）-No.951861"
+                <wx-text .iconfont.component-order-item-index--iconfont.icon-arrow_right.component-order-item-index--icon-arrow_right.f13.component-order-item-index--f13.fb5.component-order-item-index--fb5>
+                  ""
+                <wx-view .order-status.component-order-item-index--order-status>
+                  "已完成"
+                <wx-view .product-img-wrapper.component-order-item-index--product-img-wrapper>
+                  <wx-image .productImg.component-order-item-index--productImg>
+                <wx-text .c-aaa.component-order-item-index--c-aaa>
+                  "2026-04-19 16:48:26"
+                <wx-text .f11.component-order-item-index--f11.c-999.component-order-item-index--c-999>
+                  "共1件"
+                <wx-text .f14.component-order-item-index--f14.c-333.component-order-item-index--c-333.ml4.component-order-item-index--ml4.fb.component-order-item-index--fb>
+                  "¥ 8"
+                <wx-view .more-box>
+                  <wx-view .more-box-item.f12>
+                    "更多"
+                <wx-view .another-order.c-theme.f12>
+                  "再来一单"
+            <wx-view .f12.c-aaa>
+              "加载中..."
+      <wx-scroll-view .scroll-list>
+        <div .wx-scroll-view>
+          <div .wx-scroll-view>
+            <div .wx--refresher--container--private>
+              <div>
+            <wx-image .empty-img>
+            <wx-text .empty-text>
+              "您还没有订单，快去选一杯喜欢的饮品吧~"
+            <wx-button .empty-btn>
+              "去喝一杯"
+      <wx-scroll-view .scroll-list>
+        <div .wx-scroll-view>
+          <div .wx-scroll-view>
+            <div .wx--refresher--container--private>
+              <div>
+            <wx-image .empty-img>
+            <wx-text .empty-text>
+              "您还没有订单，快去选一杯喜欢的饮品吧~"
+            <wx-button .empty-btn>
+              "去喝一杯"
+      <wx-scroll-view .scroll-list>
+        <div .wx-scroll-view>
+          <div .wx-scroll-view>
+            <div .wx--refresher--container--private>
+              <div>
+            <wx-image .empty-img>
+            <wx-text .empty-text>
+              "您还没有订单，快去选一杯喜欢的饮品吧~"
+            <wx-button .empty-btn>
+              "去喝一杯"
+      <wx-scroll-view .scroll-list>
+        <div .wx-scroll-view>
+          <div .wx-scroll-view>
+            <div .wx--refresher--container--private>
+              <div>
+            <wx-image .empty-img>
+            <wx-text .empty-text>
+              "您还没有订单，快去选一杯喜欢的饮品吧~"
+            <wx-button .empty-btn>
+              "去喝一杯"
+    <wx-mx-dialog>
+    <wx-mx-dialog>
+<#document>
+  <wx-tab-bar-wrapper>
+  <body>
+    <div .wx-scroll-view>
+      <div .wx-scroll-view>
+        <wx-view .navigator.bar-index--navigator.mx-nav-bar.container-index--mx-nav-bar>
+          <wx-image .back-img.bar-index--back-img>
+          <wx-text .center-title.bar-index--center-title>
+            "订单详情"
+        <wx-view .order-card.b-fff.c-333>
+          <wx-view .order-card-body>
+            "取餐码"
+            <wx-view .takeNum.mt8>
+              "6706"
+            <wx-view .f14.mt8>
+              "订单已完成，祝您用餐愉快"
+            <wx-view .card-btn.card-btn-filled>
+              "再来一单"
+        <wx-view .bottom.safe-bottom>
+          <wx-view .qr-code-box.code-index--qr-code-box>
+            <wx-image .qr-code-bg.code-index--qr-code-bg>
+            <wx-image .qr-code.code-index--qr-code>
+          <wx-view .card.mb11>
+            <wx-image .coin-icon.order-index--coin-icon>
+            <wx-text>
+              "本单可获得"
+              " 81 "
+              "雪王币"
+            <wx-text .to-exchange.order-index--to-exchange.fb5.order-index--fb5.iconfont.order-index--iconfont.icon-arrow_right.order-index--icon-arrow_right>
+              "0元兑零食"
+              ""
+            <wx-view .flex-sb.mb12>
+              <wx-text .mx-ellipsis>
+                "示例南门店"
+              <wx-text .iconfont.icon-arrow_right.fb.f13.shrink.ml4>
+                ""
+              <wx-text .f12.c-777.mx-multi-ellipsis--l2>
+                "直线距离1.0km"
+                " | "
+                "示例路1号"
+              <wx-image .shop_item_contact_icon>
+              <wx-image .shop_item_contact_icon>
+            <wx-view .product-img-wrapper.item-index--product-img-wrapper>
+              <wx-image .product-img.item-index--product-img.no-bg.item-index--no-bg>
+            <wx-text .f14.item-index--f14.mx-ellipsis.item-index--mx-ellipsis.c-333.item-index--c-333>
+              "香柠蓝莓霸气桶"
+            <wx-view .f12.item-index--f12.ml11.item-index--ml11.shrink.item-index--shrink>
+              "¥ "
+              "8.9"
+            <wx-text .f11.item-index--f11.c-777.item-index--c-777.select-names.item-index--select-names>
+              "少冰/三分糖"
+            <wx-text .f12.item-index--f12.c-333.item-index--c-333.product-amount.item-index--product-amount>
+              "X1"
+            <wx-view>
+              "雪王币抵现活动"
+            <wx-view .c-theme-light>
+              "-¥0.89"
+            "共1件"
+            "，合计"
+            "￥8.01"
+            <wx-text .c-warn>
+              "奖励81雪王币"
+            <wx-image .snow_icon>
+            <wx-text .c-warn>
+              "+9甜蜜值"
+            <wx-text>
+              "(1分钟后发放奖励)"
+          <wx-swiper .ad-banner.ad-index--ad-banner.order-ad>
+            <div .wx-swiper-wrapper>
+              "可横向滚动"
+              <div .wx-swiper-slides>
+                <div .wx-swiper-slide-frame>
+                  <wx-swiper-item .flex.ad-index--flex>
+                    <wx-image .ad-img.ad-index--ad-img>
+                  <wx-swiper-item .flex.ad-index--flex>
+                    <wx-image .ad-img.ad-index--ad-img>
+                  <wx-swiper-item .flex.ad-index--flex>
+                    <wx-image .ad-img.ad-index--ad-img>
+                  <wx-swiper-item .flex.ad-index--flex>
+                    <wx-image .ad-img.ad-index--ad-img>
+              <div .wx-swiper-dots.wx-swiper-dots-horizontal>
+          <wx-view .card.mb11>
+            <wx-text .c-777.left-width>
+              "下单时间"
+            <wx-text>
+              "2026-08-22 19:33:52"
+            <wx-text .c-777.left-width>
+              "订单编号"
+            "1000000000000000001"
+            <wx-text .copy.f11>
+              "复制"
+            <wx-text .c-777.left-width>
+              "取餐号码"
+            <wx-text>
+              "6706"
+            <wx-text .c-777.left-width>
+              "是否打包"
+            <wx-text>
+              "要打包袋"
+            <wx-text .c-777.left-width>
+              "备注"
+            <wx-text>
+              "无"
+            <wx-text .c-777.left-width>
+              "门店编码"
+            <wx-text>
+              "927639"
+          <wx-text>
+            "如有售后或退款问题，请"
+          <wx-text>
+            "联系门店"
+    <wx-mx-dialog>
+    <wx-mx-dialog>
+    <wx-order-coupon-popup>
+    <wx-mx-join-group-guide>
+      <wx-mx-dialog>

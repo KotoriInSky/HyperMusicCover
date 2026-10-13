@@ -1,0 +1,33 @@
+{
+ "source": "this module's own rules, in ColorOS's pickupCodeH5Query format, for brands its cloud has none for (PickupCss)",
+ "rules": [
+  {
+   "appId": "wx7696c66d2245d107",
+   "appName": "蜜雪冰城",
+   "updateTime": "2026-10-13 00:00:00",
+   "pages": [
+    {
+     "description": "蜜雪冰城 详情页",
+     "appId": "wx7696c66d2245d107",
+     "codeQuery": [
+      {"query_type": 2, "result_type": 1, "key": "wx-view.takeNum", "method": "notnull"}
+     ],
+     "statusQuery": [
+      {"query_type": 2, "result_type": 1, "key": "wx-view.f14.mt8", "method": "contains", "param": "订单已完成", "link_to": "待取餐"},
+      {"query_type": 2, "result_type": 1, "key": "wx-view.f14.mt8", "method": "contains", "param": "退款", "link_to": "已取消"},
+      {"query_type": 2, "result_type": 1, "key": "wx-view.f14.mt8", "method": "contains", "param": "取消", "link_to": "已取消"},
+      {"query_type": 2, "result_type": 1, "key": "wx-view.f14.mt8", "method": "contains", "param": "制作", "link_to": "制作中"},
+      {"query_type": 2, "result_type": 1, "key": "wx-view.f14.mt8", "method": "contains", "param": "前面", "link_to": "制作中"},
+      {"query_type": 2, "result_type": 1, "key": "wx-view.f14.mt8", "method": "notnull"}
+     ],
+     "waitTimeQuery": [
+      {"query_type": 2, "result_type": 1, "key": "wx-view.f14.mt8", "method": "contains", "param": "分钟", "link_to": "pattern=\\d+ *分钟"}
+     ],
+     "orderTimeQuery": [
+      {"query_type": 2, "result_type": 3, "key": "wx-text.c-777.left-width", "tag": "下单时间"}
+     ]
+    }
+   ]
+  }
+ ]
+}

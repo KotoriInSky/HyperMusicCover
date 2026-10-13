@@ -129,6 +129,8 @@ internal object PickupCodeIsland {
     private var oemRule: PickupRule? = null
     /** What ColorOS's recognizer last answered, for the probe's `describe()`. Not shown to anyone. */
     private var lastOem = ""
+    /** What the brand's page rules read last ([PickupCss]), for the probe: off, nothing, or the read. */
+    private var lastCss = ""
     private var reads = 0
     /** The read waiting on its answer, so a late answer after its timeout is not a second loop. */
     private var readSeq = 0
@@ -250,6 +252,8 @@ internal object PickupCodeIsland {
         // Collected, cancelled, refunded: words with one reading only.
         if (s != null && s in PickupParse.DONE && s != "已完成") return true
         if (r.idle) return true
+        // The brand's rules found 已完成 where its state is shown: over, whatever the time.
+        if (r.ruled && s == "已完成") return true
         // Otherwise the order's time, which ColorOS lets outrank the page (`initialState`): 「已完成」
         // on a page whose order is minutes old is the drink being ready, not the order being over.
         val time = r.orderTime
@@ -323,7 +327,8 @@ internal object PickupCodeIsland {
                 // Read for the experiment only: the tracked page's appId and brand stay as they are.
                 val nodes = if (st != null) runCatching { PickupAssist.nodes(st) }.getOrNull() else null
                 val read = if (frontOnly) nodes?.let { PickupParse.frontPage(it) } else nodes
-                once(read?.let { recognize(it, rule) }, read?.size ?: 0)
+                val doc = if (st != null) runCatching { PickupCss.front(PickupAssist.dom(st)) }.getOrNull() else null
+                once(read?.let { recognize(it, rule, doc, PickupAssist.programOf(ex)?.appId) }, read?.size ?: 0)
             }
         }
         if (!asked) {
@@ -343,6 +348,7 @@ internal object PickupCodeIsland {
         append(" last=$lastRead")
         if (lastHead.isNotEmpty()) append(" head=[$lastHead]")
         if (lastOem.isNotEmpty()) append(" oem=[$lastOem]")
+        if (lastCss.isNotEmpty()) append(" css=[$lastCss]")
         append(" | ").append(PickupObserver.describe())
     }
 
@@ -652,7 +658,8 @@ internal object PickupCodeIsland {
                     oemRule = rule
                     brand = name
                 }
-                val r = nodes?.let { recognize(it, oemRule) }
+                val doc = if (st != null) runCatching { PickupCss.front(PickupAssist.dom(st)) }.getOrNull() else null
+                val r = nodes?.let { recognize(it, oemRule, doc, program?.appId) }
                 val ms = SystemClock.uptimeMillis() - t0
                 lastRead = when {
                     st == null -> "no structure (${ms}ms)"
@@ -716,8 +723,26 @@ internal object PickupCodeIsland {
      *
      * Reads nothing but its arguments, and writes only [lastOem], which is the probe's.
      */
-    private fun recognize(nodes: List<PickupParse.Node>, rule: PickupRule?): PickupParse.Result? {
+    private fun recognize(nodes: List<PickupParse.Node>, rule: PickupRule?, doc: PickupCss.El?,
+                          appId: String?): PickupParse.Result? {
         val texts = PickupParse.frontPage(nodes).map { it.text }
+        // The brand's own CSS rules, where ColorOS's cloud has any for this appId: over whatever the
+        // words below make of the page (see [PickupCss.merge]).
+        val css = PickupCss.ruleFor(appId)?.let { pr -> doc?.let { PickupCss.read(pr, it) } }
+        lastCss = when {
+            PickupCss.ruleFor(appId) == null -> ""
+            doc == null -> "no dom"
+            css == null -> "nothing"
+            else -> "${css.code ?: "-"} ${css.status ?: "-"} ${css.wait ?: "-"} @${css.page}"
+        }
+        return PickupCss.merge(recognizeWords(nodes, texts, rule), css)?.let { r ->
+            // A state the rules read is the page's own account of the order; idle is for a page without one.
+            if (r.code.isEmpty() || r.ruled) r else r.copy(idle = idle(rule, texts))
+        }
+    }
+
+    /** [recognize] by the page's words alone: ColorOS's recognizer, then [PickupParse]. */
+    private fun recognizeWords(nodes: List<PickupParse.Node>, texts: List<String>, rule: PickupRule?): PickupParse.Result? {
         val out = PickupOem.recognize(texts, rule?.tagAppName?.takeIf { it.isNotEmpty() } ?: OEM_APP, "")
         if (out == null) {
             lastOem = "off"
@@ -743,7 +768,7 @@ internal object PickupCodeIsland {
             return PickupParse.Result(code = "", label = "取餐码", status = null, store = null,
                 oemStatus = "waiting", orderTime = out.orderTime.ifEmpty { null })
         }
-        return r?.let { it.copy(idle = idle(rule, texts)) }
+        return r
     }
 
     /**

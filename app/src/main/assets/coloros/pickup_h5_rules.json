@@ -1,0 +1,1850 @@
+{
+ "source": "iwisdom.apps.coloros.com/pageRuleResolve/getActivityRule bizName=pickupCodeH5Query",
+ "rules": [
+  {
+   "appId": "wx08ee7f7d36a2eff8",
+   "appName": "肯德基",
+   "updateTime": "2026-02-12 19:07:01",
+   "pages": [
+    {
+     "description": "肯德基 列表页",
+     "appId": "wx08ee7f7d36a2eff8",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_f01f85672b87&path=home/pages/kfcNewOrderList/index",
+     "listNodeQuery": {
+      "query_type": 1,
+      "key": "0db0abbd--_HOc"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.kfcListItemNumberPosText.wrapper--kfcListItemNumberPosText",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.kfcListItemStatu.wrapper--kfcListItemStatu",
+       "method": "contains",
+       "param": "准备中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.kfcListItemStatu.wrapper--kfcListItemStatu",
+       "method": "contains",
+       "param": "请取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.kfcListItemStatu.wrapper--kfcListItemStatu",
+       "method": "contains",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "肯德基 详情页",
+     "appId": "wx08ee7f7d36a2eff8",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_f01f85672b87&path=order/kfcOrderDetails/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.od-sb-ct-ctr_num_code.wrapper--od-sb-ct-ctr_num_code",
+       "method": "notnull"
+      },
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-text.p-meal-info-key-txt.wrapper--p-meal-info-key-txt",
+       "tag": "取餐号",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.od-pb-c_item_c_t.wrapper--od-pb-c_item_c_t.od-pb-c_item_c_t_a.wrapper--od-pb-c_item_c_t_a",
+       "method": "contains",
+       "param": "准备中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.od-pb-c_item_c_t.wrapper--od-pb-c_item_c_t.od-pb-c_item_c_t_a.wrapper--od-pb-c_item_c_t_a",
+       "method": "contains",
+       "param": "请取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.od-pb-c_item_c_t.wrapper--od-pb-c_item_c_t.od-pb-c_item_c_t_a.wrapper--od-pb-c_item_c_t_a",
+       "method": "contains",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.od-sb-ct-l_c_t.wrapper--od-sb-ct-l_c_t",
+       "method": "contains",
+       "param": "已取消",
+       "link_to": "已取消"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.od-sb-que.wrapper--od-sb-que",
+       "method": "contains",
+       "param": "预计等待",
+       "link_to": "pattern=\\d+ *分钟"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx0ecc09fda00eecd7",
+   "appName": "丘大叔柠檬茶",
+   "updateTime": "2026-07-20 17:15:24",
+   "pages": [
+    {
+     "description": "丘大叔柠檬茶 详情页",
+     "appId": "wx0ecc09fda00eecd7",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_19e899f7eec4&path=subpackages/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.meals-num"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "equals",
+       "param": "已下单",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "equals",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "equals",
+       "param": "请取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "equals",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "丘大叔柠檬茶 列表页",
+     "appId": "wx0ecc09fda00eecd7",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_19e899f7eec4&path=pages/order/list/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.order-list-wrapper.relative._ad995aba"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.meals-num,wx-view.flex-1.text-30.font-500._ad995aba"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-text._ad995aba",
+       "method": "equals",
+       "param": "待备餐",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_",
+       "method": "equals",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_",
+       "method": "equals",
+       "param": "请取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-text._ad995aba",
+       "method": "equals",
+       "param": "待取餐",
+       "link_to": "待取餐"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx1736dcbd36f4c055",
+   "appName": "古茗茶饮点单",
+   "updateTime": "2026-02-06 17:37:26",
+   "pages": [
+    {
+     "description": "古茗茶饮点单 列表页",
+     "appId": "wx1736dcbd36f4c055",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_c9b69950bccf&path=pages/order/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.wx--refresher--content--private"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order-take-text-number.comp--order-take-text-number"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-header-status.comp--order-header-status",
+       "method": "equals",
+       "param": "已下单",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-header-status.comp--order-header-status.wait-take.comp--wait-take",
+       "method": "equals",
+       "param": "待取茶",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-header-status.comp--order-header-status.finish.comp--finish",
+       "method": "equals",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "古茗茶饮点单 详情页",
+     "appId": "wx1736dcbd36f4c055",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_c9b69950bccf&path=pages/orderDetail/goodme/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.number-code.number-bold,wx-text.ranking-number"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.get-tea-tips,wx-view.in-order-tips",
+       "method": "text_start_with",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.get-tea-tips,wx-view.in-order-tips",
+       "method": "contains",
+       "param": "制作完成",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order-detail-complete-font",
+       "method": "equals",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx21c7506e98a2fe75",
+   "appName": "瑞幸咖啡",
+   "updateTime": "2026-07-21 16:33:36",
+   "pages": [
+    {
+     "description": "瑞幸咖啡 列表页",
+     "appId": "wx21c7506e98a2fe75",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_fa66ea1664f1&path=pages/order/list/list",
+     "listNodeQuery": {
+      "query_type": 1,
+      "key": "item0"
+     },
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.space-nowrap.title--space-nowrap",
+       "method": "text_start_with",
+       "param": "下单成功",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.space-nowrap.title--space-nowrap",
+       "method": "text_start_with",
+       "param": "精心制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.space-nowrap.title--space-nowrap",
+       "method": "text_start_with",
+       "param": "等待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.space-nowrap.title--space-nowrap",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.space-nowrap.title--space-nowrap",
+       "method": "text_start_with",
+       "param": "已取消",
+       "link_to": "已取消"
+      }
+     ]
+    },
+    {
+     "description": "瑞幸咖啡 详情页",
+     "appId": "wx21c7506e98a2fe75",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_fa66ea1664f1&path=pages/order/detail/detail",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.orderDesc",
+       "method": "contains",
+       "param": "取餐号",
+       "link_to": "pattern=\\d+"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.take-meal-code",
+       "method": "notnull",
+       "link_to": "pattern=\\d+"
+      },
+      {
+       "query_type": 2,
+       "result_type": 4,
+       "key": "wx-view.color-code",
+       "tag": "取餐码",
+       "method": "notnull"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.code.code--code",
+       "method": "notnull"
+      },
+      {
+       "query_type": 2,
+       "result_type": 4,
+       "key": "wx-view.color-code.title--color-code",
+       "tag": "取餐码",
+       "method": "notnull"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.orderDesc.title--orderDesc",
+       "method": "contains",
+       "param": "取餐号",
+       "link_to": "pattern=\\d+"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.navbar-title__text.index--navbar-title__text",
+       "method": "text_start_with",
+       "param": "下单成功",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.navbar-title__text.index--navbar-title__text",
+       "method": "text_start_with",
+       "param": "精心制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.navbar-title__text.index--navbar-title__text",
+       "method": "text_start_with",
+       "param": "等待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.navbar-title__text.index--navbar-title__text",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.navbar-title__text.index--navbar-title__text",
+       "method": "text_start_with",
+       "param": "已取消",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-name",
+       "method": "text_start_with",
+       "param": "下单成功",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-name",
+       "method": "text_start_with",
+       "param": "精心制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-name",
+       "method": "text_start_with",
+       "param": "等待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-name",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-name",
+       "method": "text_start_with",
+       "param": "已取消",
+       "link_to": "已取消"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.redTip.title--redTip",
+       "method": "notnull"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.orderDesc",
+       "method": "notnull",
+       "link_to": "pattern=\\d{1,2}:\\d{1,2}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx22e1f742100ea917",
+   "appName": "甜啦啦",
+   "updateTime": "2026-07-17 10:34:15",
+   "pages": [
+    {
+     "description": "甜啦啦 列表页",
+     "appId": "wx22e1f742100ea917",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_829483a671fa&path=pages/order/index/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.order-list.orderItem--order-list.order-item.orderItem--order-item"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order-content-code.orderItem--order-content-code"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.top-status.orderItem--top-status",
+       "method": "text_start_with",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.top-status.orderItem--top-status",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "甜啦啦 详情页",
+     "appId": "wx22e1f742100ea917",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_829483a671fa&path=mainFlow/pages/order/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.code.OrderStatusCard-index--code"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order_status_title.OrderStatusCard-index--order_status_title, wx-view.reset-title.OrderStatusCard-index--reset-title",
+       "method": "text_start_with",
+       "param": "备餐中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order_status_title.OrderStatusCard-index--order_status_title, wx-view.reset-title.OrderStatusCard-index--reset-title",
+       "method": "text_start_with",
+       "param": "订单已完成",
+       "link_to": "已完成"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.redS.OrderStatusCard-index--redS.mgl4.OrderStatusCard-index--mgl4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx25f982a55e60a540",
+   "appName": "麦当劳",
+   "updateTime": "2026-03-03 11:10:58",
+   "pages": [
+    {
+     "description": "麦当劳 列表页",
+     "appId": "wx25f982a55e60a540",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_f1f7cebb53a3&path=pages/orderList/list",
+     "itemNodeQuery": [
+      {
+       "query_type": 2,
+       "key": "wx-view.flex.flex_column.flex_shrink_0._2ynN"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.flex_shrink_0._33WO",
+       "method": "contains",
+       "param": "配餐中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.flex_shrink_0._33WO",
+       "method": "contains",
+       "param": "待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.flex_shrink_0._33WO",
+       "method": "contains",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "麦当劳 详情页",
+     "appId": "wx25f982a55e60a540",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_f1f7cebb53a3&path=order/pages/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.info-view",
+       "label": "wx-text.info-title",
+       "tag": "订单号"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.header-bg-subtitle",
+       "method": "contains",
+       "param": "配餐中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.header-bg-subtitle",
+       "method": "contains",
+       "param": "餐品已备好",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.header-bg-subtitle",
+       "method": "contains",
+       "param": "订单已准备完毕",
+       "link_to": "已完成"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.info-view",
+       "label": "wx-text.info-title",
+       "tag": "预计取餐"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx2804355dbf8d15c3",
+   "appName": "茶百道",
+   "updateTime": "2026-02-06 17:54:52",
+   "pages": [
+    {
+     "description": "茶百道 列表页",
+     "appId": "wx2804355dbf8d15c3",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_d22cf66fc005&path=pages/order/index",
+     "itemNodeQuery": [
+      {
+       "query_type": 2,
+       "key": "wx-order-item"
+      }
+     ],
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.data-v-42526026.OrderStatus--data-v-42526026.cbd-order-list-item-code__text.OrderStatus--cbd-order-list-item-code__text",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.data-v-42526026.OrderStatus--data-v-42526026.cbd-order-list-item-store__status--name.OrderStatus--cbd-order-list-item-store__status--name",
+       "method": "contains",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.data-v-42526026.OrderStatus--data-v-42526026.cbd-order-list-item-store__status--name.OrderStatus--cbd-order-list-item-store__status--name",
+       "method": "contains",
+       "param": "待取茶",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.data-v-42526026.OrderStatus--data-v-42526026.cbd-order-list-item-store__status--name.OrderStatus--cbd-order-list-item-store__status--name",
+       "method": "contains",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "茶百道 详情页",
+     "appId": "wx2804355dbf8d15c3",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_d22cf66fc005&path=packages/order/orderDetail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.data-v-db1638cc.item-src-index--data-v-db1638cc.flex",
+       "tag": "取餐码",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-rich-text.order_txt.orderStatusV2--order_txt.data-v-97b7c256.orderStatusV2--data-v-97b7c256",
+       "method": "contains",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-rich-text.order_txt.orderStatusV2--order_txt.data-v-97b7c256.orderStatusV2--data-v-97b7c256",
+       "method": "contains",
+       "param": "感谢对茶百道的支持",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-rich-text.order_txt.orderStatusV2--order_txt.data-v-97b7c256.orderStatusV2--data-v-97b7c256",
+       "method": "contains",
+       "param": "期待您的再次光临",
+       "link_to": "已完成"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx3dcca19d0aa51755",
+   "appName": "星巴克",
+   "updateTime": "2026-02-06 17:39:40",
+   "pages": [
+    {
+     "description": "星巴克 列表页",
+     "appId": "wx3dcca19d0aa51755",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_4cf4a631a0c9&path=customized/pages/main/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-list.data-v-66370610.orderList--data-v-66370610.vue-ref.orderList--vue-ref"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.command.mopHead--command.data-v-48060736.mopHead--data-v-48060736"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.koulingTxt.mopHead--koulingTxt.data-v-48060736.mopHead--data-v-48060736",
+       "method": "text_start_with",
+       "param": "晒口令",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.font_Regular.OrderStatus--font_Regular.awaitpay-left.OrderStatus--awaitpay-left.data-v-252e25bd.OrderStatus--data-v-252e25bd",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 4,
+       "key": "wx-view.star-item.mopHead--star-item.data-v-48060736.mopHead--data-v-48060736",
+       "label": "wx-view.gray.mopHead--gray.data-v-48060736.mopHead--data-v-48060736",
+       "tag": "预计取单时间"
+      }
+     ]
+    },
+    {
+     "description": "星巴克 详情页",
+     "appId": "wx3dcca19d0aa51755",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_4cf4a631a0c9&path=shares/order/pages/orderDetail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title.MopActivity--title.data-v-9be0a498.MopActivity--data-v-9be0a498.normal_title.MopActivity--normal_title"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.font_Regular.OrderStatus--font_Regular.awaitpay-left.OrderStatus--awaitpay-left.data-v-252e25bd.OrderStatus--data-v-252e25bd",
+       "method": "text_start_with",
+       "param": "制作中，预计取餐时间",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.font_Regular.OrderStatus--font_Regular.awaitpay-left.OrderStatus--awaitpay-left.data-v-252e25bd.OrderStatus--data-v-252e25bd",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.font_Regular.OrderStatus--font_Regular.awaitpay-left.OrderStatus--awaitpay-left.data-v-252e25bd.OrderStatus--data-v-252e25bd",
+       "method": "text_start_with",
+       "param": "订单待取餐",
+       "link_to": "待取餐"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.time.OrderStatus--time"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx4080846d0cec2fd5",
+   "appName": "益禾堂",
+   "updateTime": "2026-03-03 11:09:41",
+   "pages": [
+    {
+     "description": "益禾堂 列表页",
+     "appId": "wx4080846d0cec2fd5",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_79aafff9edb7&path=pages/order/list/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.swipe-cell-box._ad995aba, wx-view.current-order-list-scroll._ad995aba.wx--refresher--content--private"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.meals-num, wx-view.flex-1.text-30.font-500._ad995aba"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_, wx-view.order-status-text._ad995aba",
+       "method": "text_start_with",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_, wx-view.order-status-text._ad995aba",
+       "method": "text_start_with",
+       "param": "待备餐",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_, wx-view.order-status-text._ad995aba",
+       "method": "text_start_with",
+       "param": "请取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_, wx-view.order-status-text._ad995aba",
+       "method": "text_start_with",
+       "param": "待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_, wx-view.order-status-text._ad995aba",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_, wx-view.order-status-text._ad995aba",
+       "method": "text_start_with",
+       "param": "已取消",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_, wx-view.order-status-text._ad995aba",
+       "method": "text_start_with",
+       "param": "已关闭",
+       "link_to": "已取消"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.info-i-label",
+       "tag": "就餐时间",
+       "method": "notnull",
+       "link_to": "pattern=(\\d{1,2}:\\d{2})"
+      }
+     ]
+    },
+    {
+     "description": "益禾堂 详情页",
+     "appId": "wx4080846d0cec2fd5",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_79aafff9edb7&path=subpackages/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.meals-num, wx-view.flex-1.text-30.font-500._ad995aba"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.takefood-title",
+       "method": "text_start_with",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.takefood-title",
+       "method": "text_start_with",
+       "param": "请取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.takefood-title",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "text_start_with",
+       "param": "退款中",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "text_start_with",
+       "param": "已关闭",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.takefood-title",
+       "method": "text_start_with",
+       "param": "已取消",
+       "link_to": "已取消"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.info-i-label",
+       "tag": "就餐时间",
+       "method": "notnull",
+       "link_to": "pattern=(\\d{1,2}:\\d{2})"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx412cd76eb766d89b",
+   "appName": "华莱士自助点餐",
+   "updateTime": "2026-06-05 19:42:19",
+   "pages": [
+    {
+     "description": "华莱士自助点餐 详情页",
+     "appId": "wx412cd76eb766d89b",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_ba5b2c9efdbf&path=pagesOrder/payorder/payOrderItem/index?orderCode",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.result-meal-code.orderResult-index--result-meal-code"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title-style.customNav-index--title-style",
+       "method": "equals",
+       "param": "商家已接单",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title-style.customNav-index--title-style",
+       "method": "equals",
+       "param": "已出餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title-style.customNav-index--title-style",
+       "method": "equals",
+       "param": "退单申请中",
+       "link_to": "已取消"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 2,
+       "key": "wx-view.storeName.orderResult-index--storeName.small.orderResult-index--small",
+       "link_to": "pattern=(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2})"
+      }
+     ]
+    },
+    {
+     "description": "华莱士自助点餐 详情页",
+     "appId": "wx412cd76eb766d89b",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_ba5b2c9efdbf&path=pagesOrder/orderPayResult/index?orderCode",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.result-meal-code.orderResult-index--result-meal-code"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title-style.customNav-index--title-style",
+       "method": "equals",
+       "param": "商家已接单",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title-style.customNav-index--title-style",
+       "method": "equals",
+       "param": "已出餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title-style.customNav-index--title-style",
+       "method": "equals",
+       "param": "退单申请中",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.title-style.customNav-index--title-style",
+       "method": "equals",
+       "param": "已退单",
+       "link_to": "已取消"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 2,
+       "key": "wx-view.storeName.orderResult-index--storeName.small.orderResult-index--small",
+       "link_to": "pattern=(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2}:\\d{2})"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx696a42df4f2456d3",
+   "appName": "喜茶",
+   "updateTime": "2026-07-17 10:34:39",
+   "pages": [
+    {
+     "description": "喜茶列表页",
+     "appId": "wx696a42df4f2456d3",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_afe6acb517f0&path=pages/code/code",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.list--p-tab-current-order"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.card--c-order-card-pick-out-head-number"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.header--order-card-header-status-text",
+       "method": "text_start_with",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.header--order-card-header-status-text",
+       "method": "text_start_with",
+       "param": "退款审核中",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.header--order-card-header-status-text",
+       "method": "text_start_with",
+       "param": "退款完成",
+       "link_to": "已取消"
+      }
+     ]
+    },
+    {
+     "description": "喜茶详情页",
+     "appId": "wx696a42df4f2456d3",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_afe6acb517f0&path=pages/code/order_detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.head-index--tea-detail-head-pick-up-num"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.line--text-default-class",
+       "method": "text_start_with",
+       "param": "门店已接单",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.line--text-default-class",
+       "method": "text_start_with",
+       "param": "制茶中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.head-index--tea-detail-head-title-text.head-index--tea-detail-head-title-refund",
+       "method": "text_start_with",
+       "param": "退款审核中",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.head-index--tea-detail-head-title-text.head-index--tea-detail-head-title-refund",
+       "method": "text_start_with",
+       "param": "退款完成",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.head-index--tea-detail-head-desc",
+       "method": "text_start_with",
+       "param": "订单已完成",
+       "link_to": "已完成"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wx89a110bbf29698eb",
+   "appName": "CoCo都可",
+   "updateTime": "2026-02-06 17:46:31",
+   "pages": [
+    {
+     "description": "CoCo都可 列表页",
+     "appId": "wx89a110bbf29698eb",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_276bfaaaa096&path=app/main/newOrders/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-store-order-item"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.footer__code-text.StoreOrderItem-index--footer__code-text",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.header__status.StoreOrderItem-index--header__status",
+       "method": "contains",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.header__status.StoreOrderItem-index--header__status",
+       "method": "contains",
+       "param": "待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.header__status.StoreOrderItem-index--header__status",
+       "method": "contains",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "CoCo都可 详情页",
+     "appId": "wx89a110bbf29698eb",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_276bfaaaa096&path=app/shop/pages/orderDetail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.pre-take__code.OrderTop-index--pre-take__code",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.c-box.TextLine-index--c-box",
+       "method": "contains",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.c-box.TextLine-index--c-box",
+       "method": "contains",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.c-delivery__finish.OrderTop-index--c-delivery__finish",
+       "method": "contains",
+       "param": "出示取单码",
+       "link_to": "待取餐"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.c-line.TextLine-index--c-line.c-line--active.TextLine-index--c-line--active",
+       "method": "notnull"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wxa778c3d895442625",
+   "appName": "书亦烧仙草",
+   "updateTime": "2026-07-17 15:21:13",
+   "pages": [
+    {
+     "description": "书亦烧仙草点单+ 详情页",
+     "appId": "wxa778c3d895442625",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_9364522474d9&path=orderPlus/pages/order/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 5,
+       "key": "wx-view.order-code-content.OrderStatusCard-index--order-code-content.data-v-45af5ea4.OrderStatusCard-index--data-v-45af5ea4"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 2,
+       "key": "wx-view.order-status.OrderStatusCard-index--order-status.flex-col.OrderStatusCard-index--flex-col.f11.OrderStatusCard-index--f11.data-v-45af5ea4.OrderStatusCard-index--data-v-45af5ea4.active.OrderStatusCard-index--active",
+       "method": "equals",
+       "param": "已下单",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 2,
+       "key": "wx-view.order-status.OrderStatusCard-index--order-status.flex-col.OrderStatusCard-index--flex-col.f11.OrderStatusCard-index--f11.data-v-45af5ea4.OrderStatusCard-index--data-v-45af5ea4.active.OrderStatusCard-index--active",
+       "method": "equals",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 2,
+       "key": "wx-view.order-status.OrderStatusCard-index--order-status.flex-col.OrderStatusCard-index--flex-col.f11.OrderStatusCard-index--f11.data-v-45af5ea4.OrderStatusCard-index--data-v-45af5ea4.active.OrderStatusCard-index--active",
+       "method": "equals",
+       "param": "制作完成",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 2,
+       "key": "wx-view.order-status.OrderStatusCard-index--order-status.flex-col.OrderStatusCard-index--flex-col.f11.OrderStatusCard-index--f11.data-v-45af5ea4.OrderStatusCard-index--data-v-45af5ea4.active.OrderStatusCard-index--active",
+       "method": "equals",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.text.text.data-v-3aa0c769.data-v-3aa0c769",
+       "tag": "自提时间"
+      }
+     ]
+    },
+    {
+     "description": "书亦烧仙草点单+ 历史详情页",
+     "appId": "wxa778c3d895442625",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_9364522474d9&path=pages/order/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 5,
+       "key": "wx-view.f-80.OrderStatus-index--f-80.c-black.OrderStatus-index--c-black.row-block.OrderStatus-index--row-block.position-r.OrderStatus-index--position-r"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 2,
+       "key": "wx-view.status_icon.OrderStatus-index--status_icon.f-22.OrderStatus-index--f-22.data-v-922557ce.OrderStatus-index--data-v-922557ce.select.OrderStatus-index--select",
+       "method": "equals",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "书亦烧仙草点单+ 列表页",
+     "appId": "wxa778c3d895442625",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_9364522474d9&path=pages/order/index/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.order-list.orderItem--order-list"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order-content-code.orderItem--order-content-code"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.top-status.orderItem--top-status,wx-text.top-status.orderItem--top-status.status-normal.orderItem--status-normal",
+       "method": "equals",
+       "param": "已下单",
+       "link_to": "已下单"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.top-status.orderItem--top-status",
+       "method": "equals",
+       "param": "制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.top-status.orderItem--top-status,wx-text.top-status.orderItem--top-status.status-normal.orderItem--status-normal",
+       "method": "equals",
+       "param": "制作完成",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.top-status.orderItem--top-status.status-normal.orderItem--status-normal",
+       "method": "equals",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wxab7430e6e8b9a4ab",
+   "appName": "奈雪点单",
+   "updateTime": "2026-03-03 11:11:28",
+   "pages": [
+    {
+     "description": "奈雪点单 列表页",
+     "appId": "wxab7430e6e8b9a4ab",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_b3436b600b3f&path=pages/order/orderList/orderList",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "div.wx--refresher--content--private"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.comNewCurrentOrderStatus--code",
+       "method": "notnull"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.comOrderItemStatus--text-bold",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.comNewCurrentOrderStatus--info-remind-text",
+       "method": "contains",
+       "param": "制作完成后",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.comNewCurrentOrderStatus--info-remind-text",
+       "method": "contains",
+       "param": "请凭取餐号到出餐区取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.comNewCurrentOrderStatus--payment-successful-remind",
+       "method": "contains",
+       "param": "取餐成功",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.comOrderItemStatus--status-info-progress",
+       "method": "notnull"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.empty-title",
+       "method": "equals",
+       "param": "您还没有点餐",
+       "link_to": "已完成"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.comNewCurrentOrderStatus--payment-successful-remind",
+       "method": "notnull",
+       "link_to": "pattern=\\d+(?:-\\d+)?分钟"
+      }
+     ]
+    },
+    {
+     "description": "奈雪点单 详情页",
+     "appId": "wxab7430e6e8b9a4ab",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_b3436b600b3f&path=pages/takeMeals/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-text",
+       "tag": "取单号",
+       "method": "notnull"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.comCurrentOrderStatus--payment-cancel-title",
+       "method": "contains",
+       "param": "订单已完成",
+       "link_to": "已完成"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wxafec6f8422cb357b",
+   "appName": "霸王茶姬",
+   "updateTime": "2026-02-06 16:00:45",
+   "pages": [
+    {
+     "description": "霸王茶姬 列表页",
+     "appId": "wxafec6f8422cb357b",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_e9d25e745aae&path=pages/order/list/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.swipe-cell-box"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.additional-name"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-wrap",
+       "method": "text_start_with",
+       "param": "待备餐",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.s-title.text-center_i_",
+       "method": "equals",
+       "param": "已关闭",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-wrap",
+       "method": "equals",
+       "param": "退款中",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-wrap"
+      }
+     ]
+    },
+    {
+     "description": "霸王茶姬 详情页",
+     "appId": "wxafec6f8422cb357b",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_e9d25e745aae&path=subpackages/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.meals-num"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.takefood-title",
+       "method": "text_start_with",
+       "param": "请取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.takefood-title",
+       "method": "equals",
+       "param": "退款中",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "equals",
+       "param": "已关闭",
+       "link_to": "已取消"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.takefood-title"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wxd92a2d29f8022f40",
+   "appName": "沪上阿姨",
+   "updateTime": "2026-02-06 18:18:22",
+   "pages": [
+    {
+     "description": "沪上阿姨列表页",
+     "appId": "wxd92a2d29f8022f40",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_6613a6cac7ea&path=pages/order/list/index",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-view.order-list-wrapper.relative._708ae2f3"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.meals-num"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.order-status-text._708ae2f3",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "沪上阿姨详情页",
+     "appId": "wxd92a2d29f8022f40",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_6613a6cac7ea&path=subpackages/detail/index",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.meals-num"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.s-title.text-center_i_",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "appId": "wxe87f500c8cef4c8a",
+   "appName": "一点点",
+   "updateTime": "2026-02-06 17:59:32",
+   "pages": [
+    {
+     "description": "一点点列表页",
+     "appId": "wxe87f500c8cef4c8a",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_9558bbe0a605&path=pages/order/fetch",
+     "listNodeQuery": {
+      "query_type": 2,
+      "key": "wx-swiper.swiper"
+     },
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.view_num"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.view_line_up_text",
+       "method": "text_start_with",
+       "param": "前面还有",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.view_text",
+       "method": "text_start_with",
+       "param": "茶饮已制作完成",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order_status",
+       "method": "text_start_with",
+       "param": "准备中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order_status",
+       "method": "text_start_with",
+       "param": "待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order_status",
+       "method": "text_start_with",
+       "param": "已完成",
+       "link_to": "已完成"
+      }
+     ]
+    },
+    {
+     "description": "一点点详情页",
+     "appId": "wxe87f500c8cef4c8a",
+     "url": "http://com.oplus.test/pullWXMiniProgram?userName=gh_9558bbe0a605&path=pages/order/forthwith_order_details",
+     "codeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-view.num"
+      }
+     ],
+     "statusQuery": [
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order_status",
+       "method": "text_start_with",
+       "param": "茶饮制作中",
+       "link_to": "制作中"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order_status",
+       "method": "text_start_with",
+       "param": "待取餐",
+       "link_to": "待取餐"
+      },
+      {
+       "query_type": 2,
+       "result_type": 1,
+       "key": "wx-text.order_status",
+       "method": "text_start_with",
+       "param": "订单已完成",
+       "link_to": "已完成"
+      }
+     ],
+     "waitTimeQuery": [
+      {
+       "query_type": 2,
+       "result_type": 3,
+       "key": "wx-view.live-view",
+       "label": "wx-view.live-box",
+       "tag": "取餐时间"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

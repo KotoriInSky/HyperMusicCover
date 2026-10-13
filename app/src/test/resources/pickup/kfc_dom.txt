@@ -1,0 +1,1124 @@
+<#document>
+<#document>
+  <wx-view .page_body.ex-class>
+    <wx-custom-wrapper>
+    <wx-custom-wrapper>
+    <wx-custom-wrapper>
+    <wx-view .page_header>
+      <wx-view .p-h>
+        <wx-view>
+        <wx-view .p-h-c>
+          <wx-view .p-h-c-l>
+            <wx-view>
+          <wx-view .p-h-c-c-h>
+          <wx-view .none>
+            <wx-text .kfcNewOrderListTitle>
+              "我的订单"
+          <wx-view .p-h-c-r-h>
+    <wx-view .page_content>
+      <wx-custom-wrapper>
+        <wx-view .orderZIndex.wrapper--orderZIndex>
+          <wx-view .kfcOrderListTab.wrapper--kfcOrderListTab>
+            <wx-view .kfcOrderListTabAll.wrapper--kfcOrderListTabAll>
+              <wx-custom-wrapper>
+                <wx-view .oc-layout-anime.wrapper--oc-layout-anime.ex-class.wrapper--ex-class.kfcOrderListTabAllBox.wrapper--kfcOrderListTabAllBox>
+                  <wx-view .oc-layout-anime_v.wrapper--oc-layout-anime_v>
+                    <wx-view .oc-layout-anime_v.wrapper--oc-layout-anime_v>
+                      <wx-view .kfcOrderListTabAllContent.wrapper--kfcOrderListTabAllContent>
+                        <wx-view .kfcOrderListTabAllTitle.wrapper--kfcOrderListTabAllTitle>
+                          <wx-text .kfcOrderListTabAllTitleTxt.wrapper--kfcOrderListTabAllTitleTxt>
+                            "全部分类"
+                          <wx-view .none>
+                            <wx-view .nb-ci-x.wrapper--nb-ci-x>
+                              <wx-view .nb-ci-x_r.wrapper--nb-ci-x_r>
+                              <wx-view .nb-ci-x_l.wrapper--nb-ci-x_l>
+                        <wx-view .kfcOrderListTabAllList.wrapper--kfcOrderListTabAllList>
+                          <wx-view .none>
+                            <wx-text .kfcOrderListTabAllItemTxt.wrapper--kfcOrderListTabAllItemTxt.kfcOrderListTabAllItemSelectTxt.wrapper--kfcOrderListTabAllItemSelectTxt>
+                              "全部"
+                          <wx-view .none>
+                            <wx-text .kfcOrderListTabAllItemTxt.wrapper--kfcOrderListTabAllItemTxt>
+                              "肯德基"
+                          <wx-view .none>
+                            <wx-text .kfcOrderListTabAllItemTxt.wrapper--kfcOrderListTabAllItemTxt>
+                              "肯悦咖啡"
+                          <wx-view .none>
+                            <wx-text .kfcOrderListTabAllItemTxt.wrapper--kfcOrderListTabAllItemTxt>
+                              "肯律轻食"
+                          <wx-view .none>
+                            <wx-text .kfcOrderListTabAllItemTxt.wrapper--kfcOrderListTabAllItemTxt>
+                              "炸鸡兄弟"
+                          <wx-view .none>
+                            <wx-text .kfcOrderListTabAllItemTxt.wrapper--kfcOrderListTabAllItemTxt>
+                              "爷爷自在茶"
+                          <wx-view .none>
+                            <wx-text .kfcOrderListTabAllItemTxt.wrapper--kfcOrderListTabAllItemTxt>
+                              "其他"
+                          <wx-view .kfcOrderListTabAllItemEmpty.wrapper--kfcOrderListTabAllItemEmpty>
+            <wx-view .kfcOrderListTabScroll.wrapper--kfcOrderListTabScroll>
+              <wx-custom-wrapper>
+                <wx-scroll-view .index-module__scroll___tc4po.wrapper--index-module__scroll___tc4po>
+                  <div .wx-scroll-view.wx-scroll-view-flex>
+                    <div .wx-scroll-view.wx-scroll-view-flex>
+                      <wx-view>
+                      <wx-view .index-module__content___uvRDh.wrapper--index-module__content___uvRDh>
+                        <wx-view .none>
+                          <wx-view .none>
+                            <wx-text>
+                              "全部"
+                        <wx-view .none>
+                          <wx-view .none>
+                            <wx-text>
+                              "肯德基"
+                        <wx-view .none>
+                          <wx-view .none>
+                            <wx-text>
+                              "肯悦咖啡"
+                        <wx-view .none>
+                          <wx-view .none>
+                            <wx-text>
+                              "肯律轻食"
+                        <wx-view .none>
+                          <wx-view .none>
+                            <wx-text>
+                              "炸鸡兄弟"
+                        <wx-view .none>
+                          <wx-view .none>
+                            <wx-text>
+                              "爷爷自在茶"
+                        <wx-view .none>
+                          <wx-view .none>
+                            <wx-text>
+                              "其他"
+                        <wx-view .index-module__animateView___L5mXs.wrapper--index-module__animateView___L5mXs>
+                          <wx-view .index-module__selectLine___S8qv8.wrapper--index-module__selectLine___S8qv8>
+            <wx-view .kfcOrderListTabMore.wrapper--kfcOrderListTabMore>
+              <wx-view .bg-linear-gradient.wrapper--bg-linear-gradient>
+                <wx-image .bg-linear-gradient-img.wrapper--bg-linear-gradient-img>
+              <wx-view .none>
+                <wx-view .none>
+                  <wx-view .nb-ci-arrow.wrapper--nb-ci-arrow>
+                    <wx-view .nb-ci-arrow_p.wrapper--nb-ci-arrow_p>
+                      <wx-view .nb-ci-arrow_p.wrapper--nb-ci-arrow_p>
+      <wx-view .kfcOrderListView>
+        <wx-view>
+        <wx-view .kod-c-psv.undefined.ex-class>
+          <wx-view .kod-c-psv_flex1.kod-c-psv_rel>
+            <wx-custom-wrapper>
+              <wx-view .od-c-psv-cpv.wrapper--od-c-psv-cpv.kod-c-psv_rel_p.wrapper--kod-c-psv_rel_p.ex-class.wrapper--ex-class>
+                <wx-view .od-c-psv-cpv_c.wrapper--od-c-psv-cpv_c>
+                  <wx-custom-wrapper>
+                    <wx-view .od-c-psv-crc.wrapper--od-c-psv-crc.kfcOrderListRefreshControl.wrapper--kfcOrderListRefreshControl.ex-class.wrapper--ex-class>
+                      <wx-image>
+                <wx-view .od-c-psv-cpv_s.wrapper--od-c-psv-cpv_s>
+                  <wx-scroll-view .kod-c-psv_scroll.wrapper--kod-c-psv_scroll.kod-c-psv_flex1.wrapper--kod-c-psv_flex1.kod-c-psv_s.wrapper--kod-c-psv_s>
+                    <div .wx-scroll-view>
+                      <div .wx-scroll-view.wx-scroll-view-hide-scrollbar>
+                        <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex.kod-c-psv_s_c.wrapper--kod-c-psv_s_c>
+                          <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex.kod-c-psv_s_c_m.wrapper--kod-c-psv_s_c_m>
+                            <wx-view .kod-c-psv_s_c_m_m.wrapper--kod-c-psv_s_c_m_m>
+                              <wx-view .none>
+                                <wx-custom-wrapper>
+                            <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex>
+                          <wx-view .kod-c-psv_s_c_b.wrapper--kod-c-psv_s_c_b>
+                          <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex.kod-c-psv_s_c_c.wrapper--kod-c-psv_s_c_c>
+                            <wx-custom-wrapper>
+                              <wx-view .index-module__view___LVaBn.wrapper--index-module__view___LVaBn>
+                                <wx-custom-wrapper>
+                                  <wx-view .oc-layout-anime.wrapper--oc-layout-anime.ex-class.wrapper--ex-class.index-module__animationView___jBCpk.wrapper--index-module__animationView___jBCpk>
+                                    <wx-view .oc-layout-anime_v.wrapper--oc-layout-anime_v>
+                                      <wx-view .oc-layout-anime_v.wrapper--oc-layout-anime_v>
+                                        <wx-view .index-module__content___QN824.wrapper--index-module__content___QN824>
+                              <wx-view .kfcOrderItemBox.wrapper--kfcOrderItemBox>
+                                <wx-view .kfcListItemView.wrapper--kfcListItemView>
+                                  <wx-view .kfcListItemView0.wrapper--kfcListItemView0>
+                                  <wx-view .none>
+                                    <wx-view .kfcListItemHeader.wrapper--kfcListItemHeader>
+                                      <wx-view .kfcListItemHeaderLeft.wrapper--kfcListItemHeaderLeft>
+                                        <wx-view .kfcListItemType.wrapper--kfcListItemType>
+                                          <wx-text .kfcListItemTypeText.wrapper--kfcListItemTypeText>
+                                            "自取"
+                                        <wx-text .kfcListItemHeaderText.wrapper--kfcListItemHeaderText>
+                                          "示例餐厅"
+                                      <wx-view .kfcListItemHeaderRight.wrapper--kfcListItemHeaderRight>
+                                        <wx-view .kfcListItemStatu.wrapper--kfcListItemStatu>
+                                          <wx-text .kfcListItemStatuTextGray.wrapper--kfcListItemStatuTextGray>
+                                            "已完成"
+                                        <wx-image .kfcListItemStatuArrow.wrapper--kfcListItemStatuArrow>
+                                    <wx-view .kfcListItemTime.wrapper--kfcListItemTime>
+                                      <wx-text .kfcListItemTimeText.wrapper--kfcListItemTimeText>
+                                        "2026-10-08 14:51:51"
+                                    <wx-view .kfcListItemList.wrapper--kfcListItemList.kfcListItemListMT.wrapper--kfcListItemListMT>
+                                      <wx-view .kfcListItemListContent.wrapper--kfcListItemListContent>
+                                        <wx-scroll-view .kfcListItemListScrollView.wrapper--kfcListItemListScrollView>
+                                          <div .wx-scroll-view>
+                                            <div .wx-scroll-view>
+                                              <wx-view .none>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                      <wx-view .kfcListItemInfo.wrapper--kfcListItemInfo>
+                                        <wx-text .kfcListItemInfoPrice.wrapper--kfcListItemInfoPrice>
+                                          "¥9.9"
+                                        <wx-text .kfcListItemInfoCount.wrapper--kfcListItemInfoCount>
+                                          "共1件"
+                                    <wx-view .kfcListItemButton.wrapper--kfcListItemButton>
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText>
+                                          "开发票"
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText.kfcListItemButtonTextWhite.wrapper--kfcListItemButtonTextWhite>
+                                          "再来一单"
+                              <wx-view .kfcOrderItemBox.wrapper--kfcOrderItemBox>
+                                <wx-view .kfcListItemView.wrapper--kfcListItemView>
+                                  <wx-view .none>
+                                    <wx-view .kfcListItemHeader.wrapper--kfcListItemHeader>
+                                      <wx-view .kfcListItemHeaderLeft.wrapper--kfcListItemHeaderLeft>
+                                        <wx-view .kfcListItemType.wrapper--kfcListItemType>
+                                          <wx-text .kfcListItemTypeText.wrapper--kfcListItemTypeText>
+                                            "自取"
+                                        <wx-text .kfcListItemHeaderText.wrapper--kfcListItemHeaderText>
+                                          "示例餐厅"
+                                      <wx-view .kfcListItemHeaderRight.wrapper--kfcListItemHeaderRight>
+                                        <wx-view .kfcListItemStatu.wrapper--kfcListItemStatu>
+                                          <wx-text .kfcListItemStatuTextGray.wrapper--kfcListItemStatuTextGray>
+                                            "已完成"
+                                        <wx-image .kfcListItemStatuArrow.wrapper--kfcListItemStatuArrow>
+                                    <wx-view .kfcListItemTime.wrapper--kfcListItemTime>
+                                      <wx-text .kfcListItemTimeText.wrapper--kfcListItemTimeText>
+                                        "2026-09-14 13:09:55"
+                                    <wx-view .kfcListItemList.wrapper--kfcListItemList.kfcListItemListMT.wrapper--kfcListItemListMT>
+                                      <wx-view .kfcListItemListContent.wrapper--kfcListItemListContent>
+                                        <wx-scroll-view .kfcListItemListScrollView.wrapper--kfcListItemListScrollView>
+                                          <div .wx-scroll-view>
+                                            <div .wx-scroll-view>
+                                              <wx-view .none>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                      <wx-view .kfcListItemInfo.wrapper--kfcListItemInfo>
+                                        <wx-text .kfcListItemInfoPrice.wrapper--kfcListItemInfoPrice>
+                                          "¥20.5"
+                                        <wx-text .kfcListItemInfoCount.wrapper--kfcListItemInfoCount>
+                                          "共1件"
+                                    <wx-view .kfcListItemButton.wrapper--kfcListItemButton>
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText>
+                                          "开发票"
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText.kfcListItemButtonTextWhite.wrapper--kfcListItemButtonTextWhite>
+                                          "再来一单"
+                              <wx-view .kfcOrderItemBox.wrapper--kfcOrderItemBox>
+                                <wx-view .kfcListItemView.wrapper--kfcListItemView>
+                                  <wx-view .none>
+                                    <wx-view .kfcListItemHeader.wrapper--kfcListItemHeader>
+                                      <wx-view .kfcListItemHeaderLeft.wrapper--kfcListItemHeaderLeft>
+                                        <wx-view .kfcListItemType.wrapper--kfcListItemType>
+                                          <wx-text .kfcListItemTypeText.wrapper--kfcListItemTypeText>
+                                            "自取"
+                                        <wx-text .kfcListItemHeaderText.wrapper--kfcListItemHeaderText>
+                                          "示例餐厅"
+                                      <wx-view .kfcListItemHeaderRight.wrapper--kfcListItemHeaderRight>
+                                        <wx-view .kfcListItemStatu.wrapper--kfcListItemStatu>
+                                          <wx-text .kfcListItemStatuTextGray.wrapper--kfcListItemStatuTextGray>
+                                            "已完成"
+                                        <wx-image .kfcListItemStatuArrow.wrapper--kfcListItemStatuArrow>
+                                    <wx-view .kfcListItemTime.wrapper--kfcListItemTime>
+                                      <wx-text .kfcListItemTimeText.wrapper--kfcListItemTimeText>
+                                        "2026-09-02 14:57:49"
+                                    <wx-view .kfcListItemList.wrapper--kfcListItemList.kfcListItemListMT.wrapper--kfcListItemListMT>
+                                      <wx-view .kfcListItemListContent.wrapper--kfcListItemListContent>
+                                        <wx-scroll-view .kfcListItemListScrollView.wrapper--kfcListItemListScrollView>
+                                          <div .wx-scroll-view>
+                                            <div .wx-scroll-view>
+                                              <wx-view .none>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                      <wx-view .kfcListItemInfo.wrapper--kfcListItemInfo>
+                                        <wx-text .kfcListItemInfoPrice.wrapper--kfcListItemInfoPrice>
+                                          "¥0"
+                                        <wx-text .kfcListItemInfoCount.wrapper--kfcListItemInfoCount>
+                                          "共1件"
+                                    <wx-view .kfcListItemButton.wrapper--kfcListItemButton>
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText>
+                                          "开发票"
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText.kfcListItemButtonTextWhite.wrapper--kfcListItemButtonTextWhite>
+                                          "再来一单"
+                              <wx-view .kfcOrderItemBox.wrapper--kfcOrderItemBox>
+                                <wx-view .kfcListItemView.wrapper--kfcListItemView>
+                                  <wx-view .none>
+                                    <wx-view .kfcListItemHeader.wrapper--kfcListItemHeader>
+                                      <wx-view .kfcListItemHeaderLeft.wrapper--kfcListItemHeaderLeft>
+                                        <wx-view .kfcListItemType.wrapper--kfcListItemType>
+                                          <wx-text .kfcListItemTypeText.wrapper--kfcListItemTypeText>
+                                            "自取"
+                                        <wx-text .kfcListItemHeaderText.wrapper--kfcListItemHeaderText>
+                                          "示例广场KFC"
+                                      <wx-view .kfcListItemHeaderRight.wrapper--kfcListItemHeaderRight>
+                                        <wx-view .kfcListItemStatu.wrapper--kfcListItemStatu>
+                                          <wx-text .kfcListItemStatuTextGray.wrapper--kfcListItemStatuTextGray>
+                                            "已完成"
+                                        <wx-image .kfcListItemStatuArrow.wrapper--kfcListItemStatuArrow>
+                                    <wx-view .kfcListItemTime.wrapper--kfcListItemTime>
+                                      <wx-text .kfcListItemTimeText.wrapper--kfcListItemTimeText>
+                                        "2026-08-28 21:08:46"
+                                    <wx-view .kfcListItemList.wrapper--kfcListItemList.kfcListItemListMT.wrapper--kfcListItemListMT>
+                                      <wx-view .kfcListItemListContent.wrapper--kfcListItemListContent>
+                                        <wx-scroll-view .kfcListItemListScrollView.wrapper--kfcListItemListScrollView>
+                                          <div .wx-scroll-view>
+                                            <div .wx-scroll-view>
+                                              <wx-view .none>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                <wx-view .nwi_flex.wrapper--nwi_flex.out-layout.wrapper--out-layout.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                      <wx-view .kfcListItemInfo.wrapper--kfcListItemInfo>
+                                        <wx-text .kfcListItemInfoPrice.wrapper--kfcListItemInfoPrice>
+                                          "¥26.4"
+                                        <wx-text .kfcListItemInfoCount.wrapper--kfcListItemInfoCount>
+                                          "共2件"
+                                    <wx-view .kfcListItemButton.wrapper--kfcListItemButton>
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText>
+                                          "开发票"
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText.kfcListItemButtonTextWhite.wrapper--kfcListItemButtonTextWhite>
+                                          "再来一单"
+                              <wx-view .kfcOrderItemBox.wrapper--kfcOrderItemBox>
+                                <wx-view .kfcListItemView.wrapper--kfcListItemView>
+                                  <wx-view .none>
+                                    <wx-view .kfcListItemHeader.wrapper--kfcListItemHeader>
+                                      <wx-view .kfcListItemHeaderLeft.wrapper--kfcListItemHeaderLeft>
+                                        <wx-view .kfcListItemType.wrapper--kfcListItemType>
+                                          <wx-text .kfcListItemTypeText.wrapper--kfcListItemTypeText>
+                                            "自取"
+                                        <wx-text .kfcListItemHeaderText.wrapper--kfcListItemHeaderText>
+                                          "示例广场KFC"
+                                      <wx-view .kfcListItemHeaderRight.wrapper--kfcListItemHeaderRight>
+                                        <wx-view .kfcListItemStatu.wrapper--kfcListItemStatu>
+                                          <wx-text .kfcListItemStatuTextGray.wrapper--kfcListItemStatuTextGray>
+                                            "已完成"
+                                        <wx-image .kfcListItemStatuArrow.wrapper--kfcListItemStatuArrow>
+                                    <wx-view .kfcListItemTime.wrapper--kfcListItemTime>
+                                      <wx-text .kfcListItemTimeText.wrapper--kfcListItemTimeText>
+                                        "2026-08-24 18:15:39"
+                                    <wx-view .kfcListItemList.wrapper--kfcListItemList.kfcListItemListMT.wrapper--kfcListItemListMT>
+                                      <wx-view .kfcListItemListContent.wrapper--kfcListItemListContent>
+                                        <wx-scroll-view .kfcListItemListScrollView.wrapper--kfcListItemListScrollView>
+                                          <div .wx-scroll-view>
+                                            <div .wx-scroll-view>
+                                              <wx-view .none>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                      <wx-view .kfcListItemInfo.wrapper--kfcListItemInfo>
+                                        <wx-text .kfcListItemInfoPrice.wrapper--kfcListItemInfoPrice>
+                                          "¥0"
+                                        <wx-text .kfcListItemInfoCount.wrapper--kfcListItemInfoCount>
+                                          "共1件"
+                                    <wx-view .kfcListItemButton.wrapper--kfcListItemButton>
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText>
+                                          "开发票"
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText.kfcListItemButtonTextWhite.wrapper--kfcListItemButtonTextWhite>
+                                          "再来一单"
+                              <wx-view .kfcOrderItemBox.wrapper--kfcOrderItemBox>
+                                <wx-view .kfcListItemView.wrapper--kfcListItemView>
+                                  <wx-view .none>
+                                    <wx-view .kfcListItemHeader.wrapper--kfcListItemHeader>
+                                      <wx-view .kfcListItemHeaderLeft.wrapper--kfcListItemHeaderLeft>
+                                        <wx-view .kfcListItemType.wrapper--kfcListItemType>
+                                          <wx-text .kfcListItemTypeText.wrapper--kfcListItemTypeText>
+                                            "自取"
+                                        <wx-text .kfcListItemHeaderText.wrapper--kfcListItemHeaderText>
+                                          "示例广场KFC"
+                                      <wx-view .kfcListItemHeaderRight.wrapper--kfcListItemHeaderRight>
+                                        <wx-view .kfcListItemStatu.wrapper--kfcListItemStatu>
+                                          <wx-text .kfcListItemStatuTextGray.wrapper--kfcListItemStatuTextGray>
+                                            "已完成"
+                                        <wx-image .kfcListItemStatuArrow.wrapper--kfcListItemStatuArrow>
+                                    <wx-view .kfcListItemTime.wrapper--kfcListItemTime>
+                                      <wx-text .kfcListItemTimeText.wrapper--kfcListItemTimeText>
+                                        "2026-08-23 19:54:28"
+                                    <wx-view .kfcListItemList.wrapper--kfcListItemList.kfcListItemListMT.wrapper--kfcListItemListMT>
+                                      <wx-view .kfcListItemListContent.wrapper--kfcListItemListContent>
+                                        <wx-scroll-view .kfcListItemListScrollView.wrapper--kfcListItemListScrollView>
+                                          <div .wx-scroll-view>
+                                            <div .wx-scroll-view>
+                                              <wx-view .none>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                      <wx-view .kfcListItemInfo.wrapper--kfcListItemInfo>
+                                        <wx-text .kfcListItemInfoPrice.wrapper--kfcListItemInfoPrice>
+                                          "¥6.5"
+                                        <wx-text .kfcListItemInfoCount.wrapper--kfcListItemInfoCount>
+                                          "共2件"
+                                    <wx-view .kfcListItemButton.wrapper--kfcListItemButton>
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText>
+                                          "开发票"
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText.kfcListItemButtonTextWhite.wrapper--kfcListItemButtonTextWhite>
+                                          "再来一单"
+                              <wx-view .kfcOrderItemBox.wrapper--kfcOrderItemBox>
+                                <wx-view .kfcListItemView.wrapper--kfcListItemView>
+                                  <wx-view .none>
+                                    <wx-view .kfcListItemHeader.wrapper--kfcListItemHeader>
+                                      <wx-view .kfcListItemHeaderLeft.wrapper--kfcListItemHeaderLeft>
+                                        <wx-view .kfcListItemType.wrapper--kfcListItemType>
+                                          <wx-text .kfcListItemTypeText.wrapper--kfcListItemTypeText>
+                                            "自取"
+                                        <wx-text .kfcListItemHeaderText.wrapper--kfcListItemHeaderText>
+                                          "示例广场KFC"
+                                      <wx-view .kfcListItemHeaderRight.wrapper--kfcListItemHeaderRight>
+                                        <wx-view .kfcListItemStatu.wrapper--kfcListItemStatu>
+                                          <wx-text .kfcListItemStatuTextGray.wrapper--kfcListItemStatuTextGray>
+                                            "已完成"
+                                        <wx-image .kfcListItemStatuArrow.wrapper--kfcListItemStatuArrow>
+                                    <wx-view .kfcListItemTime.wrapper--kfcListItemTime>
+                                      <wx-text .kfcListItemTimeText.wrapper--kfcListItemTimeText>
+                                        "2026-08-21 20:39:13"
+                                    <wx-view .kfcListItemList.wrapper--kfcListItemList.kfcListItemListMT.wrapper--kfcListItemListMT>
+                                      <wx-view .kfcListItemListContent.wrapper--kfcListItemListContent>
+                                        <wx-scroll-view .kfcListItemListScrollView.wrapper--kfcListItemListScrollView>
+                                          <div .wx-scroll-view>
+                                            <div .wx-scroll-view>
+                                              <wx-view .none>
+                                                <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kfcListItemListImg.wrapper--kfcListItemListImg>
+                                                  <wx-image .kfcListItemListImg.wrapper--kfcListItemListImg>
+                                      <wx-view .kfcListItemInfo.wrapper--kfcListItemInfo>
+                                        <wx-text .kfcListItemInfoPrice.wrapper--kfcListItemInfoPrice>
+                                          "¥25.9"
+                                        <wx-text .kfcListItemInfoCount.wrapper--kfcListItemInfoCount>
+                                          "共1件"
+                                    <wx-view .kfcListItemButton.wrapper--kfcListItemButton>
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText>
+                                          "开发票"
+                                      <wx-view .none>
+                                        <wx-view .none>
+                                        <wx-text .kfcListItemButtonText.wrapper--kfcListItemButtonText.kfcListItemButtonTextWhite.wrapper--kfcListItemButtonTextWhite>
+                                          "再来一单"
+                              <wx-view .kfcOrderNoData.wrapper--kfcOrderNoData>
+                                <wx-text .kfcOrderNoDataText.wrapper--kfcOrderNoDataText>
+                                  "如需查询之前的订单信息,请联系在线客服"
+          <wx-custom-wrapper>
+          <wx-custom-wrapper>
+      <wx-view .kfcNewOrderListSafeArea>
+        <wx-view .kfcNewOrderListSafeArea>
+    <wx-view .page_footer>
+      <wx-view .kfc-tabbar-wrapper>
+        <wx-view .kfc-tabbar>
+          <wx-view .none>
+            <wx-view .none>
+              <wx-image .kfc-tabbar-iconImg>
+          <wx-view .none>
+            <wx-view .none>
+              <wx-image .kfc-tabbar-iconImg>
+          <wx-view .none>
+            <wx-view .none>
+              <wx-image .kfc-tabbar-iconImg>
+          <wx-view .none>
+            <wx-view .none>
+              <wx-image .kfc-tabbar-iconImg>
+          <wx-view .none>
+            <wx-view .none>
+              <wx-image .kfc-tabbar-iconImg>
+    <wx-view .orderLoadingView>
+<#document>
+  <wx-view .kod-c-psv.undefined.ex-class>
+    <wx-custom-wrapper>
+      <wx-view .od-c-psv-cah.wrapper--od-c-psv-cah.od-pd_h.wrapper--od-pd_h.ex-class.wrapper--ex-class>
+        <wx-view .od-c-psv-cah_b.wrapper--od-c-psv-cah_b>
+        <wx-view .od-c-psv-cah_c.wrapper--od-c-psv-cah_c>
+          <wx-view .none>
+            <wx-view .od-c-psv-cah_c_a_p.wrapper--od-c-psv-cah_c_a_p>
+              <wx-view .none>
+                <wx-view .nb-ci-arrow.wrapper--nb-ci-arrow>
+                  <wx-view .nb-ci-arrow_p.wrapper--nb-ci-arrow_p>
+                  <wx-view .nb-ci-arrow_p.wrapper--nb-ci-arrow_p>
+              <wx-view .none>
+                <wx-view .nb-ci-arrow.wrapper--nb-ci-arrow>
+                  <wx-view .nb-ci-arrow_p.wrapper--nb-ci-arrow_p>
+                  <wx-view .nb-ci-arrow_p.wrapper--nb-ci-arrow_p>
+          <wx-view .od-c-psv-cah_c_t.wrapper--od-c-psv-cah_c_t>
+            <wx-view .od-c-psv-cah_c_t_w.wrapper--od-c-psv-cah_c_t_w>
+              <wx-text .od-c-psv-cah_c_t_t.wrapper--od-c-psv-cah_c_t_t>
+                "订单详情"
+              <wx-text .od-c-psv-cah_c_t_p.wrapper--od-c-psv-cah_c_t_p.od-c-psv-cah_c_t_t.wrapper--od-c-psv-cah_c_t_t>
+                "已完成"
+          <wx-view .od-c-psv-cah_c_r.wrapper--od-c-psv-cah_c_r.od-c-psv-cah_pa.wrapper--od-c-psv-cah_pa>
+            <wx-view .od-pd_h_r.wrapper--od-pd_h_r>
+              <wx-view .od-fp-icon.wrapper--od-fp-icon>
+                <wx-view .none>
+                  <wx-view .od-fp-icon_r.wrapper--od-fp-icon_r>
+                    <wx-view .nwi_flex.wrapper--nwi_flex.od-fp-icon__icon--default.wrapper--od-fp-icon__icon--default>
+                      <wx-image .od-fp-icon__icon--default.wrapper--od-fp-icon__icon--default>
+    <wx-view .kod-c-psv_flex1.kod-c-psv_rel>
+      <wx-custom-wrapper>
+        <wx-view .od-c-psv-cpv.wrapper--od-c-psv-cpv.kod-c-psv_rel_p.wrapper--kod-c-psv_rel_p.ex-class.wrapper--ex-class>
+          <wx-view .od-c-psv-cpv_c.wrapper--od-c-psv-cpv_c>
+            <wx-custom-wrapper>
+              <wx-view .od-c-psv-crc.wrapper--od-c-psv-crc.undefined.wrapper--undefined.ex-class.wrapper--ex-class>
+                <wx-image>
+          <wx-view .od-c-psv-cpv_s.wrapper--od-c-psv-cpv_s>
+            <wx-scroll-view .kod-c-psv_scroll.wrapper--kod-c-psv_scroll.kod-c-psv_flex1.wrapper--kod-c-psv_flex1.kod-c-psv_s.wrapper--kod-c-psv_s>
+              <div .wx-scroll-view>
+                <div .wx-scroll-view.wx-scroll-view-hide-scrollbar>
+                  <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex.kod-c-psv_s_c.wrapper--kod-c-psv_s_c>
+                    <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex.kod-c-psv_s_c_m.wrapper--kod-c-psv_s_c_m>
+                      <wx-view .kod-c-psv_s_c_m_m.wrapper--kod-c-psv_s_c_m_m>
+                        <wx-view .none>
+                          <wx-custom-wrapper>
+                        <wx-custom-wrapper>
+                          <wx-view .od-c-psv-cacm.wrapper--od-c-psv-cacm.od-pd_m.wrapper--od-pd_m.ex-class.wrapper--ex-class>
+                      <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex>
+                    <wx-view .kod-c-psv_s_c_b.wrapper--kod-c-psv_s_c_b>
+                    <wx-view .kod-c-psv_flex.wrapper--kod-c-psv_flex.kod-c-psv_s_c_c.wrapper--kod-c-psv_s_c_c>
+                      <wx-custom-wrapper>
+                        <wx-view .od-pd.wrapper--od-pd>
+                          <wx-view .od-sb-c.wrapper--od-sb-c>
+                            <wx-view .od-sb-c_b.wrapper--od-sb-c_b>
+                              <wx-view .od-sb-p.wrapper--od-sb-p>
+                                <wx-view .od-sb-ct-ctr.wrapper--od-sb-ct-ctr>
+                                  <wx-view .od-sb-ct-ctr_desc.wrapper--od-sb-ct-ctr_desc.od-sb-ct-ctr_desc_noNum.wrapper--od-sb-ct-ctr_desc_noNum>
+                                    <wx-view .od-sb-ct-ctr_desc_line.wrapper--od-sb-ct-ctr_desc_line>
+                                      <wx-text .od-sb-ct-ctr_desc_line_nor.wrapper--od-sb-ct-ctr_desc_line_nor>
+                                        "订单已完成"
+                                  <wx-view .od-pb-c.wrapper--od-pb-c>
+                                    <wx-view .od-pb-c_item.wrapper--od-pb-c_item>
+                                      <wx-view .od-pb-c_item_c.wrapper--od-pb-c_item_c>
+                                        <wx-image .od-pb-c_item_c_i.wrapper--od-pb-c_item_c_i>
+                                        <wx-text .od-pb-c_item_c_t.wrapper--od-pb-c_item_c_t>
+                                          "准备中"
+                                    <wx-view .od-pb-c_item.wrapper--od-pb-c_item>
+                                      <wx-view .od-pb-gap.wrapper--od-pb-gap>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                      <wx-view .od-pb-c_item_c.wrapper--od-pb-c_item_c>
+                                        <wx-image .od-pb-c_item_c_i.wrapper--od-pb-c_item_c_i>
+                                        <wx-text .od-pb-c_item_c_t.wrapper--od-pb-c_item_c_t>
+                                          "请取餐"
+                                    <wx-view .od-pb-c_item.wrapper--od-pb-c_item>
+                                      <wx-view .od-pb-gap.wrapper--od-pb-gap>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                        <wx-view .od-pb-gap_i.wrapper--od-pb-gap_i>
+                                      <wx-view .od-pb-c_item_c.wrapper--od-pb-c_item_c>
+                                        <wx-image .od-pb-c_item_c_i.wrapper--od-pb-c_item_c_i>
+                                        <wx-text .od-pb-c_item_c_t.wrapper--od-pb-c_item_c_t.od-pb-c_item_c_t_a.wrapper--od-pb-c_item_c_t_a>
+                                          "已完成"
+                          <wx-view .vgold-container.wrapper--vgold-container.vgold-area-warrper.wrapper--vgold-area-warrper>
+                            <wx-view .vgold-container-amount.wrapper--vgold-container-amount>
+                              <wx-view .vgold-container-desc-container.wrapper--vgold-container-desc-container>
+                                <wx-text .vgold-container-desc-txt.wrapper--vgold-container-desc-txt>
+                                  "本单预计获得"
+                                <wx-image .vgold-container-icon-img.wrapper--vgold-container-icon-img>
+                                <wx-view .od-p-c-sa.wrapper--od-p-c-sa>
+                                  <wx-view .od-p-c-sa_p.wrapper--od-p-c-sa_p.od-p-c-sa_r.wrapper--od-p-c-sa_r>
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                  <wx-view .od-p-c-sa_a.wrapper--od-p-c-sa_a.od-p-c-sa_r.wrapper--od-p-c-sa_r>
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                    <wx-view .od-p-c-sa_c.wrapper--od-p-c-sa_c>
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "0"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "1"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "2"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "3"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "4"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "5"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "6"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "7"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "8"
+                                      <wx-text .vgold-container-desc-number.wrapper--vgold-container-desc-number.ex-class.wrapper--ex-class>
+                                        "9"
+                                <wx-text .vgold-container-desc-txt.wrapper--vgold-container-desc-txt>
+                                  ", "
+                                  "两个工作日内到账"
+                          <wx-view .none>
+                            <wx-view .none>
+                              <wx-view .od-cnt_left.wrapper--od-cnt_left>
+                                <wx-image .od-cnt_left-i.wrapper--od-cnt_left-i>
+                                <wx-view .od-cnt_left_desc.wrapper--od-cnt_left_desc>
+                                  <wx-view .od-cnt_left_desc_main.wrapper--od-cnt_left_desc_main>
+                                    <wx-text .od-cnt_left_desc_main-txt.wrapper--od-cnt_left_desc_main-txt>
+                                      "加入"
+                                    <wx-text .od-cnt_left_desc_main-txt.wrapper--od-cnt_left_desc_main-txt>
+                                      "示例餐厅"
+                                    <wx-text .od-cnt_left_desc_main-txt.wrapper--od-cnt_left_desc_main-txt>
+                                      "店"
+                                  <wx-text .od-cnt_left_desc_sub.wrapper--od-cnt_left_desc_sub>
+                                    "学生认证开启福利美食之旅"
+                              <wx-view .od-cnt_right.wrapper--od-cnt_right>
+                                <wx-image .od-cnt_right-i.wrapper--od-cnt_right-i>
+                          <wx-view .od-pd_fi.wrapper--od-pd_fi>
+                            <wx-custom-wrapper>
+                              <wx-view .food-detail-title-warper.wrapper--food-detail-title-warper>
+                                <wx-view .food-detail-title-container.wrapper--food-detail-title-container>
+                                  <wx-view .food-title-store.wrapper--food-title-store>
+                                    <wx-view .food-title-store_t.wrapper--food-title-store_t>
+                                      <wx-image .food-title-store-img.wrapper--food-title-store-img>
+                                      <wx-view .none>
+                                        <wx-text .food-title-store-name.wrapper--food-title-store-name>
+                                          "示例餐厅"
+                                        <wx-image .food-title-store-arrow.wrapper--food-title-store-arrow>
+                                  <wx-view .food-detail-title-right.wrapper--food-detail-title-right>
+                                    <wx-view .none>
+                                      <wx-image .food-title-icon.wrapper--food-title-icon>
+                                      <wx-text .food-title-icon-txt.wrapper--food-title-icon-txt>
+                                        "收藏门店"
+                                    <wx-view .none>
+                                      <wx-image .food-title-icon.wrapper--food-title-icon>
+                                      <wx-text .food-title-icon-txt.wrapper--food-title-icon-txt>
+                                        "门店指引"
+                                <wx-view .none>
+                                  <wx-view .nb-ci-l_w.wrapper--nb-ci-l_w.nb-ci-l_w_r.wrapper--nb-ci-l_w_r>
+                                    <wx-view .nb-ci-l_w_l.wrapper--nb-ci-l_w_l.nb-ci-l_w_l_r.wrapper--nb-ci-l_w_l_r>
+                            <wx-view .od-pd_fi_f.wrapper--od-pd_fi_f>
+                              <wx-view .kod-c-fif.wrapper--kod-c-fif.od-pd_fi_f_f.wrapper--od-pd_fi_f_f.ex-class.wrapper--ex-class>
+                                <wx-view .kod-c-fi.wrapper--kod-c-fi.kod-c-fif_i.wrapper--kod-c-fif_i.ex-class.wrapper--ex-class>
+                                  <wx-view .kod-c-fi_i.wrapper--kod-c-fi_i>
+                                    <wx-view .nwi_bg.wrapper--nwi_bg.nwi_flex.wrapper--nwi_flex.defaultLogo.wrapper--defaultLogo.kod-c-fi_i_i.wrapper--kod-c-fi_i_i.kod-c-fi_i_i_false.wrapper--kod-c-fi_i_i_false>
+                                      <wx-image .kod-c-fi_i_i.wrapper--kod-c-fi_i_i.kod-c-fi_i_i_false.wrapper--kod-c-fi_i_i_false>
+                                  <wx-view .kod-c-fi_c.wrapper--kod-c-fi_c>
+                                    <wx-view .kod-c-fi_c_t.wrapper--kod-c-fi_c_t>
+                                      <wx-view .kod-c-fi_c_t_g.wrapper--kod-c-fi_c_t_g>
+                                        <wx-view .kod-c-fit.wrapper--kod-c-fit.undefined.wrapper--undefined.ex-class.wrapper--ex-class>
+                                          <wx-image .kod-c-fit_i.wrapper--kod-c-fit_i>
+                                      <wx-text .kod-c-fi_c_t_t.wrapper--kod-c-fi_c_t_t.kod-c-fi_c_t_t_false.wrapper--kod-c-fi_c_t_t_false>
+                                        "90金标鸡腿堡买一送一"
+                                    <wx-view .kod-c-fi_c_c.wrapper--kod-c-fi_c_c>
+                                      <wx-text .kod-c-fi_c_c_t.wrapper--kod-c-fi_c_c_t>
+                                        "x1 三重香辣鸡腿堡"
+                                      <wx-text .kod-c-fi_c_c_t.wrapper--kod-c-fi_c_c_t>
+                                        "x1 90金标劲脆鸡腿堡"
+                                    <wx-text .kod-c-fi_c_b.wrapper--kod-c-fi_c_b>
+                                      "x"
+                                      <wx-text .kod-c-fi_c_b_n.wrapper--kod-c-fi_c_b_n>
+                                        "1"
+                                  <wx-view .kod-c-fi_r.wrapper--kod-c-fi_r>
+                                    <wx-text .kod-c-fi_r_t.wrapper--kod-c-fi_r_t>
+                                      <wx-text .kod-c-fi_r_t_p.wrapper--kod-c-fi_r_t_p>
+                                        "¥"
+                                      "20.5"
+                                    <wx-text .kod-c-fi_r_d.wrapper--kod-c-fi_r_d>
+                                      "¥"
+                                      "41"
+                            <wx-view .kod-c-tp.wrapper--kod-c-tp.undefined.wrapper--undefined.ex-class.wrapper--ex-class>
+                              <wx-view .kod-c-tp_l.wrapper--kod-c-tp_l>
+                                <wx-view .kod-c-tp_l_c.wrapper--kod-c-tp_l_c.kod-c-tp_l_l.wrapper--kod-c-tp_l_l>
+                                <wx-view .kod-c-tp_l_ln.wrapper--kod-c-tp_l_ln>
+                                  <wx-view .kod-c-tp_l_ln_w.wrapper--kod-c-tp_l_ln_w>
+                                    <wx-view .none>
+                                      <wx-view .nb-ci-l_w.wrapper--nb-ci-l_w.nb-ci-l_w_r.wrapper--nb-ci-l_w_r>
+                                        <wx-view .nb-ci-l_w_l.wrapper--nb-ci-l_w_l.nb-ci-l_w_l_r.wrapper--nb-ci-l_w_l_r>
+                                <wx-view .kod-c-tp_l_c.wrapper--kod-c-tp_l_c.kod-c-tp_l_r.wrapper--kod-c-tp_l_r>
+                              <wx-view .kod-c-tp_t.wrapper--kod-c-tp_t>
+                                <wx-text .kod-c-tp_t_t.wrapper--kod-c-tp_t_t>
+                                  <wx-text .kod-c-tp_t_t_p.wrapper--kod-c-tp_t_t_p>
+                                    "共优惠"
+                                    " "
+                                    <wx-text .kod-c-tp_t_t_p_b.wrapper--kod-c-tp_t_t_p_b>
+                                      "¥"
+                                      "20.5"
+                                  "  "
+                                  "合计"
+                                  " "
+                                  <wx-text .kod-c-tp_t_t_b.wrapper--kod-c-tp_t_t_b>
+                                    "¥20.5"
+                          <wx-view .od-pd_info.wrapper--od-pd_info>
+                            <wx-view>
+                              <wx-view>
+                                <wx-view .p-meal-info-container.wrapper--p-meal-info-container>
+                                  <wx-view .p-meal-info-title-container.wrapper--p-meal-info-title-container>
+                                    <wx-text .p-meal-info-title-txt.wrapper--p-meal-info-title-txt>
+                                      "订单信息"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "取餐门店"
+                                    <wx-view .p-meal-info-value-txt_d.wrapper--p-meal-info-value-txt_d>
+                                      <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt>
+                                        "示例餐厅"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "取餐位置"
+                                    <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt.txt-limited-width.wrapper--txt-limited-width>
+                                      "示例路1号"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "取餐号"
+                                    <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt>
+                                      "A0414"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "下单时间"
+                                    <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt>
+                                      "2026-09-14 13:09:55"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "订单号"
+                                    <wx-view .p-meal-info-copy-item.wrapper--p-meal-info-copy-item>
+                                      <wx-view .p-meal-info-copy-txt-wrapper.wrapper--p-meal-info-copy-txt-wrapper>
+                                        <wx-text .p-meal-info-value-txt-order_id.wrapper--p-meal-info-value-txt-order_id>
+                                          "1000000000000000001"
+                                      <wx-view .none>
+                                        <wx-text .p-meal-info-value-copy-txt.wrapper--p-meal-info-value-copy-txt>
+                                          "复制"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "交易号"
+                                    <wx-view .p-meal-info-copy-item.wrapper--p-meal-info-copy-item>
+                                      <wx-view .p-meal-info-copy-txt-wrapper.wrapper--p-meal-info-copy-txt-wrapper>
+                                        <wx-text .p-meal-info-value-txt-order_number.wrapper--p-meal-info-value-txt-order_number>
+                                          "2000000000000000002"
+                                      <wx-view .none>
+                                        <wx-text .p-meal-info-value-copy-txt.wrapper--p-meal-info-value-copy-txt>
+                                          "复制"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "就餐方式"
+                                    <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt>
+                                      "堂食"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "支付方式"
+                                    <wx-text .p-meal-info-value-txt-pay.wrapper--p-meal-info-value-txt-pay>
+                                      "微信支付"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "联系方式"
+                                    <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt>
+                                      "138******00"
+                                  <wx-view .p-meal-info-item-container.wrapper--p-meal-info-item-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "餐具"
+                                    <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt>
+                                      "不需要"
+                                  <wx-view .p-meal-info-item-other-container.wrapper--p-meal-info-item-other-container>
+                                    <wx-text .p-meal-info-key-txt.wrapper--p-meal-info-key-txt>
+                                      "备注"
+                                    <wx-text .p-meal-info-value-txt.wrapper--p-meal-info-value-txt.txt-limited-width.wrapper--txt-limited-width>
+                                      "无"
+                          <wx-view .order-detail-notice-wrapper.wrapper--order-detail-notice-wrapper>
+                            <wx-view .order-detail-notice-view.wrapper--order-detail-notice-view>
+                              <wx-text .order-detail-notice-title.wrapper--order-detail-notice-title>
+                                "友情提示"
+                              <wx-view .order-detail-multi-notice-wrapper.wrapper--order-detail-multi-notice-wrapper>
+                                <wx-text .order-detail-notice-content.wrapper--order-detail-notice-content>
+                                  "1. 如遇临时断货，将导致您无法获得所定食物，或需延迟送餐到达时间，我们将立即致电协商解决，敬请谅解。"
+                                <wx-text .order-detail-notice-content.wrapper--order-detail-notice-content>
+                                  "2.如订单取消，该订单内的优惠券会在1个工作日内退回到您的账户，如有疑问，请联系客服处理。"
+    <wx-custom-wrapper>
+      <wx-view>
+        <wx-view .footerActions.wrapper--footerActions.footerActions_false.wrapper--footerActions_false>
+          <wx-view .footerActions-inner.wrapper--footerActions-inner.footerActions-inner-onlyRight.wrapper--footerActions-inner-onlyRight>
+            <wx-view .footerActions-right.wrapper--footerActions-right>
+              <wx-view .none>
+                <wx-view .none>
+                  <wx-text .od-common-btn-txt.wrapper--od-common-btn-txt>
+                    "在线客服"
+              <wx-view .none>
+                <wx-view .none>
+                  <wx-text .od-common-btn-txt.wrapper--od-common-btn-txt>
+                    "开发票"
+              <wx-view .none>
+                <wx-view .none>
+                  <wx-text .od-common-btn-txt.wrapper--od-common-btn-txt>
+                    "再来一单"
+          <wx-view>
+    <wx-custom-wrapper>
+      <wx-custom-wrapper>
+        <wx-view>
+      <wx-view>
+        <wx-view .none>
+      <wx-custom-wrapper>
+      <wx-custom-wrapper>
+      <wx-custom-wrapper>
+      <wx-custom-wrapper>
+      <wx-custom-wrapper>
+      <wx-view .od-kf-mw.wrapper--od-kf-mw>
+        <wx-view .od-kf-mw_ctn_bottom.wrapper--od-kf-mw_ctn_bottom>
+        <wx-view .od-kf-mw_ctn_bottom.wrapper--od-kf-mw_ctn_bottom>
+          <wx-view>
+            <wx-view .oc-od-c-ap.wrapper--oc-od-c-ap>
+              <wx-view>
+                <wx-view>
+                  <wx-view .oc-od-c-ap_c.wrapper--oc-od-c-ap_c.od-fp-pop.wrapper--od-fp-pop.ex-class.wrapper--ex-class>
+      <wx-view>
+      <wx-custom-wrapper>
+        <wx-view>
+      <wx-custom-wrapper>
+        <wx-view .flt-root.wrapper--flt-root>
+          <wx-view .flt-root_bg.wrapper--flt-root_bg>
+          <wx-view .flt-root-content.wrapper--flt-root-content>
+            <wx-view .none>
+            <wx-view .flt-root-box.wrapper--flt-root-box.flt-root-box_default.wrapper--flt-root-box_default.ex-class.wrapper--ex-class>
+              <wx-view .od-cancel-reason-header.wrapper--od-cancel-reason-header>
+                <wx-text .od-cancel-reason-header_tit.wrapper--od-cancel-reason-header_tit>
+                  "请选择取消订单原因"
+                <wx-view .none>
+                  <wx-image .od-cancel-reason-header_img-i.wrapper--od-cancel-reason-header_img-i>
+              <wx-scroll-view .flt-root-box-content-scroll-view.wrapper--flt-root-box-content-scroll-view.flt-root-box-content-scroll-view_hs.wrapper--flt-root-box-content-scroll-view_hs>
+                <div .wx-scroll-view>
+                  <div .wx-scroll-view>
+                    <wx-view .od-crp-contain.wrapper--od-crp-contain>
+                      <wx-view .od-crp-contain_content_wrap.wrapper--od-crp-contain_content_wrap>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "卡券/权益/优惠无法使用"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "未营业/无法接单"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "产品断货"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "出餐慢/催餐/早到"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "忘记写备注"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "选错时间"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "选错餐厅/地址"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "买错了/多了/少了"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+                        <wx-view .none>
+                          <wx-text .od-crp-contain_content_wrap_item_txt.wrapper--od-crp-contain_content_wrap_item_txt>
+                            "下错订单渠道"
+                          <wx-image .od-crp-contain_content_wrap_item_img.wrapper--od-crp-contain_content_wrap_item_img>
+              <wx-view .od-cb-bg.wrapper--od-cb-bg>
+                <wx-view .od-cb-contain.wrapper--od-cb-contain>
+                  <wx-view .none>
+                    <wx-view .od-cb-contain_btn.wrapper--od-cb-contain_btn.od-cb-contain_btn_white.wrapper--od-cb-contain_btn_white>
+                      <wx-text .od-cb-contain_btn_white_txt.wrapper--od-cb-contain_btn_white_txt>
+                        "确认取消"
+                  <wx-view .none>
+                    <wx-view .od-cb-contain_btn.wrapper--od-cb-contain_btn.od-cb-contain_btn_red.wrapper--od-cb-contain_btn_red>
+                      <wx-text .od-cb-contain_btn_red_txt.wrapper--od-cb-contain_btn_red_txt>
+                        "暂不取消"
+      <wx-custom-wrapper>
+        <wx-view>
+      <wx-custom-wrapper>
+        <wx-view .flt-root.wrapper--flt-root>
+          <wx-view .flt-root_bg.wrapper--flt-root_bg>
+          <wx-view .flt-root-content.wrapper--flt-root-content>
+            <wx-view .none>
+            <wx-view .flt-root-box.wrapper--flt-root-box.flt-root-box_default.wrapper--flt-root-box_default.ex-class.wrapper--ex-class>
+              <wx-view .od-asp-header.wrapper--od-asp-header>
+                <wx-text .od-asp-header_tit.wrapper--od-asp-header_tit>
+                  "选择售后服务类型"
+                <wx-view .none>
+                  <wx-image .od-asp-header_img-i.wrapper--od-asp-header_img-i>
+              <wx-view .od-ast-contain.wrapper--od-ast-contain>
+                <wx-view .none>
+                  <wx-text .od-ast-contain_item_txt.wrapper--od-ast-contain_item_txt>
+                    "申请退款"
+      <wx-custom-wrapper>
+        <wx-view>
+      <wx-view .none>
+      <wx-view>
+        <wx-view .customView.wrapper--customView>
+          <wx-view .customAnimatedView.wrapper--customAnimatedView>
+          <wx-view .none>
+            <wx-image>
+  <wx-view>
+    <wx-view>
+      <wx-custom-wrapper>
+        <wx-view .flt-root.wrapper--flt-root>
+          <wx-view .flt-root_bg.wrapper--flt-root_bg>
+          <wx-view .flt-root-content.wrapper--flt-root-content>
+            <wx-view .none>
+            <wx-view .flt-root-box.wrapper--flt-root-box.flt-root-box_default.wrapper--flt-root-box_default.ex-class.wrapper--ex-class>
+              <wx-view .od-cancel-pop-header.wrapper--od-cancel-pop-header>
+                <wx-text .od-cancel-pop-header_tit.wrapper--od-cancel-pop-header_tit>
+                  "确定取消订单吗？"
+                <wx-view .none>
+                  <wx-image .od-cancel-pop-header_img-i.wrapper--od-cancel-pop-header_img-i>
+              <wx-view .cancel-layout-contaner.wrapper--cancel-layout-contaner>
+                <wx-view .none>
+                  <wx-text .cancel-layout-txt.wrapper--cancel-layout-txt>
+                    "修改订单信息"
+                  <wx-view .cancel-layout-tag-txt-contain.wrapper--cancel-layout-tag-txt-contain>
+                    <wx-view .cancel-layout-tag-txt-contain_pa.wrapper--cancel-layout-tag-txt-contain_pa>
+                      <wx-text .cancel-layout-tag-txt.wrapper--cancel-layout-tag-txt>
+                        "推荐"
+                <wx-view .cancel-layout-gap-line.wrapper--cancel-layout-gap-line.cancel-layout-gap-line-height.wrapper--cancel-layout-gap-line-height>
+                <wx-view .none>
+                  <wx-text .cancel-layout-txt.wrapper--cancel-layout-txt>
+                    "狠心取消"
+                <wx-view .cancel-layout-gap-line.wrapper--cancel-layout-gap-line>
+                <wx-view .none>
+                  <wx-text .cancel-layout-txt.wrapper--cancel-layout-txt>
+                    "暂不取消"

@@ -50,6 +50,11 @@ internal object PickupParse {
          * Set by [PickupCodeIsland]; such an order is not waited on and not sent to the cloud.
          */
         val idle: Boolean = false,
+        /**
+         * Whether [status] is the brand's own rules' reading of the page ([PickupCss]) rather than a
+         * word found on it: their 已完成 is the order being over, not a drink that is ready.
+         */
+        val ruled: Boolean = false,
         /** Whether the code sat beside a label that is only ever the code (取餐码, not 订单号). */
         val strong: Boolean = false,
     )
