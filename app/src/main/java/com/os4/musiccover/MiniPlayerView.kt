@@ -981,6 +981,27 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         toggle2.alpha = a * secondShown
     }
 
+    /**
+     * The row coming up out of nothing, its content in two beats: the picture pops in on its own
+     * centre, the text follows sliding in from the left by [textShift] pixels. Nothing else moves
+     * these two pieces this way; [clearAppearStagger] puts them back.
+     */
+    fun setAppearStagger(iconScale: Float, iconAlpha: Float, textShift: Float, textAlpha: Float) {
+        slot.pivotX = slot.width / 2f
+        slot.pivotY = slot.height / 2f
+        slot.scaleX = iconScale
+        slot.scaleY = iconScale
+        slot.alpha = if (artworkHidden) 0f else iconAlpha.coerceIn(0f, 1f)
+        textColumn.translationX = textShift
+        setTextAlpha(textAlpha)
+    }
+
+    fun clearAppearStagger() {
+        slot.scaleX = 1f
+        slot.scaleY = 1f
+        textColumn.translationX = 0f
+    }
+
     /** The text and the button alone: an island shrinking to its circle keeps its picture. */
     fun setTextAlpha(alpha: Float) {
         val a = alpha.coerceIn(0f, 1f)

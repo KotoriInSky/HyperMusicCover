@@ -10,6 +10,7 @@
     <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
     <string name="cover_bias">Vertical position</string>
     <string name="cover_motion">Motion cover</string>
+    <string name="cover_enabled">Enable lock screen music cover</string>
     <string name="cover_style">Cover presentation</string>
     <string name="cover_style_full">Full-screen cover</string>
     <string name="cover_style_card">Square card</string>
@@ -158,6 +159,7 @@
     <string name="lyrics_provider_got_it">Got it</string>
     <string name="lyrics_provider_got_it_wait">Got it (%1$d)</string>
     <string name="lyrics_trans">Show translations</string>
+    <string name="lyrics_enabled">Enable lock screen lyrics</string>
     <string name="lyrics_roma">Show romanisations</string>
     <string name="lyrics_align">Lyric alignment</string>
     <string name="lyrics_align_left">Left</string>
@@ -225,7 +227,9 @@
     <!-- The islands' page, which the features page opens. -->
     <string name="mini_page_title">Lock screen super island</string>
     <string name="mini_enabled">Enable the lock screen super island</string>
-    <string name="mini_enabled_waiting">Waiting for the SystemUI module to answer</string>
+    <string name="mini_section_look">Appearance</string>
+    <string name="mini_section_notifications">Notifications</string>
+    <string name="mini_section_other">Other</string>
     <string name="mini_enabled_update_required">Restart SystemUI from the home page before changing these settings</string>
     <string name="mini_style">Island layout</string>
     <string name="mini_style_row">Side by side</string>

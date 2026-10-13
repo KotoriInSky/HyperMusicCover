@@ -2,14 +2,12 @@
 // Copyright 2026 btm_m
 package com.os4.musiccover
 
+import com.os4.musiccover.ui.util.FoldUnder
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -28,8 +26,11 @@ import com.os4.musiccover.ui.screen.features.IslandDemo
 import com.os4.musiccover.ui.screen.features.ValueSlider
 import com.os4.musiccover.ui.theme.AppTheme
 import com.os4.musiccover.ui.util.PageScaffold
+import com.os4.musiccover.ui.util.firstCard
+import com.os4.musiccover.ui.util.nextCard
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
@@ -76,8 +77,11 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
     // See ShadePageView: a setting the module did not take greys the page until it answers again.
     val lost by ModuleBridge.lost.collectAsState()
     LaunchedEffect(lost) { if (lost > 0) alive = false }
+    // Whether a query has come back yet: before that, not answering is not yet true.
+    var asked by remember { mutableStateOf(false) }
     LaunchedEffect(refreshKey, lost) {
         val reply = ModuleBridge.queryAlive(context)
+        asked = true
         alive = reply.alive
         schema = reply.miniConfigSchema
         if (reply.alive && reply.miniConfigSchema >= MiniPlayerConfig.SCHEMA_VERSION)
@@ -88,100 +92,114 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
         ModuleBridge.setMiniConfig(context, configText)
     }
 
+    val on = config.optBoolean(MiniPlayerConfig.ENABLED)
+
     PageScaffold(title = stringResource(R.string.mini_page_title), isBlurEnabled = blur,
         onBack = onBack) {
-        item {
+        item(key = "demo") {
             // What the islands do, played on a drawn phone, before the switches that turn them on.
-            Card(Modifier.padding(horizontal = 12.dp).padding(top = 12.dp)) {
+            Card(Modifier.firstCard()) {
                 IslandDemo(Modifier.padding(top = 16.dp))
             }
         }
-        item {
-            // The height slider sizes the island and the shortcut discs together. The pill's
-            // width and artwork radius remain fixed.
-            Card(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)) {
+        item(key = "master") {
+            Card(Modifier.nextCard()) {
+                SwitchPreference(title = stringResource(R.string.mini_enabled),
+                    // Why it cannot be moved, as every master switch in the app says it: not
+                    // answering at all, or answering from a build older than these settings.
+                    summary = when {
+                        asked && !alive -> stringResource(R.string.home_status_inactive_hint)
+                        alive && !ready -> stringResource(R.string.mini_enabled_update_required)
+                        else -> null
+                    },
+                    checked = on, enabled = ready,
+                    onCheckedChange = { push(MiniPlayerConfig.ENABLED, it) })
+            }
+        }
+        item(key = "sections") {
+            // Everything else folds away under the master switch (FoldUnder), in three sections
+            // as the settings and shade pages have theirs: how the islands look, which
+            // notifications they take, and the rest (2026-10-14; one card of eight rows before).
+            FoldUnder(on, settled = ready) {
                 Column {
-                    SwitchPreference(title = stringResource(R.string.mini_enabled),
-                        summary = when {
-                            !alive -> stringResource(R.string.mini_enabled_waiting)
-                            !ready -> stringResource(R.string.mini_enabled_update_required)
-                            else -> null
-                        },
-                        checked = config.optBoolean(MiniPlayerConfig.ENABLED), enabled = ready,
-                        onCheckedChange = { push(MiniPlayerConfig.ENABLED, it) })
-                    WindowDropdownPreference(
-                        title = stringResource(R.string.mini_style),
-                        items = listOf(stringResource(R.string.mini_style_row), stringResource(R.string.mini_style_stack)),
-                        selectedIndex = config.optInt(MiniPlayerConfig.STYLE, MiniPlayerConfig.STYLE_ROW)
-                            .coerceIn(MiniPlayerConfig.STYLE_ROW, MiniPlayerConfig.STYLE_STACK),
-                        enabled = ready && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onSelectedIndexChange = { push(MiniPlayerConfig.STYLE, it) },
-                    )
-                    // Above the grouping it switches off: with ordinary notifications staying in
-                    // the system list there is nothing for that row to group, and the expression
-                    // below greys it out for exactly as long as this one is on.
-                    SwitchPreference(title = stringResource(R.string.mini_normals_in_stack),
-                        checked = config.optBoolean(MiniPlayerConfig.NORMALS_IN_STACK, true),
-                        enabled = ready && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onCheckedChange = { push(MiniPlayerConfig.NORMALS_IN_STACK, it) })
-                    // Only while it can actually work. The module wants ordinary notifications on
-                    // the islands and the stacked style, and feeds LockIslands.setGroupByApp the
-                    // same three conditions, so outside them a row here could not be moved and
-                    // would not say why - which is the whole of what the user would see. It
-                    // expands in under the switch above rather than appearing, so the card's
-                    // height stays continuous and the rows below do not jump (as the theme page's
-                    // glass row does).
-                    AnimatedVisibility(
-                        visible = ready && config.optBoolean(MiniPlayerConfig.ENABLED) &&
-                            !config.optBoolean(MiniPlayerConfig.NORMALS_IN_STACK, true) &&
-                            config.optInt(MiniPlayerConfig.STYLE) == MiniPlayerConfig.STYLE_STACK,
-                        enter = expandVertically(),
-                        exit = shrinkVertically(),
-                    ) {
-                        SwitchPreference(title = stringResource(R.string.mini_group_by_app),
-                            summary = stringResource(R.string.mini_group_by_app_summary),
-                            checked = config.optBoolean(MiniPlayerConfig.GROUP_NOTIFICATIONS_BY_APP),
+                    SmallTitle(text = stringResource(R.string.mini_section_look))
+                    Card(Modifier.nextCard()) {
+                        WindowDropdownPreference(
+                            title = stringResource(R.string.mini_style),
+                            items = listOf(stringResource(R.string.mini_style_row), stringResource(R.string.mini_style_stack)),
+                            selectedIndex = config.optInt(MiniPlayerConfig.STYLE, MiniPlayerConfig.STYLE_ROW)
+                                .coerceIn(MiniPlayerConfig.STYLE_ROW, MiniPlayerConfig.STYLE_STACK),
                             enabled = ready,
-                            onCheckedChange = { push(MiniPlayerConfig.GROUP_NOTIFICATIONS_BY_APP, it) })
+                            onSelectedIndexChange = { push(MiniPlayerConfig.STYLE, it) },
+                        )
+                        // The height slider sizes the island and the shortcut discs together. The
+                        // pill's width and artwork radius remain fixed.
+                        ValueSlider(
+                            title = stringResource(R.string.mini_height),
+                            summary = stringResource(R.string.mini_height_summary),
+                            value = heightDraft.coerceIn(MiniPlayerConfig.MIN_HEIGHT_DP,
+                                MiniPlayerConfig.MAX_HEIGHT_DP),
+                            valueRange = MiniPlayerConfig.MIN_HEIGHT_DP..MiniPlayerConfig.MAX_HEIGHT_DP,
+                            detent = MiniPlayerConfig.DEFAULT_HEIGHT_DP,
+                            label = { "${it.roundToInt()} dp" },
+                            enabled = ready,
+                            onValueChange = { heightDraft = it },
+                            onValueChangeFinished = {
+                                push(MiniPlayerConfig.HEIGHT_RADIUS, heightDraft.roundToInt() / 2f)
+                            },
+                        )
+                        // A switch was here and is gone: the islands take the ordinary notification's
+                        // colours and soft glass and there is nothing to turn off. See
+                        // MiniPlayerConfig.NOTIFICATION_MATERIAL.
+                        SwitchPreference(title = stringResource(R.string.mini_widen),
+                            summary = stringResource(R.string.mini_widen_summary),
+                            checked = config.optBoolean(MiniPlayerConfig.ADAPTIVE_WIDTH),
+                            enabled = ready,
+                            onCheckedChange = { push(MiniPlayerConfig.ADAPTIVE_WIDTH, it) })
                     }
-                    ValueSlider(
-                        title = stringResource(R.string.mini_height),
-                        summary = stringResource(R.string.mini_height_summary),
-                        value = heightDraft.coerceIn(MiniPlayerConfig.MIN_HEIGHT_DP,
-                            MiniPlayerConfig.MAX_HEIGHT_DP),
-                        valueRange = MiniPlayerConfig.MIN_HEIGHT_DP..MiniPlayerConfig.MAX_HEIGHT_DP,
-                        detent = MiniPlayerConfig.DEFAULT_HEIGHT_DP,
-                        label = { "${it.roundToInt()} dp" },
-                        enabled = ready && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onValueChange = { heightDraft = it },
-                        onValueChangeFinished = {
-                            push(MiniPlayerConfig.HEIGHT_RADIUS, heightDraft.roundToInt() / 2f)
-                        },
-                    )
-                    // A switch was here and is gone: the islands take the ordinary notification's
-                    // colours and soft glass and there is nothing to turn off. See
-                    // MiniPlayerConfig.NOTIFICATION_MATERIAL.
-                    SwitchPreference(title = stringResource(R.string.mini_widen),
-                        summary = stringResource(R.string.mini_widen_summary),
-                        checked = config.optBoolean(MiniPlayerConfig.ADAPTIVE_WIDTH),
-                        enabled = ready && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onCheckedChange = { push(MiniPlayerConfig.ADAPTIVE_WIDTH, it) })
-                    // A switch was here and is gone: the shortcuts always go with the full-screen
-                    // doze now. See MiniPlayerConfig.HIDE_AOD_SHORTCUTS.
-                    // A switch was here and is gone: a long line scrolls once and rests cut. See
-                    // MiniPlayerView.scrollOnce.
-                    SwitchPreference(title = stringResource(R.string.mini_nav_keep_on),
-                        summary = stringResource(R.string.mini_nav_keep_on_summary),
-                        checked = config.optBoolean(MiniPlayerConfig.NAV_KEEP_ON),
-                        enabled = ready && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onCheckedChange = { push(MiniPlayerConfig.NAV_KEEP_ON, it) })
-                    // No 状态显示在日期后面 row: the placement is fixed with the islands on
-                    // (MiniPlayerRuntime.statusAtDate), so there is nothing left to switch.
-                    SwitchPreference(title = stringResource(R.string.mini_fod_lift),
-                        summary = stringResource(R.string.mini_fod_lift_summary),
-                        checked = config.optBoolean(MiniPlayerConfig.FOD_LIFT),
-                        enabled = ready && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onCheckedChange = { push(MiniPlayerConfig.FOD_LIFT, it) })
+                    SmallTitle(text = stringResource(R.string.mini_section_notifications))
+                    Card(Modifier.nextCard()) {
+                        // Above the grouping it switches off: with ordinary notifications staying
+                        // in the system list there is nothing for that row to group.
+                        SwitchPreference(title = stringResource(R.string.mini_normals_in_stack),
+                            checked = config.optBoolean(MiniPlayerConfig.NORMALS_IN_STACK, true),
+                            enabled = ready,
+                            onCheckedChange = { push(MiniPlayerConfig.NORMALS_IN_STACK, it) })
+                        // Only while it can actually work. The module wants ordinary notifications
+                        // on the islands and the stacked style, and feeds LockIslands.setGroupByApp
+                        // the same three conditions, so outside them a row here could not be moved
+                        // and would not say why.
+                        FoldUnder(
+                            !config.optBoolean(MiniPlayerConfig.NORMALS_IN_STACK, true) &&
+                                config.optInt(MiniPlayerConfig.STYLE) == MiniPlayerConfig.STYLE_STACK,
+                            settled = ready,
+                        ) {
+                            SwitchPreference(title = stringResource(R.string.mini_group_by_app),
+                                summary = stringResource(R.string.mini_group_by_app_summary),
+                                checked = config.optBoolean(MiniPlayerConfig.GROUP_NOTIFICATIONS_BY_APP),
+                                enabled = ready,
+                                onCheckedChange = { push(MiniPlayerConfig.GROUP_NOTIFICATIONS_BY_APP, it) })
+                        }
+                    }
+                    SmallTitle(text = stringResource(R.string.mini_section_other))
+                    Card(Modifier.nextCard()) {
+                        // A switch was here and is gone: the shortcuts always go with the
+                        // full-screen doze now. See MiniPlayerConfig.HIDE_AOD_SHORTCUTS.
+                        // A switch was here and is gone: a long line scrolls once and rests cut.
+                        // See MiniPlayerView.scrollOnce.
+                        SwitchPreference(title = stringResource(R.string.mini_nav_keep_on),
+                            summary = stringResource(R.string.mini_nav_keep_on_summary),
+                            checked = config.optBoolean(MiniPlayerConfig.NAV_KEEP_ON),
+                            enabled = ready,
+                            onCheckedChange = { push(MiniPlayerConfig.NAV_KEEP_ON, it) })
+                        // No 状态显示在日期后面 row: the placement is fixed with the islands on
+                        // (MiniPlayerRuntime.statusAtDate), so there is nothing left to switch.
+                        SwitchPreference(title = stringResource(R.string.mini_fod_lift),
+                            summary = stringResource(R.string.mini_fod_lift_summary),
+                            checked = config.optBoolean(MiniPlayerConfig.FOD_LIFT),
+                            enabled = ready,
+                            onCheckedChange = { push(MiniPlayerConfig.FOD_LIFT, it) })
+                    }
                 }
             }
         }

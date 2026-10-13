@@ -86,17 +86,23 @@ internal object PickupCloud {
     }
 
     /**
-     * Ask the cloud and keep the answer. The return is what to show the user - the whole story is
-     * in it because this is a button on a settings page, and "sync failed" with no reason is worse
-     * than the reason.
+     * What a fetch came to: whether the list was taken, and what to show the user. Two fields
+     * rather than one sentence the settings page had to read back - it took "starts with 已更新"
+     * for success, which a reworded line or another language would have broken (2026-10-14).
      */
-    fun fetch(ctx: Context): String {
+    data class Fetched(val ok: Boolean, val said: String)
+
+    /**
+     * Ask the cloud and keep the answer. [Fetched.said] is the whole story because this is a
+     * button on a settings page, and "sync failed" with no reason is worse than the reason.
+     */
+    fun fetch(ctx: Context): Fetched {
         val now = System.currentTimeMillis()
         val reply = runCatching { ask(ctx) }.getOrElse {
-            return "同步失败：${it.javaClass.simpleName} ${it.message.orEmpty()}".trim()
+            return Fetched(false, "同步失败：${it.javaClass.simpleName} ${it.message.orEmpty()}".trim())
         }
         val incoming = reply.second
-        if (incoming.isEmpty()) return "同步失败：云端没有 ${reply.first} 条规则里的取餐名单"
+        if (incoming.isEmpty()) return Fetched(false, "同步失败：云端没有 ${reply.first} 条规则里的取餐名单")
         return runCatching {
             val stored = file(ctx)
             stored.parentFile?.mkdirs()
@@ -115,8 +121,8 @@ internal object PickupCloud {
             updatedAt = reply.third
             PickupRules.invalidate()
             Xp.log(TAG + "cloud rules: ${incoming.size} applied, update ${stamp(reply.third)}")
-            "已更新：${incoming.size} 个小程序，云端版本 ${stamp(reply.third)}"
-        }.getOrElse { "已取得 ${incoming.size} 条，但保存失败：${it.javaClass.simpleName}" }
+            Fetched(true, "已更新：${incoming.size} 个小程序，云端版本 ${stamp(reply.third)}")
+        }.getOrElse { Fetched(false, "已取得 ${incoming.size} 条，但保存失败：${it.javaClass.simpleName}") }
     }
 
     private fun file(ctx: Context): File = File(ctx.filesDir, FILE)

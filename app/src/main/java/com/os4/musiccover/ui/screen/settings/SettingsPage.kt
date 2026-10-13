@@ -1,5 +1,7 @@
 package com.os4.musiccover.ui.screen.settings
 
+import com.os4.musiccover.ui.util.nextCard
+import com.os4.musiccover.ui.util.firstCard
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -90,11 +92,11 @@ fun SettingsPageView(
         isBlurEnabled = isBlurEnabled,
         extraBottomPadding = extraBottomPadding,
     ) {
-        item {
+        item(key = "settings") {
             Column {
                 SmallTitle(text = stringResource(R.string.settings_interface))
                 Card(
-                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
+                    modifier = Modifier.nextCard()
                 ) {
                     // Everything that repaints the app - theme mode, the floating bar, its glass,
                     // the blur - is on the screen this opens. What is left here is the one
@@ -126,7 +128,7 @@ fun SettingsPageView(
 
                 SmallTitle(text = stringResource(R.string.settings_language))
                 Card(
-                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
+                    modifier = Modifier.nextCard()
                 ) {
                     val languageNames = listOf(
                         stringResource(R.string.language_default),
@@ -161,7 +163,7 @@ fun SettingsPageView(
                 // sake. Every process the module is in follows it at once (LsposedService).
                 SmallTitle(text = stringResource(R.string.settings_debug))
                 Card(
-                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
+                    modifier = Modifier.nextCard()
                 ) {
                     val levelNames = listOf(
                         stringResource(R.string.log_level_normal),
@@ -183,7 +185,7 @@ fun SettingsPageView(
 
                 SmallTitle(text = stringResource(R.string.settings_data))
                 Card(
-                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
+                    modifier = Modifier.nextCard()
                 ) {
                     Column {
                         ArrowPreference(

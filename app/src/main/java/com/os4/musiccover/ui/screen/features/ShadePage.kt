@@ -1,5 +1,8 @@
 package com.os4.musiccover.ui.screen.features
 
+import com.os4.musiccover.ui.util.nextCard
+import com.os4.musiccover.ui.util.firstCard
+import com.os4.musiccover.ui.util.FoldUnder
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -66,8 +69,6 @@ internal fun ShadePageView(
     // an unanswered query out of it; the fallback below is the module's ship default, which is
     // off now, so a key that is missing for any other reason reads as off too.
     val master = module.alive && (module.shade["enabled"] ?: 0) != 0
-    // Everything below the master switch greys out with it; the switch itself only needs the module.
-    val enabled = module.alive && master
 
     // Local first, then the module: its answer arrives a broadcast later.
     val push: (String, Int) -> Unit = { key, value ->
@@ -81,11 +82,9 @@ internal fun ShadePageView(
         extraBottomPadding = extraBottomPadding,
         onBack = onBack,
     ) {
-        item {
+        item(key = "master") {
             Column {
-                Card(
-                    modifier = Modifier.padding(horizontal = 12.dp).padding(top = 12.dp)
-                ) {
+                Card(modifier = Modifier.firstCard()) {
                     SwitchPreference(
                         title = stringResource(R.string.shade_enabled),
                         // Said here rather than left to a greyed-out page: a switch that cannot
@@ -102,22 +101,26 @@ internal fun ShadePageView(
                     )
                 }
 
-                SmallTitle(text = stringResource(R.string.shade_section_behaviour))
-                Card(
-                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)
-                ) {
-                    // Index is the module's mode: 0 hands the shade back, 1 keeps the last cover.
-                    val modes = listOf(
-                        stringResource(R.string.shade_mode_restore),
-                        stringResource(R.string.shade_mode_keep),
-                    )
-                    WindowDropdownPreference(
-                        title = stringResource(R.string.shade_mode),
-                        items = modes,
-                        selectedIndex = (module.shade["mode"] ?: 0).coerceIn(0, modes.lastIndex),
-                        enabled = enabled,
-                        onSelectedIndexChange = { push("mode", it) },
-                    )
+                // Folds away under the master switch rather than greying out (FoldUnder); still
+                // only once the module has answered, so entering the page plays nothing.
+                FoldUnder(master, settled = module.alive) {
+                    Column {
+                        SmallTitle(text = stringResource(R.string.shade_section_behaviour))
+                        Card(modifier = Modifier.nextCard()) {
+                            // Index is the module's mode: 0 hands the shade back, 1 keeps the last cover.
+                            val modes = listOf(
+                                stringResource(R.string.shade_mode_restore),
+                                stringResource(R.string.shade_mode_keep),
+                            )
+                            WindowDropdownPreference(
+                                title = stringResource(R.string.shade_mode),
+                                items = modes,
+                                selectedIndex = (module.shade["mode"] ?: 0).coerceIn(0, modes.lastIndex),
+                                enabled = module.alive,
+                                onSelectedIndexChange = { push("mode", it) },
+                            )
+                        }
+                    }
                 }
             }
         }

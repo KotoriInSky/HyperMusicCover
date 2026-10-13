@@ -10,6 +10,7 @@
     <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
     <string name="cover_bias">封面纵向位置</string>
     <string name="cover_motion">动态封面</string>
+    <string name="cover_enabled">启用音乐锁屏封面</string>
     <string name="cover_style">封面展现形式</string>
     <string name="cover_style_full">全屏封面</string>
     <string name="cover_style_card">方形卡片</string>
@@ -164,6 +165,7 @@
     <string name="lyrics_provider_got_it">知道了</string>
     <string name="lyrics_provider_got_it_wait">知道了 (%1$d)</string>
     <string name="lyrics_trans">显示翻译</string>
+    <string name="lyrics_enabled">启用锁屏歌词</string>
     <string name="lyrics_roma">显示罗马音</string>
     <string name="lyrics_align">歌词对齐方式</string>
     <string name="lyrics_align_left">居左</string>
@@ -235,7 +237,9 @@
     <!-- Settings for the lockscreen islands page. -->
     <string name="mini_page_title">锁屏超级岛</string>
     <string name="mini_enabled">启用锁屏超级岛</string>
-    <string name="mini_enabled_waiting">等待 SystemUI 模块响应</string>
+    <string name="mini_section_look">外观</string>
+    <string name="mini_section_notifications">通知</string>
+    <string name="mini_section_other">其他</string>
     <string name="mini_enabled_update_required">请在首页重启 SystemUI 后再修改设置</string>
     <string name="mini_style">锁屏岛排列方式</string>
     <string name="mini_style_row">并排</string>

@@ -1,5 +1,6 @@
 package com.os4.musiccover.ui.screen.about
 
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
@@ -262,7 +263,7 @@ fun UpdateHint(modifier: Modifier = Modifier, update: UpdateInfo?, onShowNotes: 
             .padding(vertical = 8.dp),
         color = colorScheme.primary,
         text = stringResource(R.string.update_available, update.versionName),
-        fontSize = 14.sp,
+        style = MiuixTheme.textStyles.body2,
         textAlign = TextAlign.Center,
     )
 }
@@ -335,7 +336,7 @@ private fun UpdateStatusDialog(status: String?, onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 8.dp),
                 text = status,
-                fontSize = 14.sp,
+                style = MiuixTheme.textStyles.body2,
                 color = colorScheme.onSurface,
             )
             TextButton(
@@ -367,7 +368,7 @@ private fun UpdateLatestDialog(show: Boolean, onDismiss: () -> Unit) {
             MiuixText(
                 modifier = Modifier.padding(bottom = 8.dp),
                 text = stringResource(R.string.update_latest),
-                fontSize = 14.sp,
+                style = MiuixTheme.textStyles.body2,
                 color = colorScheme.onSurface,
             )
             TextButton(
@@ -400,7 +401,7 @@ private fun UpdateProgressDialog(show: Boolean, progress: Float?, onCancel: () -
                 Spacer(Modifier.width(12.dp))
                 MiuixText(
                     text = if (percent != null) stringResource(R.string.update_percent, percent) else "",
-                    fontSize = 14.sp,
+                    style = MiuixTheme.textStyles.body2,
                     color = colorScheme.onSurfaceVariantSummary,
                 )
             }
@@ -437,7 +438,7 @@ private fun UpdateNotesDialog(
                 MiuixText(
                     modifier = Modifier.padding(bottom = 8.dp),
                     text = stringResource(R.string.update_notes_empty),
-                    fontSize = 14.sp,
+                    style = MiuixTheme.textStyles.body2,
                     color = colorScheme.onSurface,
                 )
             } else {

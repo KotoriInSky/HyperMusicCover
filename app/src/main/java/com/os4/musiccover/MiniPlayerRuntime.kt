@@ -1082,6 +1082,15 @@ object MiniPlayerRuntime {
     @JvmStatic fun preferMini() = live().forEach { it.preferMini() }
 
     /**
+     * A tap on the music island with the cover switched off: the island goes up into the plain
+     * card, the same choice a pull up on it makes, since there is no cover for it to open.
+     */
+    @JvmStatic fun openCardInstead() {
+        val token = live().firstNotNullOfOrNull { it.sessionToken() } ?: return
+        selectNative(token)
+    }
+
+    /**
      * The card was swiped down out of the cover or the lyrics. The next swipe up on the pill
      * goes back there rather than to the plain card - which of the two is the entry's own
      * question (LockLyrics.willAttachOnEntry keeps a two-finger dismissal), so it lands where
@@ -3758,7 +3767,10 @@ private class MiniPlayerController(
      * frame too. [appear]'s target says which way; one coming in mid-way turns it round from
      * where it has got to.
      */
-    private val appear = Jelly(SWAP_RESPONSE, SWAP_DAMPING)
+    // A spring of its own, bouncier than the super island's APPEAR (0.7 overshoots ~5%, which
+    // the first build showed as no bounce at all, 2026-10-14): the rise carries well past its
+    // place and settles back - the landing the squash in applyAppear answers.
+    private val appear = Jelly(ROW_POP_RESPONSE, ROW_POP_DAMPING)
     private var appearing = false
     private var appearLast = 0L
 
@@ -3796,8 +3808,8 @@ private class MiniPlayerController(
             val dt = if (appearLast == 0L) 1f / 120f
                 else ((frameTimeNanos - appearLast) / 1e9f).coerceIn(0f, 0.05f)
             appearLast = frameTimeNanos
-            // A new row come up while the screen is still coming back: its circle fades in with
-            // the lock screen, and it grows once it can be seen doing so.
+            // A new row come up while the screen is still coming back: it waits out of sight
+            // and rises once it can be seen doing so.
             val held = appear.target == 1f && appear.value == 0f && !pillSeen() &&
                 android.os.SystemClock.uptimeMillis() - growHeldSince < BACK_WAIT_MS
             if (!held) appear.step(dt)
@@ -3855,7 +3867,7 @@ private class MiniPlayerController(
         // The row's spring still holds wherever the pill was last shown: set afresh by the next
         // position(), not sprung from there.
         rowKnown = false
-        // The first frame drawn is already the small circle, not the whole pill for one frame.
+        // The first frame drawn is already the start of the rise, not the whole pill for one frame.
         if (!applyAppear()) view.setContentAlpha(0f)
         Choreographer.getInstance().removeFrameCallback(appearFrame)
         Choreographer.getInstance().postFrameCallback(appearFrame)
@@ -3906,6 +3918,34 @@ private class MiniPlayerController(
         view.setInteractionsEnabled(false)
     }
 
+    /**
+     * The torch's and the camera's icons pushed out by [push] pixels and pressed thin, each from
+     * its outer edge. The icon inside each button, never the button's own layout: the pill
+     * follows where those layouts are drawn (followShortcuts), and moving them would read to it
+     * as the row zooming - it would grow with the push. 0 puts both back.
+     */
+    private fun squeezeShortcuts(push: Float) {
+        fun one(layout: View, outward: Float) {
+            val icon = (layout as? ViewGroup)?.takeIf { it.childCount > 0 }?.getChildAt(0) ?: return
+            if (push < 0.25f) {
+                if (icon.translationX != 0f || icon.scaleX != 1f) {
+                    icon.translationX = 0f
+                    icon.scaleX = 1f
+                    icon.scaleY = 1f
+                }
+                return
+            }
+            val k = push / icon.width.coerceAtLeast(1)
+            icon.pivotX = if (outward < 0f) 0f else icon.width.toFloat()
+            icon.pivotY = icon.height / 2f
+            icon.translationX = outward * push
+            icon.scaleX = (1f - k * 0.5f).coerceAtLeast(0.7f)
+            icon.scaleY = (1f + k * 0.25f).coerceAtMost(1.15f)
+        }
+        one(left, -1f)
+        one(right, 1f)
+    }
+
     /** One frame of it; false when another motion has taken the frame (it is theirs from here). */
     private fun applyAppear(): Boolean {
         val view = player ?: return false
@@ -3917,21 +3957,57 @@ private class MiniPlayerController(
         // The row as its own spring has it, grown from its left end.
         val fullW = (if (rowKnown) rowWidth.value else rest.w).coerceAtLeast(rest.h)
         val left = if (rowKnown) xy[0] + rowLeft.value else rest.x
-        val d = discDiameter().toFloat()
         val p = appear.value
-        // applySwap's: thinner while it widens fast, a touch taller off its overshoot.
-        val widening = if (stackedStyle()) 0f else appear.velocity * (fullW - d)
-        val squash = (widening / fullW.coerceAtLeast(1f) * ROW_SQUASH).coerceIn(-ROW_SQUASH_MAX, ROW_SQUASH_MAX)
-        val h = (rest.h * (1f - squash)).coerceAtLeast(1f)
-        val w = (if (stackedStyle()) fullW else lerp(d, fullW, p)).coerceAtLeast(h)
-        val glass = if (stackedStyle()) p.coerceIn(0f, 1f)
-            else if (leaving()) MiniCardMorph.smooth(0f, APPEAR_FADE_AT, p) else 1f
         backFrames++
         // setMorphFrame does nothing to a pill out of its morph: the way is then not drawn.
         if (view.inMorph()) backDrawn++
+        if (stackedStyle()) {
+            val glass = p.coerceIn(0f, 1f)
+            if (backMinW.isNaN() || fullW < backMinW) backMinW = fullW
+            view.setMorphFrame(CoverMorphMotion.Box(left, rest.y, fullW, rest.h), rest.h / 2f, glass)
+            view.setContentAlpha(1f)
+            return true
+        }
+        // Up from below, whole (2026-10-14, user): it rose out of its left end's circle before,
+        // and from the middle before that - both turned down. The pill comes up from under its
+        // place a little small, the spring carrying it just past and back; rising fast it is
+        // drawn a touch tall and narrow, and settling back off the overshoot a touch flat and
+        // wide - the landing. Going, the same in reverse: it sinks away.
+        val d = density()
+        val shown = p.coerceAtLeast(0f)
+        val rise = (1f - p) * APPEAR_RISE_DP * d
+        // Not held at 1: past its place it is a touch bigger too, which is most of the bounce.
+        // The height takes all of it; the width far less - from nearer its own size, and only a
+        // share of the overshoot (2026-10-14, user: it spread sideways too much).
+        val scale = lerp(APPEAR_SCALE_FROM, 1f, shown)
+        val across = if (shown <= 1f) shown else 1f + (shown - 1f) * APPEAR_WIDTH_OVERSHOOT
+        val widthScale = lerp(APPEAR_WIDTH_FROM, 1f, across)
+        val v = appear.velocity
+        val stretch = (if (v > 0f) v * APPEAR_STRETCH else v * APPEAR_LAND)
+            .coerceIn(-APPEAR_SQUASH_MAX, APPEAR_SQUASH_MAX)
+        val h = (rest.h * scale * (1f + stretch)).coerceAtLeast(1f)
+        val w = (fullW * widthScale * (1f - stretch * 0.25f)).coerceAtLeast(h)
+        val cx = left + fullW / 2f
+        val cy = rest.y + rest.h / 2f + rise
+        val glass = MiniCardMorph.smooth(0f, 0.3f, shown)
         if (backMinW.isNaN() || w < backMinW) backMinW = w
-        view.setMorphFrame(CoverMorphMotion.Box(left, rest.y + (rest.h - h) / 2f, w, h), h / 2f, glass)
-        view.setContentAlpha(if (stackedStyle()) 1f else MiniCardMorph.smooth(0.35f, 0.9f, p))
+        view.setMorphFrame(CoverMorphMotion.Box(cx - w / 2f, cy - h / 2f, w, h), h / 2f, glass)
+        // Wider than its place - the overshoot and the landing - it shoulders the torch and the
+        // camera aside, and they give: pushed out and pressed thin against it.
+        squeezeShortcuts(((w - fullW) / 2f).coerceAtLeast(0f) * APPEAR_PUSH_GAIN)
+        // Out of focus to in, the glass left sharp, as the super island's content arrives.
+        view.setMorphContentBlur((1f - MiniCardMorph.smooth(0f, 0.5f, shown)) * APPEAR_BLUR_DP * d)
+        // The content in two beats: the picture first, popping in on its centre, the text a
+        // little after it, sliding in from the left. Early, both: the whole of it is in by the
+        // time the spring first reaches its place, not waiting on the bounce to settle.
+        val icon = MiniCardMorph.smooth(0.05f, 0.4f, shown)
+        val text = MiniCardMorph.smooth(0.2f, 0.65f, shown)
+        view.setAppearStagger(
+            iconScale = lerp(APPEAR_ICON_FROM, 1f, icon),
+            iconAlpha = icon,
+            textShift = -(1f - text) * APPEAR_TEXT_SHIFT_DP * d,
+            textAlpha = text,
+        )
         return true
     }
 
@@ -3940,10 +4016,13 @@ private class MiniPlayerController(
         val left = appear.target == 0f
         MiniPlayerRuntime.noteGone((if (left) "back" else "up") + " done ${android.os.SystemClock.uptimeMillis() - backStartedAt}ms " +
             "frames=$backFrames drawn=$backDrawn minW=${if (backMinW.isNaN()) "-" else backMinW.toInt().toString()} " +
-            "at=${"%.2f".format(appear.value)} pill=${player?.let { "${it.visibility}/t${"%.2f".format(it.transitionAlpha)}/a${"%.2f".format(it.alpha)}" }}")
+            "at=${"%.2f".format(appear.value)} row=${quietWhy()} pill=${player?.let { "${it.visibility}/t${"%.2f".format(it.transitionAlpha)}/a${"%.2f".format(it.alpha)}" }}")
         appearing = false
         Choreographer.getInstance().removeFrameCallback(appearFrame)
+        squeezeShortcuts(0f)
         val view = player ?: return
+        view.clearAppearStagger()
+        view.setMorphContentBlur(0f)
         view.setContentAlpha(1f)
         if (left) {
             // Gone back into nothing (or cut short there): the row is not there any more. The
@@ -9482,6 +9561,8 @@ private class MiniPlayerController(
         return Main.coverModeOn() || wantsNativeArtworkGesture()
     }
 
+    fun sessionToken(): Any? = controller?.sessionToken
+
     fun preferMini() {
         controller?.sessionToken?.let { token ->
             MiniPlayerRuntime.chooseMini(token)
@@ -10832,7 +10913,14 @@ private class MiniPlayerController(
                 // Up out of nothing on a lock screen already there: it grows in. Coming back
                 // under a flight, a card's morph or a switch, or with the row's wake fade, those
                 // bring it; and a row going just goes.
-                val newRow = lastShownKeys.isEmpty()
+                // New is a notification island the row did not have when last shown - not only an
+                // empty record. The record is emptied only by the way back, so a row put away any
+                // other way (the unlock, the doze, the cover) left it full, and the next
+                // notification came up in a frame unless the lock screen happened to be quiet:
+                // the animation "sometimes lost" (2026-10-14). The same islands coming back on
+                // the wake's fade are still not new, and still come with it.
+                val newRow = lastShownKeys.isEmpty() ||
+                    islandKeys.any { it != MUSIC_ISLAND && it !in lastShownKeys }
                 val growIn = target == View.VISIBLE && keyguardOwned && !frameTaken() &&
                     (rowQuiet() && Main.screenOnCached() || newRow)
                 // The last island gone from a lock screen that stays: it goes back into nothing.
@@ -11330,8 +11418,32 @@ private const val SWAP_STACK = 3
  */
 private const val APPEAR_RESPONSE = 0.5f
 private const val APPEAR_DAMPING = 0.7f
-/** The pill going back into nothing: its circle fades over this last share of the way. */
-private const val APPEAR_FADE_AT = 0.15f
+/**
+ * The row coming up out of nothing (applyAppear): how far below its place it starts, how small,
+ * how blurred its content, and the content's two beats - the picture's starting scale and how
+ * far left the text slides in from. The stretch is per unit of the spring's velocity: rising
+ * (tall and narrow) and settling back off the overshoot (flat and wide), the latter stronger
+ * since that velocity is the smaller one.
+ */
+private const val APPEAR_RISE_DP = 40f
+private const val APPEAR_SCALE_FROM = 0.75f
+/** The width starts nearer its own size than the height does, and takes this share of the overshoot. */
+private const val APPEAR_WIDTH_FROM = 0.9f
+private const val APPEAR_WIDTH_OVERSHOOT = 0.4f
+/** How far the torch and camera give, per pixel the pill stands wider than its place. */
+private const val APPEAR_PUSH_GAIN = 1.6f
+private const val APPEAR_BLUR_DP = 8f
+private const val APPEAR_ICON_FROM = 0.6f
+private const val APPEAR_TEXT_SHIFT_DP = 8f
+private const val APPEAR_STRETCH = 0.012f
+private const val APPEAR_LAND = 0.1f
+private const val APPEAR_SQUASH_MAX = 0.1f
+/**
+ * Damping 0.5 overshoots ~16%: 40dp of rise carries ~6dp past, the height to ~1.04. 0.55/0.45
+ * took 1.3s to settle (`op mini`: up done 1324ms), which read as slow.
+ */
+private const val ROW_POP_RESPONSE = 0.4f
+private const val ROW_POP_DAMPING = 0.5f
 private const val SHOW_RESPONSE = 0.35f
 private const val SHOW_DAMPING = 0.95f
 private const val HIDDEN_RESPONSE = 0.2f

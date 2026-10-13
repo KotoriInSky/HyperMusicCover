@@ -462,6 +462,14 @@ public class Main extends XposedModule {
      */
     private static volatile boolean sAuto = true;
     /**
+     * 启用音乐锁屏封面, the app's master switch for the cover. Unlike sAuto it is a setting, and
+     * it shuts every way in rather than only the automatic one: off, the card going up does not
+     * open the cover and neither does a tap on the artwork or on the music island - the island
+     * opens the plain card instead. The rest of the module (islands, shade, card tweaks) goes on.
+     * On when absent from the state file: every phone had the cover before the switch existed.
+     */
+    static volatile boolean sCoverFeatureOn = true;
+    /**
      * Whether the OEM media card is on the lockscreen. This, not playback state, is the switch:
      * pausing leaves the card up, so it leaves the cover up too, and dismissing the card is the
      * one thing that ends music mode.
@@ -2006,6 +2014,7 @@ public class Main extends XposedModule {
         try {
             f = af.startWrite();
             f.write(("cover=" + (sCoverMode ? 1 : 0)
+                    + "\ncoverfeature=" + (sCoverFeatureOn ? 1 : 0)
                     + "\nbias=" + sBias
                     // Only the mode. The square's size, place and corners, the clock's offset,
                     // the glass end and the spring are all fixed now, and loadState does not read
@@ -2032,9 +2041,10 @@ public class Main extends XposedModule {
                     // geometry is: a fresh SystemUI should not have to relearn it to use it.
                     + "\ncovergap=" + CoverPush.sCoverFadeGapMs
                     + "\nhidefp=" + (sHideFp ? 1 : 0)
-                    // The lyrics master switch is not written: it is fixed on, and loadState does
-                    // not read it. lyrichidden still is - the two-finger tap is the one way the
-                    // lock screen can be asked for the cover instead, and it has to survive.
+                    // The lyrics master switch, a setting again (2026-10-14). A new key rather than
+                    // the old "lyrics": a file from when that one was written may still hold a
+                    // 0 nobody remembers setting. lyrichidden is the two-finger tap's page.
+                    + "\nlyricmaster=" + (LockLyrics.sEnabled ? 1 : 0)
                     + "\ncolon=" + (HyperTweaks.sForceColon ? 1 : 0)
                     + "\nseekglow=" + (HyperTweaks.sBarGlow ? 1 : 0)
                     + "\nlyrickeep=" + (LockLyrics.sKeepOn ? 1 : 0)
@@ -2130,6 +2140,7 @@ public class Main extends XposedModule {
                     // key. One bad number should cost its own setting and nothing else.
                     try {
                         if ("cover".equals(k)) cover = "1".equals(v);
+                        else if ("coverfeature".equals(k)) sCoverFeatureOn = "1".equals(v);
                         // "auto" was a stored setting; following the card is unconditional now.
                         else if ("bias".equals(k)) sBias = Float.parseFloat(v);
                         else if ("coverstyle".equals(k)) sCoverCardStyle =
@@ -2156,11 +2167,8 @@ public class Main extends XposedModule {
                         else if ("hidefp".equals(k)) sHideFp = "1".equals(v);
                         else if ("colon".equals(k)) HyperTweaks.sForceColon = "1".equals(v);
                         else if ("seekglow".equals(k)) HyperTweaks.sBarGlow = "1".equals(v);
-                        // The lyrics are not read: the lock screen shows them unconditionally now,
-                        // and in the AOD it is 息屏时显示大时钟 (aodsmall) that decides whether
-                        // there is a clock for them to sit under at all.
-                        // lyrichidden still is - that is the two-finger tap, and it is how the
-                        // lock screen is asked for the cover instead.
+                        // The old "lyrics" key is not read, see saveState; lyricmaster is.
+                        else if ("lyricmaster".equals(k)) LockLyrics.sEnabled = "1".equals(v);
                         else if ("lyrickeep".equals(k)) LockLyrics.sKeepOn = "1".equals(v);
                         else if ("lyrichidden".equals(k)) LockLyrics.sTapHidden = "1".equals(v);
                         else if ("lyrichdr".equals(k)) LockLyrics.sHdr = "1".equals(v);
@@ -2876,6 +2884,8 @@ public class Main extends XposedModule {
                         setClockResponse(i.getFloatExtra("v", EASE_COVER[1]));
                     } else if ("auto".equals(op)) {
                         setAuto(i.getBooleanExtra("on", true));
+                    } else if ("coverfeature".equals(op)) {
+                        setCoverFeature(i.getBooleanExtra("on", true));
                     } else if ("reload".equals(op)) {
                         CoverPush.requestWallpaperReload(c);
                     } else if ("lockwp".equals(op)) {
@@ -2995,11 +3005,18 @@ public class Main extends XposedModule {
                             async = true;
                             new Thread(() -> {
                                 String said;
+                                boolean ok = false;
                                 try {
-                                    said = PickupCloud.INSTANCE.fetch(c);
+                                    PickupCloud.Fetched r = PickupCloud.INSTANCE.fetch(c);
+                                    said = r.getSaid();
+                                    ok = r.getOk();
                                 } catch (Throwable t) {
                                     said = "同步失败：" + t.getClass().getSimpleName();
                                 }
+                                // The outcome as a field, the sentence only for showing.
+                                android.os.Bundle outcome = new android.os.Bundle();
+                                outcome.putBoolean("ok", ok);
+                                receipt.setResultExtras(outcome);
                                 receipt.setResultData(said);
                                 receipt.setResultCode(OP_ACK);
                                 receipt.finish();
@@ -3028,6 +3045,7 @@ public class Main extends XposedModule {
                         float[] shortcuts = MiniPlayerRuntime.shortcutGeometry();
                         if (shortcuts != null) out.putFloatArray("minishortcuts", shortcuts);
                         out.putBoolean("auto", sAuto);
+                        out.putBoolean("coverfeature", sCoverFeatureOn);
                         out.putFloat("bias", sBias);
                         out.putInt("coverstyle", sCoverCardStyle.mode);
                         out.putFloat("covercardfill", sCoverCardStyle.fill);
@@ -6991,6 +7009,11 @@ public class Main extends XposedModule {
     /** Enter through the same route as the OEM artwork, with MiniPlayerRuntime owning the bridge. */
     static void miniPlayerEnterCover() {
         if (!miniPlayerCanShow()) return;
+        // No cover to open: the island opens into the plain card, as a pull up on it does.
+        if (!sCoverFeatureOn) {
+            MiniPlayerRuntime.openCardInstead();
+            return;
+        }
         // Taken before the entry moves anything: the lyrics grow out of the island as it is now.
         LockLyrics.notePopOrigin(MiniPlayerRuntime.musicIslandCentreOnScreen());
         if (!sAuto) {
@@ -7027,7 +7050,7 @@ public class Main extends XposedModule {
     static void miniPlayerTurnScene(boolean enter) {
         if (!keyguardShowing() || bouncerUp()) return;
         if (enter) {
-            if (sCoverMode) return;
+            if (sCoverMode || !sCoverFeatureOn) return;
             // Back out of the island mid-morph: the lyrics come out of it too, from where it is.
             LockLyrics.notePopOrigin(MiniPlayerRuntime.musicIslandCentreOnScreen());
             if (!sAuto) setCoverEnabled(true, true, false);
@@ -8463,7 +8486,10 @@ public class Main extends XposedModule {
     private static boolean swallowArtTap(MotionEvent ev) {
         int action = ev.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
-            boolean onCard = (wantsArtTap() || MiniPlayerRuntime.wantsNativeArtworkGesture())
+            // With the cover switched off the artwork is the OEM's again: its tap would only
+            // lead to a cover that is not allowed to open.
+            boolean onCard = (sCoverFeatureOn || sCoverMode)
+                    && (wantsArtTap() || MiniPlayerRuntime.wantsNativeArtworkGesture())
                     && screenOn() && keyguardShowing() && onKeyguardNow()
                     && !bouncerUp() && !sGestureOnCentre && !sGestureOnCharge;
             sArtSwallow = onCard && artRectContains(ev.getRawX(), ev.getRawY());
@@ -9095,6 +9121,9 @@ public class Main extends XposedModule {
     }
 
     private static void enterFromTap(String why) {
+        // Before the morph is begun, not only at setCoverEnabled: the morph would otherwise
+        // start out of a card that then never turns into anything.
+        if (!sCoverFeatureOn) return;
         long t0 = System.nanoTime();
         enterFromTapNow(why);
         noteToggleCost("in", System.nanoTime() - t0);
@@ -9287,6 +9316,24 @@ public class Main extends XposedModule {
      * Turns the automatic mode on or off. On, cover mode is a consequence of what is playing;
      * off, it stays exactly where a pushart broadcast left it.
      */
+    /**
+     * The master switch. Off takes a cover that is up down the way a tap does, so the wallpaper
+     * is handed back; on lets the card decide again, as it would have all along.
+     */
+    private static void setCoverFeature(boolean on) {
+        sCoverFeatureOn = on;
+        Xp.log(TAG + "cover feature " + (on ? "on" : "off"));
+        saveState();
+        if (!on) {
+            CoverMorphLayer.cancel();
+            if (sCoverMode) setCoverEnabled(false, true);
+        } else {
+            sTapSuppressed = false;
+            sTrackKey = "";
+            applyCardState();
+        }
+    }
+
     private static synchronized void setAuto(boolean on) {
         sAuto = on;
         Xp.log(TAG + "auto mode " + (on ? "on" : "off"));
@@ -9984,6 +10031,8 @@ public class Main extends XposedModule {
      */
     private static void setCoverEnabled(final boolean on, final boolean animate,
                                         final boolean fresh) {
+        // The one door every way into the cover goes through, so the master switch is kept here.
+        if (on && !sCoverFeatureOn) return;
         CoverPush.pushArtAsync(on, on && fresh);
         Runnable r = new Runnable() {
             @Override

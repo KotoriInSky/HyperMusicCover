@@ -1,8 +1,8 @@
 package com.os4.musiccover.ui.screen.settings
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import com.os4.musiccover.ui.util.nextCard
+import com.os4.musiccover.ui.util.firstCard
+import com.os4.musiccover.ui.util.FoldUnder
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -51,11 +51,9 @@ fun ThemePageView(
         isBlurEnabled = isBlurEnabled,
         onBack = onBack,
     ) {
-        item {
+        item(key = "theme") {
             Card(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp)
+                modifier = Modifier.firstCard()
                     .padding(bottom = 12.dp)
             ) {
                 Column {
@@ -98,11 +96,7 @@ fun ThemePageView(
                     // Glass is a style of the floating bar, so the row for it only exists while
                     // that bar is the one on screen. Expanding rather than appearing keeps the
                     // card's height continuous - the switch below does not jump.
-                    AnimatedVisibility(
-                        visible = isFloatingNavbar,
-                        enter = expandVertically(),
-                        exit = shrinkVertically(),
-                    ) {
+                    FoldUnder(isFloatingNavbar) {
                         SwitchPreference(
                             title = stringResource(R.string.liquid_glass),
                             summary = stringResource(R.string.liquid_glass_summary),

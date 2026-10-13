@@ -7,6 +7,8 @@
  */
 package com.os4.musiccover.ui.screen.home
 
+import com.os4.musiccover.ui.util.nextCard
+import com.os4.musiccover.ui.util.firstCard
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
@@ -170,12 +172,11 @@ fun HomePageView(
         extraBottomPadding = extraBottomPadding,
         actions = { RestartMenu() },
     ) {
-        item {
+        item(key = "status") {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp)
+                    .firstCard()
             ) {
                 val darkTheme = isInDarkTheme()
                 val dynamicColor = MiuixTheme.isDynamicColor
@@ -292,7 +293,7 @@ fun HomePageView(
                                 ) {
                                     MiuixText(
                                         text = workingMode,
-                                        fontSize = 16.sp,
+                                        style = MiuixTheme.textStyles.body1,
                                         fontWeight = FontWeight.Medium,
                                     )
                                 }
@@ -306,13 +307,13 @@ fun HomePageView(
                                 Column {
                                     MiuixText(
                                         text = titleText,
-                                        fontSize = 22.sp,
+                                        style = MiuixTheme.textStyles.title3,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Spacer(Modifier.height(1.dp))
                                     MiuixText(
                                         text = lineTwo,
-                                        fontSize = 15.sp,
+                                        style = MiuixTheme.textStyles.body2,
                                     )
                                 }
                             }
@@ -328,13 +329,8 @@ fun HomePageView(
         // used to hold is now the card's own, so the card sits exactly where it always did.
         // The module's own version was a fifth row and is gone: the status card above already
         // carries it, and the same number twice on one page is one of them to read.
-        item {
-            Card(
-                modifier = Modifier
-                    .padding(top = 12.dp)
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp)
-            ) {
+        item(key = "device") {
+            Card(modifier = Modifier.nextCard()) {
                 Column {
                     BasicComponent(
                         title = stringResource(R.string.home_device_name),
@@ -361,12 +357,8 @@ fun HomePageView(
         // the user can tap in this app is a row, and a lone button here would read as a demand.
         //
         // No top padding of its own: the device card above already carries 12dp underneath it.
-        item {
-            Card(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp)
-            ) {
+        item(key = "donate") {
+            Card(modifier = Modifier.nextCard()) {
                 ArrowPreference(
                     title = stringResource(R.string.donate_title),
                     summary = stringResource(R.string.donate_home_summary),

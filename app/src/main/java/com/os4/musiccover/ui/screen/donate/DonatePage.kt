@@ -1,5 +1,7 @@
 package com.os4.musiccover.ui.screen.donate
 
+import com.os4.musiccover.ui.util.nextCard
+import com.os4.musiccover.ui.util.firstCard
 import android.content.ContentValues
 import android.content.Context
 import android.os.Environment
@@ -7,12 +9,16 @@ import android.provider.MediaStore
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,7 +29,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -58,6 +67,8 @@ private data class DonateChannel(
     val image: Int,
     val fileName: String,
     val mimeType: String,
+    /** Width over height of the poster file. */
+    val aspect: Float,
 )
 
 @Composable
@@ -72,8 +83,8 @@ fun DonatePageContent(
     val alipay = stringResource(R.string.donate_alipay)
     val channels = remember(wechat, alipay) {
         listOf(
-            DonateChannel(wechat, R.drawable.donate_wechat, "HyperMusicCover-WeChat.webp", "image/webp"),
-            DonateChannel(alipay, R.drawable.donate_alipay, "HyperMusicCover-Alipay.webp", "image/webp"),
+            DonateChannel(wechat, R.drawable.donate_wechat, "HyperMusicCover-WeChat.webp", "image/webp", 840f / 1144f),
+            DonateChannel(alipay, R.drawable.donate_alipay, "HyperMusicCover-Alipay.webp", "image/webp", 840f / 1260f),
         )
     }
     // Alipay, not the first tab: it is the one the author is paid through most, and a tab row
@@ -81,6 +92,13 @@ fun DonatePageContent(
     // way. The order stays as it is - the tabs are read left to right whichever is selected.
     var selected by remember { mutableIntStateOf(channels.indexOfFirst { it.name == alipay }) }
     val channel = channels[selected]
+
+    // Everything on the page but the poster - status bar, the expanded title, the thanks card,
+    // the tabs, the two hint lines, the button, the paddings and the gesture bar - comes to about
+    // this much. What the window has beyond it goes to the poster, capped at the width-280 size
+    // the page used to show it at.
+    val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+    val codeHeight = (windowHeight - 600.dp).coerceIn(220.dp, 380.dp)
 
     // null while nothing has been saved; true/false is the outcome of the last attempt, and it is
     // the button's own label that reports it. A Toast is not a channel this app has - they are
@@ -98,45 +116,35 @@ fun DonatePageContent(
         isBlurEnabled = isBlurEnabled,
         onBack = onBack,
     ) {
-        item {
-            Card(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp)
-            ) {
+        item(key = "thanks") {
+            Card(modifier = Modifier.firstCard()) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                     MiuixText(
                         text = stringResource(R.string.donate_thanks_title),
-                        fontSize = 17.sp,
+                        style = MiuixTheme.textStyles.headline1,
                         color = MiuixTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.height(4.dp))
                     MiuixText(
                         text = stringResource(R.string.donate_thanks_summary),
-                        fontSize = 14.sp,
+                        style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     )
                 }
             }
         }
 
-        item {
+        item(key = "tabs") {
             TabRow(
                 tabs = channels.map { it.name },
                 selectedTabIndex = selected,
                 onTabSelected = { selected = it },
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp),
+                modifier = Modifier.nextCard(),
             )
         }
 
-        item {
-            Card(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp)
-            ) {
+        item(key = "code") {
+            Card(modifier = Modifier.nextCard()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -147,20 +155,38 @@ fun DonatePageContent(
                     // Crossfade rather than a straight swap: the two posters are entirely
                     // different colours, and cutting between a green one and a blue one reads as
                     // a flash where a fade reads as the same card turning over.
-                    Crossfade(targetState = channel, label = "donateCode") { shown ->
-                        Image(
-                            modifier = Modifier
-                                .widthIn(max = 280.dp)
-                                .fillMaxWidth()
-                                .squircleClip(cornerRadius = 16.dp),
-                            painter = painterResource(shown.image),
-                            contentDescription = shown.name,
-                        )
+                    //
+                    // Both posters sit in one box of one height. They are not the same shape
+                    // (Alipay 840x1260, WeChat 840x1144), so sized by width they were different
+                    // heights and the taller one pushed the save button below the fold. The
+                    // height is what is left of the window once everything else on the page has
+                    // had its share, so the whole page fits without scrolling.
+                    // The box is as wide as the wider poster, so it does not change width - and
+                    // the centred column shift - halfway through the fade.
+                    Crossfade(
+                        modifier = Modifier.size(
+                            width = codeHeight * channels.maxOf { it.aspect },
+                            height = codeHeight,
+                        ),
+                        targetState = channel,
+                        label = "donateCode",
+                    ) { shown ->
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Image(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .aspectRatio(shown.aspect)
+                                    .squircleClip(cornerRadius = 16.dp),
+                                painter = painterResource(shown.image),
+                                contentDescription = shown.name,
+                                contentScale = ContentScale.Fit,
+                            )
+                        }
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         MiuixText(
                             text = stringResource(R.string.donate_scan_hint),
-                            fontSize = 13.sp,
+                            style = MiuixTheme.textStyles.footnote1,
                             textAlign = TextAlign.Center,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         )
@@ -170,7 +196,7 @@ fun DonatePageContent(
                         // it is being shown on.
                         MiuixText(
                             text = stringResource(R.string.donate_xiaoai_tip),
-                            fontSize = 13.sp,
+                            style = MiuixTheme.textStyles.footnote1,
                             textAlign = TextAlign.Center,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         )
@@ -193,8 +219,6 @@ fun DonatePageContent(
                 }
             }
         }
-
-        item { Spacer(Modifier.height(12.dp)) }
     }
 }
 

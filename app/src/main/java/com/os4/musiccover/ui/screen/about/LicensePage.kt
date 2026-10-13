@@ -7,6 +7,8 @@
  */
 package com.os4.musiccover.ui.screen.about
 
+import com.os4.musiccover.ui.util.nextCard
+import com.os4.musiccover.ui.util.firstCard
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -137,23 +139,20 @@ fun LicensePageContent(
                     bottom = contentPadding.calculateBottomPadding(),
                 ),
             ) {
-                items(libraries, key = { it.name }) { library ->
-                    Card(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp)
-                            .padding(top = 12.dp)
-                    ) {
-                        ArrowPreference(
-                            title = library.name,
-                            summary = "${library.artifactVersion} · ${library.website}",
-                            onClick = {
-                                uriHandler.openUri(library.website)
-                            },
-                        )
+                // One card of rows, as the credits page and miuix's example list theirs: a card
+                // per library was a column of single-row islands (2026-10-14).
+                item(key = "libraries") {
+                    Card(modifier = Modifier.firstCard()) {
+                        libraries.forEach { library ->
+                            ArrowPreference(
+                                title = library.name,
+                                summary = "${library.artifactVersion} · ${library.website}",
+                                onClick = {
+                                    uriHandler.openUri(library.website)
+                                },
+                            )
+                        }
                     }
-                }
-                item {
-                    Spacer(Modifier.height(12.dp))
                 }
             }
         }

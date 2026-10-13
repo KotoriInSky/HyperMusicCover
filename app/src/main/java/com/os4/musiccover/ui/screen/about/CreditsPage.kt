@@ -1,5 +1,7 @@
 package com.os4.musiccover.ui.screen.about
 
+import com.os4.musiccover.ui.util.nextCard
+import com.os4.musiccover.ui.util.firstCard
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -179,23 +181,16 @@ fun CreditsPageContent(
         isBlurEnabled = isBlurEnabled,
         onBack = onBack,
     ) {
-        item {
-            Card(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp)
-            ) {
+        item(key = "intro") {
+            Card(modifier = Modifier.firstCard()) {
                 BasicComponent(summary = stringResource(R.string.credits_intro))
             }
         }
 
         groups.forEach { (heading, credits) ->
-            item {
-                SmallTitle(
-                    text = stringResource(heading),
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-                Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+            item(key = heading) {
+                SmallTitle(text = stringResource(heading))
+                Card(modifier = Modifier.nextCard()) {
                     credits.forEach { credit ->
                         ArrowPreference(
                             title = credit.name,
@@ -206,7 +201,5 @@ fun CreditsPageContent(
                 }
             }
         }
-
-        item { Spacer(Modifier.height(12.dp)) }
     }
 }

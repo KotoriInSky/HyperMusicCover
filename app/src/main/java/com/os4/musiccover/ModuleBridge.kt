@@ -41,6 +41,8 @@ object ModuleBridge {
         val alive: Boolean = false,
         val cover: Boolean = false,
         val auto: Boolean = false,
+        /** 启用音乐锁屏封面. On for a module too old to report it: it had no way to turn off. */
+        val coverFeature: Boolean = true,
         val bias: Float = 0.34f,
         val coverStyle: Int = 0,
         /**
@@ -117,8 +119,8 @@ object ModuleBridge {
         /** Light the media card's progress bar the way the island's is lit (#49). On by default. */
         val mediaBarGlow: Boolean = true,
         /**
-         * Lock screen lyrics, between the collapsed clock and the card. On, and not a setting:
-         * the two-finger tap on the lock screen is what asks for the cover instead.
+         * Lock screen lyrics, between the collapsed clock and the card. The master switch; the
+         * two-finger tap on the lock screen swaps cover and lyrics only while it is on.
          */
         val lyrics: Boolean = true,
         /** Keep the screen lit while lock screen lyrics are playing. */
@@ -394,6 +396,9 @@ object ModuleBridge {
 
     fun setAuto(context: Context, on: Boolean) = send(context, "auto") { putExtra("on", on) }
 
+    fun setCoverFeature(context: Context, on: Boolean) =
+        send(context, "coverfeature") { putExtra("on", on) }
+
     fun setCover(context: Context, on: Boolean) = send(context, "pushart") { putExtra("on", on) }
 
     fun setBias(context: Context, v: Float) = send(context, "bias") { putExtra("v", v) }
@@ -461,7 +466,7 @@ object ModuleBridge {
     fun setMediaBarGlow(context: Context, on: Boolean) =
         send(context, "seekglow") { putExtra("on", on) }
 
-    /** The lyrics are always on now; this is how they are turned off for a session. */
+    /** 启用锁屏歌词, the lyrics' master switch. Saved by the module as lyricmaster. */
     fun setLyrics(context: Context, on: Boolean) =
         send(context, "lyrics") { putExtra("on", on) }
 
@@ -513,10 +518,15 @@ object ModuleBridge {
      * network round trip on SystemUI's side, so it is given longer than the usual query: the module
      * answers it through goAsync once the request is done.
      */
-    suspend fun refreshPickupRules(context: Context): String =
-        broadcast(context.applicationContext,
-            intent("cloud").apply { putExtra("do", "fetch") }, REFRESH_TIMEOUT_MS)?.data
-            ?: "同步超时：模块没有在 ${REFRESH_TIMEOUT_MS / 1000} 秒内回答"
+    suspend fun refreshPickupRules(context: Context): PickupRefresh {
+        val reply = broadcast(context.applicationContext,
+            intent("cloud").apply { putExtra("do", "fetch") }, REFRESH_TIMEOUT_MS)
+            ?: return PickupRefresh(false, "同步超时：模块没有在 ${REFRESH_TIMEOUT_MS / 1000} 秒内回答")
+        return PickupRefresh(reply.extras?.getBoolean("ok", false) == true, reply.data.orEmpty())
+    }
+
+    /** A cloud refresh's outcome, and the module's sentence about it for the row's summary. */
+    data class PickupRefresh(val ok: Boolean, val said: String)
 
     /**
      * One shade setting, by the module's own key.
@@ -830,6 +840,7 @@ object ModuleBridge {
             alive = true,
             cover = b.getBoolean("cover", false),
             auto = b.getBoolean("auto", false),
+            coverFeature = b.getBoolean("coverfeature", true),
             bias = b.getFloat("bias", 0.34f),
             coverStyle = b.getInt("coverstyle", 0),
             coverCardFill = b.getFloat("covercardfill", 1f),
