@@ -45,6 +45,13 @@ internal class ShortcutDisc(context: Context) : FrameLayout(context) {
         else setCardText(other.cardTitle.text, other.cardText.text)
     }
 
+    /** The pill's ink (MiniPlayerView.setInk), for the rear card's two lines. */
+    fun setInk(color: Int) {
+        if (cardTitle.currentTextColor == color) return
+        cardTitle.setTextColor(color)
+        cardText.setTextColor(color)
+    }
+
     /** The rear stacked island has the same two lines as the front card. */
     fun setCardText(title: CharSequence?, text: CharSequence?) {
         cardWords.visibility = if (title == null && text == null) View.GONE else View.VISIBLE

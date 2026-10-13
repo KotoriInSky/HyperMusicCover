@@ -145,6 +145,23 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     /** A picture that moves (a focus template's Lottie), shown over whatever bitmap is bound. */
     private var artworkOverride: android.graphics.drawable.Drawable? = null
     private var lastPlaying: Boolean? = null
+
+    /**
+     * The colour of the words and the play button: the system's own card's (MiniPlayerController
+     * .ink), not white. Under the frosted material in light mode the pill is a light frost, and
+     * white on it could not be read (the user, 2026-10-14).
+     */
+    private var ink = Color.WHITE
+
+    fun setInk(color: Int) {
+        if (ink == color) return
+        ink = color
+        title.setTextColor(color)
+        artist.setTextColor(color)
+        if (toggleOverride == null) lastPlaying?.let { playing ->
+            toggle.setImageDrawable(MiniPlayerPathDrawable(if (playing) ICON_PAUSE else ICON_PLAY, color))
+        }
+    }
     private var artworkRadiusPx = dp(12).toFloat()
     private var interactionsEnabled = true
     /** Where position() puts the view at rest; a morph moves it without losing this. */
@@ -300,7 +317,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         if (lastPlaying != playing) {
             lastPlaying = playing
             if (toggleOverride == null) toggle.setImageDrawable(MiniPlayerPathDrawable(
-                if (playing) ICON_PAUSE else ICON_PLAY, Color.WHITE))
+                if (playing) ICON_PAUSE else ICON_PLAY, ink))
         }
         onToggle = togglePlayback
         onPrevious = skipPrevious
@@ -416,7 +433,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
             toggle.setPadding(dp(8), dp(8), dp(8), dp(8))
             toggle.contentDescription = "播放或暂停"
             lastPlaying?.let { playing ->
-                toggle.setImageDrawable(MiniPlayerPathDrawable(if (playing) ICON_PAUSE else ICON_PLAY, Color.WHITE))
+                toggle.setImageDrawable(MiniPlayerPathDrawable(if (playing) ICON_PAUSE else ICON_PLAY, ink))
             }
             return
         }

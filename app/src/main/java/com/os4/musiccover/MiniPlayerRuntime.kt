@@ -2106,7 +2106,26 @@ private class MiniPlayerController(
             "cbReg=${runCatching { Xp.getObjectField(c, "mCbRegistered") }.getOrNull()} " +
             "cbs=${runCatching { (Xp.getObjectField(c, "mCallbacks") as List<*>).size }.getOrNull()} " +
             "wCbs=${runCatching { (Xp.getObjectField(w, "mCallbacks") as List<*>).size }.getOrNull()} " +
-            "lastCallAgo=${android.os.SystemClock.uptimeMillis() - lastMetadataAt} track=$lastTrack "
+            "lastCallAgo=${android.os.SystemClock.uptimeMillis() - lastMetadataAt} track=$lastTrack " +
+            "ink=[${describeInk()}] "
+    }
+
+    /** For `op mini`: the text colours the system gave its own card and rows, by view id. */
+    private fun describeInk(): String {
+        fun hex(v: View?) = (v as? android.widget.TextView)?.let { Integer.toHexString(it.currentTextColor) }
+        val sb = StringBuilder("cardTitle=${hex(Main.miniPairTitle())} cardArtist=${hex(Main.miniPairArtist())}")
+        val seen = HashSet<String>()
+        fun walk(v: View) {
+            if (v is android.widget.TextView && v.isShown) {
+                val id = runCatching { v.resources.getResourceEntryName(v.id) }.getOrNull() ?: "?"
+                val entry = "$id=${Integer.toHexString(v.currentTextColor)}"
+                if (seen.add(entry) && seen.size <= 12) sb.append(' ').append(entry)
+            }
+            if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        notificationStack()?.let(::walk)
+        Main.miniPlayerMediaHeader()?.let(::walk)
+        return sb.toString()
     }
 
     private fun stateOf(c: MediaController): PlaybackState? =
@@ -8621,6 +8640,7 @@ private class MiniPlayerController(
     private fun updateDiscs() {
         // First, so that the discs below see the buttons as they will be drawn.
         holdButtonsThroughDoze()
+        applyInk()
         val d = discDiameter()
         val frame = discFrame(d)
         followHost.reset()
@@ -9749,10 +9769,60 @@ private class MiniPlayerController(
         // After the small island is chosen: whether the music is it decides its picture's bridge.
         updateSmallIsland(music, notes)
         traced("MC r.artBridge") { applyArtBridge() }
+        applyInk()
         updateVisibility()
         schedulePosition()
         prewarmSpares()
     } finally { android.os.Trace.endSection() } }
+
+    /**
+     * The colour the system gives the words on its own card, for the material it is in now: the
+     * media card's title, or a lock screen notification's when there is no card. The pill and
+     * the discs wear the card's material, so its words are the ones that can be read on them -
+     * white on the glass and on the dark frost, near black on the frost in light mode. Opaque:
+     * the pill's own alphas say how strong each line is.
+     */
+    private fun ink(): Int {
+        val card = Main.miniPairTitle() as? TextView
+        val color = card?.takeIf { it.isAttachedToWindow }?.currentTextColor ?: rowInk() ?: android.graphics.Color.WHITE
+        return color or 0xFF000000.toInt()
+    }
+
+    private fun rowInk(): Int? {
+        fun find(v: View): TextView? {
+            if (v is TextView && v.isShown &&
+                runCatching { v.resources.getResourceEntryName(v.id) }.getOrNull() == "title") return v
+            if (v is ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))?.let { return it }
+            return null
+        }
+        return notificationStack()?.let(::find)?.currentTextColor
+    }
+
+    /** What applyInk last tinted the buttons with; null while they are the OEM's own. */
+    private var buttonInk: Int? = null
+
+    private fun applyInk() {
+        val color = ink()
+        player?.setInk(color)
+        smallIsland?.setInk(color)
+        ghostPill?.setInk(color)
+        ghostDisc?.setInk(color)
+        flight?.setInk(color)
+        for (v in spareViews) v.setInk(color)
+        // The torch and the camera are white glyphs; on discs of the light frost they vanished.
+        // Tinted only while the discs are under them, and given back as they were after.
+        val want = color.takeIf { discsWanted && discs.any { it?.visibility == View.VISIBLE } && it != android.graphics.Color.WHITE }
+        if (want == buttonInk) return
+        buttonInk = want
+        for (side in 0..1) tintButton(button(side), want)
+    }
+
+    private fun tintButton(v: View, color: Int?) {
+        val filter = color?.let { android.graphics.PorterDuffColorFilter(it, android.graphics.PorterDuff.Mode.SRC_IN) }
+        if (v is ImageView) { v.colorFilter = filter; return }
+        if (filter == null) v.setLayerType(View.LAYER_TYPE_NONE, null)
+        else v.setLayerType(View.LAYER_TYPE_HARDWARE, android.graphics.Paint().apply { colorFilter = filter })
+    }
 
     /** The session and track the music island is showing; a new one starts its artwork afresh. */
     private fun trackMusic(current: MediaController) {
