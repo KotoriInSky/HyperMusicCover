@@ -71,8 +71,20 @@ final class MotionCover {
         MediaController c = Main.watched();
         MediaMetadata md = c == null ? null : c.getMetadata();
         if (ctx == null || md == null) return;
-        final String title = md.getString(MediaMetadata.METADATA_KEY_TITLE);
-        final String artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST);
+        String t = md.getString(MediaMetadata.METADATA_KEY_TITLE);
+        String a = md.getString(MediaMetadata.METADATA_KEY_ARTIST);
+        // Salt, 汽水 and QQ (on Bluetooth) sing into TITLE and move the song into ARTIST; the
+        // lyric lookup already knows how to read them back out. See TrackName.
+        String[] sung = TrackName.searchName(c.getPackageName(), md);
+        if (sung != null) {
+            t = sung[0];
+            a = sung[1];
+        }
+        // QQ's bracketed second names: the store has one of them, not both together.
+        if (t != null) t = TrackName.untranslated(t);
+        if (a != null) a = TrackName.unaliased(a);
+        final String title = t;
+        final String artist = a;
         final String album = md.getString(MediaMetadata.METADATA_KEY_ALBUM);
         final long dur = md.getLong(MediaMetadata.METADATA_KEY_DURATION);
         Main.main().post(() -> track(ctx, title, artist, album, dur, card));

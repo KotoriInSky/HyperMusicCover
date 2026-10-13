@@ -888,7 +888,11 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         drawArt(canvas, previous, 1f);
         drawArt(canvas, current, fadeFraction());
         Bitmap frame = CardVideo.frame();
-        if (videoAlpha > 0f && frame != null) drawBitmap(canvas, frame, videoAlpha);
+        // The last frame stays for the fade out: an unloaded video has no frame of its own any
+        // more, and the still under it would otherwise cut in.
+        if (frame != null) lastVideo = frame;
+        else if (videoAlpha <= 0f) lastVideo = null;
+        if (videoAlpha > 0f && lastVideo != null) drawBitmap(canvas, lastVideo, videoAlpha);
         canvas.restoreToCount(save);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(density);
@@ -1145,6 +1149,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     /** 0..1, how far the video is drawn over the still. See CardVideo. */
     private float videoAlpha;
+    /** What the video last drew, kept for its fade out. A wrapped HardwareBuffer: no copy. */
+    private Bitmap lastVideo;
     private static final float VIDEO_FADE_S = 0.25f;
 
     /**

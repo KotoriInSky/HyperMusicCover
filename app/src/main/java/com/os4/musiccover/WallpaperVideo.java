@@ -76,12 +76,24 @@ final class WallpaperVideo {
 
     private static EGLContext sCtx;
     private static int sOes;
-    private static SurfaceTexture sTexture;
+    private static volatile SurfaceTexture sTexture;
     private static int sProgMirror, sProgBlur, sProgCompose;
     private static int sSmallW, sSmallH;
     private static final int[] sSmallTex = new int[2], sSmallFbo = new int[2];
     private static int sFullW, sFullH, sFullTex, sFullFbo;
     private static boolean sHasFrame;
+    /** The video on screen has delivered a frame since it was started. Main writes false. */
+    private static volatile boolean sCurrent;
+    /**
+     * How much of the composite is video rather than the still, 0..1. It fades in once the
+     * video has a frame and out once it stops, mixed against the OEM's own texture (uStill), so
+     * either way the picture under it is the one the screen goes on showing.
+     */
+    private static float sAlpha;
+    private static long sAlphaAt;
+    private static final float FADE_MS = 350f;
+    /** GL thread: a still's crossfade is running, and whether it began with video on screen. */
+    private static boolean sInFade, sOverlay;
     private static final float[] sStMatrix = new float[16];
     private static FloatBuffer sQuad;
     private static boolean sWarnedProgram;
@@ -118,9 +130,18 @@ final class WallpaperVideo {
             Xp.w(TAG + "cannot read " + path + ": " + t);
             return;
         }
+        sCurrent = false;
         sOn = true;
         registerScreen(ctx);
         Xp.log(TAG + "on: " + path + " " + sVideoW + "x" + sVideoH + " bias=" + bias);
+        // Restarted for another track, the GL objects outlive the old player: give the new
+        // one the texture that is there. Only a fresh set-up posts this by itself, and waiting
+        // for one left the second video with no player at all (2026-10-13).
+        final SurfaceTexture st = sTexture;
+        if (st != null) {
+            sPendingTexture = st;
+            new Handler(Looper.getMainLooper()).post(() -> attachPlayer(st));
+        }
         // The SurfaceTexture has to be made in the engine's GL context, so the first frame
         // request is what creates it; the player is started once it exists.
         WallpaperProbe.videoFrame();
@@ -140,7 +161,8 @@ final class WallpaperVideo {
         sPendingTexture = null;
         if (was) {
             Xp.log(TAG + "off (" + why + ") " + stats());
-            // One more frame, so the GL thread lets its objects go and the still is drawn again.
+            // The GL thread fades the last frame out over the still and then lets its objects
+            // go; this frame starts it.
             WallpaperProbe.videoFrame();
         }
     }
@@ -213,16 +235,25 @@ final class WallpaperVideo {
      * Called from the onDrawFrame hook before the OEM draws. Returns the texture to draw in place
      * of the OEM's, or 0 to leave the frame alone.
      */
-    static int beforeDraw(Object renderer, boolean fadeRunning, int texW, int texH) {
+    /** GL thread: whether this still holds GL objects that a frame has to look after. */
+    static boolean holdsGl() {
+        return sCtx != null;
+    }
+
+    /**
+     * GL thread, from the still's crossfade: the texture to fade out instead of its own copy of
+     * the old still - the video's last composite, when the fade began with video on screen.
+     * So a track change goes from the old video to the new still, not via the old still.
+     */
+    static int fadeOverlay() {
         EGLContext ctx = EGL14.eglGetCurrentContext();
-        if (!sOn) {
-            if (sCtx != null) release(ctx);
-            return 0;
-        }
-        if (fadeRunning) {
-            sSkippedFade++;
-            return 0;
-        }
+        return sOverlay && sFullTex != 0 && sCtx != null && sCtx.equals(ctx) ? sFullTex : 0;
+    }
+
+    static int beforeDraw(Object renderer, boolean fadeRunning, int texW, int texH,
+                          int stillTex) {
+        EGLContext ctx = EGL14.eglGetCurrentContext();
+        if (!sOn && sCtx == null) return 0;
         try {
             Object prog = Xp.getObjectField(Xp.getObjectField(renderer, "mAnimator"), "mProgram");
             if (prog == null || prog.getClass() != WallpaperProbe.plainProgram()) {
@@ -231,28 +262,82 @@ final class WallpaperVideo {
                     Xp.log(TAG + "not drawn: the keyguard program is "
                             + (prog == null ? "null" : prog.getClass().getSimpleName()));
                 }
+                if (!sOn) release(ctx);
                 return 0;
             }
+            if (!sOn && !ctx.equals(sCtx)) {
+                // Off, and the objects went with a context that is gone: nothing to fade.
+                forget();
+                return 0;
+            }
+            // Made even under a fade. A cover coming back starts its video while its still is
+            // fading in, and it is the player's frames that ask for the frames after - set-up
+            // left for after the fade waited on a frame nothing was going to ask for, and the
+            // video never started (2026-10-13: `on`, then decoded=0 player=none for good).
             if (sCtx == null || !ctx.equals(sCtx)) {
                 // A context we did not make our objects in. Its predecessor took them with it.
                 forget();
                 setUp(ctx);
             }
-            if (texW > 0 && texH > 0 && (texW != sFullW || texH != sFullH)) makeFull(texW, texH);
+            if (texW > 0 && texH > 0 && (texW != sFullW || texH != sFullH)) {
+                if (!sOn) {
+                    release(ctx);
+                    return 0;
+                }
+                makeFull(texW, texH);
+            }
+            long now = SystemClock.uptimeMillis();
+            if (fadeRunning) {
+                // The still's fade owns the texture; the video takes over when it has landed.
+                // If video was showing as it began, its last composite is what fades out.
+                if (!sInFade) {
+                    sInFade = true;
+                    sOverlay = sAlpha > 0f && sHasFrame;
+                }
+                sSkippedFade++;
+                sAlphaAt = now;
+                return 0;
+            }
+            if (sInFade) {
+                sInFade = false;
+                // The fade took the video off the screen with it.
+                if (sOverlay) sAlpha = 0f;
+                sOverlay = false;
+            }
             if (sFullTex == 0) return 0;
-            if (sFrameWaiting) {
+            boolean fresh = false;
+            if (sOn && sFrameWaiting && sTexture != null) {
                 sFrameWaiting = false;
-                long t0 = System.nanoTime();
                 sTexture.updateTexImage();
                 sTexture.getTransformMatrix(sStMatrix);
-                compose();
+                sCurrent = true;
+                sHasFrame = true;
+                fresh = true;
+            }
+            float target = sOn && sCurrent ? 1f : 0f;
+            float was = sAlpha;
+            if (sAlpha != target) {
+                float dt = sAlphaAt == 0L ? 16f : Math.min(50f, Math.max(1f, now - sAlphaAt));
+                sAlpha = target > sAlpha ? Math.min(target, sAlpha + dt / FADE_MS)
+                        : Math.max(target, sAlpha - dt / FADE_MS);
+            }
+            sAlphaAt = now;
+            if (sAlpha <= 0f) {
+                if (!sOn) release(ctx);
+                return 0;
+            }
+            if (!sHasFrame) return 0;
+            if (fresh || sAlpha != was) {
+                long t0 = System.nanoTime();
+                compose(stillTex);
                 long ns = System.nanoTime() - t0;
                 sComposeNs += ns;
                 if (ns > sComposeMaxNs) sComposeMaxNs = ns;
                 sComposed++;
-                sHasFrame = true;
             }
-            if (!sHasFrame) return 0;
+            // A fade in either direction asks for its own frames: a paused or stopped player
+            // sends none.
+            if (sAlpha != target) WallpaperProbe.videoFrame();
             sDrawn++;
             return sFullTex;
         } catch (Throwable t) {
@@ -321,7 +406,7 @@ final class WallpaperVideo {
     }
 
     /** The three passes. Saves and puts back every piece of state the OEM's draw relies on. */
-    private static void compose() {
+    private static void compose(int stillTex) {
         int[] i1 = new int[1];
         int[] vp = new int[4];
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, i1, 0);
@@ -391,7 +476,13 @@ final class WallpaperVideo {
         GLES20.glUniform2f(loc(sProgCompose, "uFull"), sFullW, sFullH);
         GLES20.glUniform3f(loc(sProgCompose, "uBand"), top, coverH,
                 Math.min(240f, Math.round(coverH / 4f)));
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, stillTex);
+        GLES20.glUniform1i(loc(sProgCompose, "uStill"), 2);
+        GLES20.glUniform1f(loc(sProgCompose, "uAlpha"), stillTex == 0 ? 1f : sAlpha);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0);
 
         // Put back what the OEM's draw finds.
@@ -418,6 +509,8 @@ final class WallpaperVideo {
             GLES20.glDeleteProgram(sProgCompose);
         }
         forget();
+        sAlpha = 0f;
+        sInFade = sOverlay = false;
         Xp.log(TAG + "GL objects released" + (ours ? "" : " (their context was already gone)"));
     }
 
@@ -578,6 +671,8 @@ final class WallpaperVideo {
             + "precision highp float;\n"
             + VIDEO
             + "uniform sampler2D uBack;\n"
+            + "uniform sampler2D uStill;\n"   // the OEM's texture: what shows without video
+            + "uniform float uAlpha;\n"
             + "uniform vec2 uFull;\n"
             + "uniform vec3 uBand;\n"   // top, height, feather
             + "void main() {\n"
@@ -589,6 +684,7 @@ final class WallpaperVideo {
             + "        ? clamp(min(y, uBand.y - y) / uBand.z, 0.0, 1.0) : 1.0;\n"
             + "    c = mix(c, video(vec2(p.x / uFull.x, y / uBand.y)).rgb, a);\n"
             + "  }\n"
+            + "  if (uAlpha < 1.0) c = mix(texture2D(uStill, p / uFull).rgb, c, uAlpha);\n"
             + "  gl_FragColor = vec4(c, 1.0);\n"
             + "}\n";
 

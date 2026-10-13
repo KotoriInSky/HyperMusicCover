@@ -1480,6 +1480,9 @@ public class WallpaperProbe {
         sGpuFade = null;
         sUploadOverride = null;
         if (f.done != null) f.done.run();
+        // A video held back by the fade is drawn from the next frame; ask for it rather than
+        // wait on the player's next one, which a paused player would never send.
+        if (WallpaperVideo.on()) videoFrame();
     }
 
     /** Any thread. Ends a fade that cannot continue, with a plain reload so nothing is stranded. */
@@ -1665,7 +1668,10 @@ public class WallpaperProbe {
         GLES20.glBlendFunc(GLES20.GL_CONSTANT_ALPHA, GLES20.GL_ONE_MINUS_CONSTANT_ALPHA);
         GLES20.glBlendColor(0f, 0f, 0f, alpha);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sGlTex);
+        // A fresh fade (overlay 1 -> 0) over a motion cover fades the video's last frame out,
+        // not the old still - see WallpaperVideo.fadeOverlay.
+        int video = f.a0 >= 0.5f && f.a1 < 0.5f ? WallpaperVideo.fadeOverlay() : 0;
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, video != 0 ? video : sGlTex);
         Xp.callMethod(wp, "draw");
 
         if (uDarken != -1) GLES20.glUniform1i(uDarken, darkUnder ? 1 : 0);
@@ -2728,22 +2734,28 @@ public class WallpaperProbe {
      */
     private static Object drawWithVideo(XposedInterface.Chain chain) throws Throwable {
         Object renderer = chain.getThisObject();
-        int tex = WallpaperVideo.beforeDraw(renderer, sGpuFade != null, sReportedW, sReportedH);
-        sVideoGlLive = WallpaperVideo.on();
         Object wp = null;
         int oemTex = 0;
+        try {
+            Object prog = Xp.getObjectField(Xp.getObjectField(renderer, "mAnimator"),
+                    "mProgram");
+            wp = Xp.getObjectField(prog, "mAnimImageGLWallpaper");
+            oemTex = ((Integer) Xp.getObjectField(wp, "mTextureId")).intValue();
+        } catch (Throwable t) {
+            wp = null;
+        }
+        int tex = wp == null ? 0 : WallpaperVideo.beforeDraw(renderer,
+                sGpuFade != null || sFade != null, sReportedW, sReportedH, oemTex);
+        sVideoGlLive = WallpaperVideo.on() || WallpaperVideo.holdsGl();
         if (tex != 0) {
             try {
-                Object prog = Xp.getObjectField(Xp.getObjectField(renderer, "mAnimator"),
-                        "mProgram");
-                wp = Xp.getObjectField(prog, "mAnimImageGLWallpaper");
-                oemTex = ((Integer) Xp.getObjectField(wp, "mTextureId")).intValue();
                 Xp.setObjectField(wp, "mTextureId", tex);
             } catch (Throwable t) {
                 Xp.w(TAG + "video: cannot swap the texture: " + t);
-                wp = null;
+                tex = 0;
             }
         }
+        if (tex == 0) wp = null;
         try {
             return chain.proceed();
         } finally {
