@@ -46,7 +46,7 @@ import org.json.JSONObject
  * the order's state; the island goes [LIFE] after the code was last seen, or when swiped away
  * (that code is then not shown again for [LIFE]).
  *
- * A new code floats the island open, and so does the order turning ready to collect ([READY]);
+ * A new code floats the island open, and so does the order turning ready to collect ([PickupParse.READY]);
  * anything else about a code already up only updates it. The island's being up is asked of the
  * system rather than remembered, since the notification's own timeout takes it away unannounced.
  */
@@ -142,26 +142,16 @@ internal object PickupCodeIsland {
     /** The logo's fade-in, in ms: ColorOS's own `alpha_up_in` is 300ms on `coui_ease_move`. */
     private const val LOGO_FADE = 300L
 
-    /**
-     * The order states worth floating the island open for - the food can be collected. [PickupParse]
-     * keeps the order's wording in its own list; this is what is done with a state, not reading it.
-     * 已完成 is in: some pages call the ready state that (蜜雪冰城's read 「订单已完成」).
-     */
-    private val READY = setOf(
-        "待取餐", "请取餐", "可取餐", "已出餐", "已准备完毕", "制作完成", "已完成",
-    )
-
-    /** The order is over: nothing left to wait on, and a parked task is let go. */
-    private val DONE = setOf("已完成", "已取消", "已退款")
+    /** The opacity a floated card starts at; [fade] steps it up to 1. */
+    private const val FADE_FROM = 0.15f
 
     /**
-     * The order is being made. OPPO's config gives this state its own interval beside the plain
-     * ordered one ([PickupObserve]); the two are equal in the file it ships, so this only matters
-     * if a release ever makes them differ.
+     * Tokens for what [bg] has queued: [READ] the read loop, [TRACK] the rest of the tracking (the
+     * label retries, the [LEFT] timer). [stop] takes both away and nothing else - a card's [fade]
+     * steps and a tap's work are not the tracker's to cancel.
      */
-    private val MAKING = setOf(
-        "制作中", "制茶中", "备餐中", "配餐中", "出餐中", "餐厅准备中", "精心制作中", "已接单",
-    )
+    private val READ = Any()
+    private val TRACK = Any()
 
     /** The mini programs read, matched in the task label. */
     private val BRANDS = listOf(
@@ -175,7 +165,7 @@ internal object PickupCodeIsland {
     )
 
     /** The settings switch, kept with Main's state. On unless turned off. */
-    @JvmField var sOn = true
+    @Volatile @JvmField var sOn = true
 
     /**
      * Whether the card is attached to the notification.
@@ -186,7 +176,7 @@ internal object PickupCodeIsland {
      * better beside the system's island. Turned off, the template is back and the code is read
      * from the param alone (probe: `op pickup --ez card false`).
      */
-    @JvmField var sCard = true
+    @Volatile @JvmField var sCard = true
 
     private val bg: Handler by lazy { Handler(HandlerThread("mc-pickup").apply { start() }.looper) }
 
@@ -208,9 +198,10 @@ internal object PickupCodeIsland {
     private var lastOem = ""
     /** The picture opacity the card is drawn at; 1f except while [fade] is stepping it up. */
     private var cardAlpha = 1f
-    /** The opacity a floated card starts at; [fade] steps it up to 1. */
-    private val FADE_FROM = 0.15f
     private var reads = 0
+    /** The read waiting on its answer, so a late answer after its timeout is not a second loop. */
+    private var readSeq = 0
+    private var inFlight = false
     /** Reads finished since this task was parked, which is what OPPO's first-after interval counts. */
     private var parkedReads = 0
     /** The task [parkedReads] belongs to, so a new park starts the count over. */
@@ -365,9 +356,9 @@ internal object PickupCodeIsland {
         val asked = request(task) { st, ex ->
             bg.post {
                 bg.removeCallbacks(timeout)
-                program = programOf(ex)
+                // Read for the experiment only: the tracked page's appId and brand stay as they are.
                 val nodes = if (st != null) runCatching { nodes(st) }.getOrNull() else null
-                once(nodes?.let { parse(it) }, nodes?.size ?: 0)
+                once(nodes?.let { recognize(it, oemRule) }, nodes?.size ?: 0)
             }
         }
         if (!asked) {
@@ -389,8 +380,16 @@ internal object PickupCodeIsland {
         if (lastOem.isNotEmpty()) append(" oem=[$lastOem]")
     }
 
-    /** The probe's `do=read`: one read now, of whatever is tracked. */
-    fun readNow() = bg.post { if (taskId >= 0) read(taskId, gen) }
+    /**
+     * The probe's `do=read`: one read now, of whatever is tracked. It takes the place of the read
+     * that was queued rather than starting a loop beside it; with one already waiting on its answer,
+     * that answer is the read.
+     */
+    fun readNow() = bg.post {
+        if (taskId < 0 || inFlight) return@post
+        bg.removeCallbacksAndMessages(READ)
+        read(taskId, gen)
+    }
 
     /**
      * The app whose mini program [top] is, or null when it is not one.
@@ -512,7 +511,7 @@ internal object PickupCodeIsland {
         // (measured 2026-10-09, 蜜雪冰城's page sitting in task 44419), so on 支付宝 the task is
         // taken without a label and the page itself is asked for its appId on the first read.
         if (info == null || (label.isEmpty() && pkg != ALIPAY)) {
-            if (retry < RETRIES) bg.postDelayed({ front(top, retry + 1) }, RETRY_GAP)
+            if (retry < RETRIES) bg.postDelayed({ front(top, retry + 1) }, TRACK, RETRY_GAP)
             else Xp.log(TAG + "no labelled task for ${top.shortClassName}")
             return
         }
@@ -538,7 +537,7 @@ internal object PickupCodeIsland {
         inFront = true
         val g = gen
         Xp.log(TAG + "tracking task $taskId ($label)")
-        bg.postDelayed({ read(taskId, g) }, FIRST)
+        bg.postDelayed({ read(taskId, g) }, READ, FIRST)
     }
 
     /**
@@ -580,7 +579,7 @@ internal object PickupCodeIsland {
             PickupPark.parkFrom(taskId)
             return
         }
-        bg.postDelayed({ if (!inFront && taskId >= 0 && PickupPark.parked() != taskId) stop() }, LEFT)
+        bg.postDelayed({ if (!inFront && taskId >= 0 && PickupPark.parked() != taskId) stop() }, TRACK, LEFT)
     }
 
     /**
@@ -599,11 +598,7 @@ internal object PickupCodeIsland {
      * the order is not over. A park is what the wait costs, so it is not made for nothing.
      */
     private fun waiting(): Boolean =
-        shownKey != null && !over(shownStatus)
-
-    /** Whether an order that reads [s] has nothing left to wait for: ready, or over. */
-    private fun over(s: String?): Boolean =
-        s != null && (READY.any { s.contains(it) } || DONE.any { s.contains(it) })
+        shownKey != null && !PickupParse.isOver(shownStatus)
 
     private fun battery(ctx: Context): Int =
         ctx.getSystemService(android.os.BatteryManager::class.java)
@@ -626,13 +621,14 @@ internal object PickupCodeIsland {
         gen++
         taskId = -1
         inFront = false
+        inFlight = false
         PickupPark.releaseFrom("the tracked task was let go")
-        bg.removeCallbacksAndMessages(null)
+        bg.removeCallbacksAndMessages(READ)
+        bg.removeCallbacksAndMessages(TRACK)
     }
 
     private fun read(task: Int, g: Int) {
-        if (g != gen || task != taskId) return
-        if (++reads > MAX_READS) return
+        if (g != gen || task != taskId || inFlight) return
         val ctx = Main.appContext() ?: return
         val parked = PickupPark.parked() == task
         if (parked && parkedTask != task) {
@@ -674,13 +670,34 @@ internal object PickupCodeIsland {
             next(task, g)
             return
         }
+        // Counted here, where a read is really made: the skipped ones above are the phone in a
+        // pocket, and an hour of those used to spend the whole allowance. Spent, the task is let go
+        // out loud, and [lastTop] is forgotten so that coming back to the mini program finds it
+        // again - it used to stay tracked and never be read, which looked like a frozen island.
+        if (++reads > MAX_READS) {
+            Xp.log(TAG + "$MAX_READS reads of task $task: letting it go")
+            stop()
+            lastTop = null
+            return
+        }
         val t0 = SystemClock.uptimeMillis()
-        val timeout = Runnable { if (g == gen) { lastRead = "timeout"; next(task, g) } }
+        // One answer per read, whichever comes first: the reply, or the timeout. A reply that came
+        // after its timeout had already moved the loop on used to start a second loop beside it.
+        val seq = ++readSeq
+        inFlight = true
+        val timeout = Runnable {
+            if (g == gen && seq == readSeq && inFlight) {
+                inFlight = false
+                lastRead = "timeout"
+                next(task, g)
+            }
+        }
         bg.postDelayed(timeout, TIMEOUT)
         val asked = request(task) { st, ex ->
             bg.post {
                 bg.removeCallbacks(timeout)
-                if (g != gen) return@post
+                if (g != gen || seq != readSeq || !inFlight) return@post
+                inFlight = false
                 program = programOf(ex)
                 // 支付宝's mini program pages carry their appId in their own launch intent; a page
                 // in the same container without one is not a mini program page - an H5 or a service
@@ -696,7 +713,12 @@ internal object PickupCodeIsland {
                     return@post
                 }
                 val nodes = if (st != null) runCatching { nodes(st) }.getOrNull() else null
-                val r = nodes?.let { parse(it) }
+                if (nodes != null) {
+                    val (rule, name) = brandOf(nodes.joinToString("\n") { it.text })
+                    oemRule = rule
+                    brand = name
+                }
+                val r = nodes?.let { recognize(it, oemRule) }
                 val ms = SystemClock.uptimeMillis() - t0
                 lastRead = when {
                     st == null -> "no structure (${ms}ms)"
@@ -711,7 +733,7 @@ internal object PickupCodeIsland {
                     // §6.6, and one state further: an order that is ready to collect is nothing to
                     // wait for any more, so the park ends there and not only at 已完成 - the wait is
                     // for the change, and the user is on their way to the counter.
-                    if (over(r.status)) PickupPark.releaseFrom("the order reads ${r.status}")
+                    if (PickupParse.isOver(r.status)) PickupPark.releaseFrom("the order reads ${r.status}")
                 } else if (nodes != null) {
                     val front = nodes.maxOfOrNull { it.page } ?: -1
                     lastHead = "page $front: " + nodes.filter { it.page == front }.take(12)
@@ -722,6 +744,7 @@ internal object PickupCodeIsland {
         }
         if (!asked) {
             bg.removeCallbacks(timeout)
+            inFlight = false
             lastRead = "not asked"
             next(task, g)
         }
@@ -735,16 +758,16 @@ internal object PickupCodeIsland {
             inFront -> EVERY
             else -> SLOW
         }
-        bg.postDelayed({ read(task, g) }, gap)
+        bg.postDelayed({ read(task, g) }, READ, gap)
     }
 
     /** OPPO's intervals for an order being waited on: what it is doing decides how often to look. */
     private fun parkedGap(): Long {
         val cfg = PickupObserve.intervals
         val s = shownStatus
-        if (s != null && READY.any { s.contains(it) }) return cfg.ready
+        if (PickupParse.isReady(s)) return cfg.ready
         if (parkedReads <= 1) return cfg.firstAfter
-        val gap = if (s != null && MAKING.any { s.contains(it) }) cfg.making else cfg.ordered
+        val gap = if (PickupParse.isMaking(s)) cfg.making else cfg.ordered
         val level = Main.appContext()?.let { battery(it) } ?: -1
         return if (level in 1 until cfg.lowBatteryPercent) maxOf(gap, cfg.lowBattery) else gap
     }
@@ -823,41 +846,33 @@ internal object PickupCodeIsland {
      * out of the bundle we ship (see [PickupOem]). So this is OPPO's first rung and none of its
      * second: a page the rules cannot read falls through to [PickupParse] exactly as before.
      *
-     * The code it answers is taken whole. The label and the shop beside it still come from this
-     * file's own reading, since the plugin has neither, and so does the order's wording: the plugin
-     * says `completed`/`uncompleted`, which is its own vocabulary rather than the page's, and it is
-     * the page's that [ready] and [over] read.
+     * The plugin is handed the front page only - ColorOS reads the page in front, by its
+     * `innerText`, and the stack behind it holds the order list with every old order's code on it.
+     * Whether its code is taken at all is [PickupParse.choose]'s to say: its code labels include the
+     * order states, so it will read a shop's queue length as a code.
+     *
+     * Reads nothing but its arguments, and writes only [lastOem], which is the probe's.
      */
-    private fun parse(nodes: List<PickupParse.Node>): PickupParse.Result? {
-        val fallback = PickupParse.parse(nodes)
-        val content = nodes.joinToString("\n") { it.text }
-        val texts = nodes.map { it.text }
-        brandOf(content).let { (rule, name) ->
-            oemRule = rule
-            brand = name
-        }
-        val out = PickupOem.recognize(texts, oemRule?.tagAppName?.takeIf { it.isNotEmpty() } ?: OEM_APP, "")
+    private fun recognize(nodes: List<PickupParse.Node>, rule: PickupRule?): PickupParse.Result? {
+        val texts = PickupParse.frontPage(nodes).map { it.text }
+        val out = PickupOem.recognize(texts, rule?.tagAppName?.takeIf { it.isNotEmpty() } ?: OEM_APP, "")
         if (out == null) {
             lastOem = "off"
-            return fallback
+            return PickupParse.choose(nodes, null)
         }
         // Said whether or not a code came out, so the probe can tell "did not run" from "ran and
         // found nothing" from "answered" - three different things to go and fix.
         lastOem = (out.code.ifEmpty { "none" }) + " ${out.status} pt=${out.processType}" +
-            " page=${out.orderPage} n=${nodes.size}" +
+            " page=${out.orderPage} n=${texts.size}" +
             (if (out.product.isEmpty()) "" else " ${out.product}") +
             (if (out.orderTime.isEmpty()) "" else " ${out.orderTime}") +
             (if (out.temperature.isEmpty()) "" else " ${out.temperature}")
-        if (out.code.isEmpty()) return fallback
-        return PickupParse.Result(
-            code = out.code,
-            label = fallback?.label?.takeIf { it.isNotEmpty() } ?: "取餐码",
-            status = fallback?.status,
-            store = fallback?.store,
-            product = out.product.ifEmpty { null },
-            oemStatus = out.status.ifEmpty { null },
-            temperature = out.temperature.ifEmpty { null },
-        )
+        val r = PickupParse.choose(nodes,
+            PickupParse.Oem(out.code, out.orderPage, out.status, out.product, out.temperature))
+        if (out.code.isNotEmpty() && r?.code != out.code.trim().removePrefix("#")) {
+            lastOem += " (not taken)"
+        }
+        return r
     }
 
     /**
@@ -960,7 +975,7 @@ internal object PickupCodeIsland {
         }
     }
 
-    private fun ready(status: String?): Boolean = status != null && READY.any { status.contains(it) }
+    private fun ready(status: String?): Boolean = PickupParse.isReady(status)
 
     /** A colour out of the rules XML as `#RRGGBB`, or the fallback when it cannot be read. */
     private fun colour(value: String?, fallback: String): String = runCatching {
@@ -981,7 +996,9 @@ internal object PickupCodeIsland {
      */
     private fun oemTitle(r: PickupParse.Result): String? = when (r.oemStatus) {
         "completed" -> "已完成"
-        "uncompleted" -> "制作中"
+        // Not 「制作中」: `uncompleted` is where the recognizer starts, so it is also what it says
+        // when it read nothing, and shown as 「制作中」 it put a 「已准备完毕」 order back in the
+        // kitchen. With the page silent too, the card says its label instead.
         "waiting" -> "等待出码"
         else -> null
     }

@@ -100,7 +100,7 @@ final class PickupOem {
         }
     }
 
-    /** The page's text as lines, the way the recognizer reads them. */
+    /** The page's text as lines, the way the recognizer reads them ([PickupPolicy]'s state port). */
     static List<String> contentLines(String content) {
         ArrayList<String> lines = new ArrayList<>();
         if (content == null) return lines;

@@ -2031,6 +2031,9 @@ public class Main extends XposedModule {
                     // On when absent: the trip's page and island shipped before their switch.
                     + "\ntransit=" + (AmapTransitScene.sOn ? 1 : 0)
                     + "\npickup=" + (PickupCodeIsland.sOn ? 1 : 0)
+                    // Read back at startup, so it has to be written too: without it
+                    // `--ez card false` lasted until the next SystemUI restart.
+                    + "\ncard=" + (PickupCodeIsland.sCard ? 1 : 0)
                     + "\nminicfg=" + android.util.Base64.encodeToString(
                             MiniPlayerRuntime.configJson(sAppCtx).getBytes(java.nio.charset.StandardCharsets.UTF_8),
                             android.util.Base64.NO_WRAP)
