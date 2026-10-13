@@ -149,17 +149,44 @@ class PickupCssTest {
         assertEquals("2026-08-22T19:33", r.orderTime)
     }
 
+    // The take page's status line, as pages/order_detail/take/index.wxml writes it (wxapkg 304,
+    // 2026-10-13): the wait sits in its own <text>, with a 「+」 when the shop is busy.
+    private fun mixueTake(vararg line: String) = page(
+        "<wx-view .order-card-body>",
+        "  <wx-text .f14>", "    \"取餐码\"",
+        "  <wx-view .takeNum.mt8>", "    \"8746\"",
+        *line.map { "  $it" }.toTypedArray(),
+    )
+
+    private fun mixueMaking(wait: String) = mixueTake(
+        "<wx-view .f14.mt8.flex-center>",
+        "  <wx-text>", "    \"制作中，预计等待\"",
+        "    <wx-text .need-time.ml4.mr4>", "      \"$wait\"",
+        "    \"分钟\"",
+    )
+
     @Test
     fun mixueBeingMade() {
-        val doc = page(
-            "<wx-view .order-card-body>", "  \"取餐码\"",
-            "  <wx-view .takeNum.mt8>", "    \"8746\"",
-            "  <wx-view .f14.mt8>", "    \"制作中，预计5分钟后可取\"",
-        )
-        val r = PickupCss.read(rule(MIXUE), doc)!!
+        val r = PickupCss.read(rule(MIXUE), mixueMaking("5"))!!
+        assertEquals("8746", r.code)
         assertEquals("制作中", r.status)
         assertEquals("约5分钟", r.wait)
         assertNull(r.orderTime)
+        val busy = PickupCss.read(rule(MIXUE), mixueMaking("15+"))!!
+        assertEquals("制作中", busy.status)
+        assertNotNull(busy.wait)
+    }
+
+    @Test
+    fun mixuesOtherLines() {
+        fun state(text: String) =
+            PickupCss.read(rule(MIXUE), mixueTake("<wx-view .f14.mt8>", "  <wx-text>", "    \"$text\""))!!.status
+        assertEquals("待取餐", state("制作完成，请取餐~"))
+        assertEquals("待取餐", state("请前往取餐区查看"))
+        assertEquals("制作中", state("您的餐品制作中"))
+        assertEquals("制作中", state("门店已接单，请于下单当日及时到店取餐"))
+        assertEquals("已下单", state("凭取餐码自提，预计取餐时间12:30"))
+        assertEquals("已取消", state("订单金额已原路返回，请及时查看"))
     }
 
     @Test
