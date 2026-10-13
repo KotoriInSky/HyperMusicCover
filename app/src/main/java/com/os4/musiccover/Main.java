@@ -874,6 +874,47 @@ public class Main extends XposedModule {
                     + " - the clock squeeze cannot be driven on this build");
         }
 
+        hookContainerAttach();
+        hookContainerDetach();
+
+        // The lyrics' HDR highlight no longer has a hook here: it needs a colour mode, a colour
+        // mode is a whole window's, and the lyrics have a window of their own now (LyricWindow).
+        // It used to be written into the shade window's mLpChanged from inside the OEM's own
+        // apply, which is where the media card got dragged into HDR with it.
+
+        hookSleepAndWake(cl);
+        hookTransportControls(cl);
+        hookAodHandover();
+        hookDepthOwnership(cl);
+        hookCutOutVisibility();
+        hookAodShrink(cl);
+        hookWallpaperBlack(cl);
+        hookFingerprintAnimation(cl);
+        hookFingerprintIcon(cl);
+        hookFingerprintPrintView(cl);
+        hookFingerprintAvoidance(cl);
+        hookKeyguardWallpaperManager(cl);
+        hookMediaCard(cl);
+        hookLockScreenTap(cl);
+        hookChargingAnimation(cl);
+
+        // The notification shade's cover background. Its hooks and logic are ShadeLayer's own.
+        ShadeLayer.install(cl);
+
+        hookNotifStateChange();
+        hookTimeView(cl);
+
+        // The date line above the clock is deliberately left to the OEM. On the glass styles it
+        // is blur-blend rendered: setDateTextColor keeps only the green and blue of what it is
+        // given and forces red to 0xff, and those channels weight the blend layers against the
+        // backdrop rather than name a colour. Swapping in the cover's hue moved those weights,
+        // so the date went dark on a light cover and light on a dark one - and our recolour,
+        // which fed getCurrentTextColor() back in, left it that way after cover mode ended.
+
+        hookClockInteractor(cl);
+    }
+
+    private static void hookContainerAttach() {
         try {
             Xp.hookAll(sContainerCls, "onAttachedToWindow", chain -> {
                 Object result = chain.proceed();
@@ -965,7 +1006,9 @@ public class Main extends XposedModule {
             // of onPackageLoaded, which loses the message.
             Xp.log(TAG + "onAttachedToWindow hook FAILED, the module is inert in SystemUI: " + t);
         }
+    }
 
+    private static void hookContainerDetach() {
         // The keyguard is rebuilt on every screen-off/on, so a captured instance goes
         // stale. Drop it on detach and always drive the currently attached one.
         try {
@@ -982,12 +1025,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "onDetachedFromWindow hook failed: " + t);
         }
+    }
 
-        // The lyrics' HDR highlight no longer has a hook here: it needs a colour mode, a colour
-        // mode is a whole window's, and the lyrics have a window of their own now (LyricWindow).
-        // It used to be written into the shade window's mLpChanged from inside the OEM's own
-        // apply, which is where the media card got dragged into HDR with it.
-
+    private static void hookSleepAndWake(final ClassLoader cl) {
         // The keyguard service hears about sleep and wake before anything is laid out for either.
         //
         // Sleep: the start of the fade that leaves only the clock. The small clock is sprung to
@@ -1052,7 +1092,9 @@ public class Main extends XposedModule {
             Xp.w(TAG + "KeyguardService sleep/wake hooks failed, the clock cuts to and from "
                     + "the AOD: " + t);
         }
+    }
 
+    private static void hookTransportControls(final ClassLoader cl) {
         // The press itself, ~0.8s before the player admits anything changed.
         //
         // Measured on this phone: from the key landing to the module being told a new track is
@@ -1085,7 +1127,9 @@ public class Main extends XposedModule {
             Xp.w(TAG + "transport control hook failed, a skip is only noticed when the player "
                     + "reports it: " + t);
         }
+    }
 
+    private static void hookAodHandover() {
         // The OEM's own hand-over between the lock screen and the AOD, both ways.
         //
         // Into the AOD it lands after the screen fade has gone to black and before the AOD is
@@ -1128,7 +1172,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "doAnimationToAod hook failed, AOD falls back to screen off: " + t);
         }
+    }
 
+    private static void hookDepthOwnership(final ClassLoader cl) {
         // The system does re-show the cut-out - verified: it came back right after we restored
         // cover mode across a SystemUI restart. Re-hide after the OEM's own update instead of
         // hooking View.setVisibility process-wide, which would tax every view in SystemUI.
@@ -1155,7 +1201,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "depth ownership hook failed: " + t);
         }
+    }
 
+    private static void hookCutOutVisibility() {
         // What the OEM itself wants of its cut-out view while we hold it hidden. See sDeductedRef.
         // ImageView declares its own setVisibility, so this sees ImageViews only, and it acts on
         // exactly one of them.
@@ -1171,7 +1219,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "cut-out visibility hook failed: " + t);
         }
+    }
 
+    private static void hookAodShrink(final ClassLoader cl) {
         // The full-screen AOD's shrink, and the one view that must not take it.
         //
         // On the way into full-screen AOD KeyguardPanelViewController.doDeductedImageScaleAnim
@@ -1203,7 +1253,9 @@ public class Main extends XposedModule {
             Xp.w(TAG + "AOD shrink hook failed (the video cover may pull in from the edges"
                     + " into full-screen AOD): " + t);
         }
+    }
 
+    private static void hookWallpaperBlack(final ClassLoader cl) {
         // The AOD's wallpaper dim. doWallpaperBlackAnim animates "wallpaperBlack" and lands it
         // through ViewRootImpl.setWallpaperBlack(float) - a MIUI channel that reaches the
         // wallpaper window itself. The value, and whether the window stays dimmed, survive a
@@ -1232,7 +1284,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "wallpaperBlack hook failed (the cover may sit bright in AOD): " + t);
         }
+    }
 
+    private static void hookFingerprintAnimation(final ClassLoader cl) {
         // The fingerprint ring, when the user has asked for it to go. Two hooks, because the
         // ring is two things: MiuiGxzwFrameAnimation plays the pulsing circle out of a list of
         // drawables, and MiuiGxzwIconView holds the static print underneath. Hiding either one
@@ -1274,7 +1328,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "fingerprint animation hook failed, the ring will still pulse: " + t);
         }
+    }
 
+    private static void hookFingerprintIcon(final ClassLoader cl) {
         try {
             Class<?> iconCls = Xp.findClass(Fingerprint.CLS_FOD_ICON, cl);
             Xp.hookAllConstructors(iconCls, chain -> {
@@ -1310,7 +1366,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "fingerprint icon hook failed, the static print will stay: " + t);
         }
+    }
 
+    private static void hookFingerprintPrintView(final ClassLoader cl) {
         // The view the print is actually painted on. Its own hook because it is its own class
         // and its own failure: the frame substitution above covers it only once the animation
         // has run, and the first keyguard after a SystemUI start paints without it.
@@ -1335,7 +1393,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "fingerprint print view hook failed: " + t);
         }
+    }
 
+    private static void hookFingerprintAvoidance(final ClassLoader cl) {
         // Both manual and automatic sinking use the OEM's fingerprint avoidance branch.
         // Add our policy as an input so the system recomputes and emits on its own coroutine.
         try {
@@ -1436,7 +1496,9 @@ public class Main extends XposedModule {
             sNotificationSink.hookStatus("avoidance failed: " + t);
             Xp.w(TAG + "fingerprint avoidance hook failed: " + t);
         }
+    }
 
+    private static void hookKeyguardWallpaperManager(final ClassLoader cl) {
         // MIUI's own answer to "what kind of wallpaper is this", which beats every heuristic
         // below it: SystemUI keeps this class unobfuscated and it holds a live
         // MiuiWallpaperManager, whose getMiuiWallpaperType(which) is the API MIUI itself asks.
@@ -1454,7 +1516,9 @@ public class Main extends XposedModule {
             Xp.w(TAG + "keyguard wallpaper manager hook failed, falling back to "
                     + "MIUI's files for the wallpaper type: " + t);
         }
+    }
 
+    private static void hookMediaCard(final ClassLoader cl) {
         // The media card is the switch. Every add, track change and dismissal of the
         // lockscreen card funnels through this one static - MediaData in means a card is on
         // screen (and which track), null means it has gone. Playback state never reaches it,
@@ -1471,7 +1535,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "media card hook failed: " + t);
         }
+    }
 
+    private static void hookLockScreenTap(final ClassLoader cl) {
         // A tap on the cover puts the wallpaper back.
         //
         // Hooked on the shade window's dispatch rather than given a view of our own: anything
@@ -1572,7 +1638,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "lock screen tap hook failed: " + t);
         }
+    }
 
+    private static void hookChargingAnimation(final ClassLoader cl) {
         // The charging animation going up and coming down, recorded rather than guessed at.
         //
         // This is not what holds the tap back - chargeAnimUp reads the live tree and would go on
@@ -1599,10 +1667,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "charging animation hook failed: " + t);
         }
+    }
 
-        // The notification shade's cover background. Its hooks and logic are ShadeLayer's own.
-        ShadeLayer.install(cl);
-
+    private static void hookNotifStateChange() {
         // The live container, and - on every clock style except the all_in_one family - the
         // only place the notification Y ever arrives.
         //
@@ -1654,7 +1721,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "notifStateChange hook failed: " + t);
         }
+    }
 
+    private static void hookTimeView(final ClassLoader cl) {
         // The OEM squeezes the clock through these four setters on TimeView. Scaling
         // setSizeInternal's argument shrinks the whole clock without touching the animation:
         // the OEM still computes and drives every frame, we just rescale the last mile.
@@ -1756,14 +1825,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "TimeView hook failed: " + t);
         }
+    }
 
-        // The date line above the clock is deliberately left to the OEM. On the glass styles it
-        // is blur-blend rendered: setDateTextColor keeps only the green and blue of what it is
-        // given and forces red to 0xff, and those channels weight the blend layers against the
-        // backdrop rather than name a colour. Swapping in the cover's hue moved those weights,
-        // so the date went dark on a light cover and light on a dark one - and our recolour,
-        // which fed getCurrentTextColor() back in, left it that way after cover mode ended.
-
+    private static void hookClockInteractor(final ClassLoader cl) {
         // The real chokepoint. Everything that squeezes the clock - the OEM's own
         // notification-Y flow, KeyguardClockContainer.notifStateChange, and our own
         // per-frame driving - lands here, so this is where ownership is enforced.
