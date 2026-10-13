@@ -126,22 +126,39 @@ internal object PickupPark {
         val back = if (task in parked) {
             parked = parked - task
             val keep = if (!front) frontTask(except = task) else -1
+            ownMoveUntil = SystemClock.uptimeMillis() + OWN_MOVE
             val moved = move(task, 0)
             if (keep >= 0) restore(keep)
             moved
         } else "not parked"
         val s = "released $task ($why): $back"
         Xp.log(TAG + s)
-        if (parked.isEmpty()) letGo()
+        if (parked.isEmpty()) letGoSoon()
         return s
     }
 
     /** Every parked task back, and the display let go: the probe's `vdoff`, the switch going off. */
     fun releaseAll(why: String): String {
         parked.toList().forEach { release(it, why) }
-        letGo()
+        letGoSoon()
         return "released all ($why)"
     }
+
+    /**
+     * The display let go a while after its last task has left it, not at once. Released in the same
+     * moment as a task came off it, the task's window reached display 0 with its input still filed
+     * under the display that was gone - InputDispatcher's 「Found window …AppBrandUI00 in display 0,
+     * but it should belong to display 21」 - and from then on no touch reached the mini program and
+     * Back did nothing (2026-10-13 19:07:05, the island tapped while the order was parked). A park in
+     * the meantime takes the display back up as it is ([park]).
+     */
+    private fun letGoSoon() {
+        bg.removeCallbacksAndMessages(LET_GO)
+        bg.postDelayed({ if (parked.isEmpty()) letGo() }, LET_GO, LET_GO_AFTER)
+    }
+
+    private val LET_GO = Any()
+    private const val LET_GO_AFTER = 5_000L
 
     /** The display itself, once nothing is on it. */
     private fun letGo() {
@@ -239,6 +256,101 @@ internal object PickupPark {
         bg.post { park(task) }
     }
 
+    /** Until when a parked task coming to the front is our own doing - the park itself (uptime). */
+    @Volatile private var ownMoveUntil = 0L
+    private const val OWN_MOVE = 2_000L
+    private var watching = false
+
+    /**
+     * A parked task brought to the front by its own app - the mini program opened from 微信's list
+     * while its page sits on the hidden display, where it would come up out of sight. That, and only
+     * that, is when the page goes back to the phone's display, on top: it is what the user just
+     * asked for, so landing on top is right and there is no second move to make.
+     *
+     * It used to go back the moment 微信 came to the front at all, and with moveRootTaskToDisplay
+     * landing on top that meant the order page over 微信, then 微信 put back over it - a flash of the
+     * page each time 微信 was opened, and once, tapping 微信's icon on the desktop, the launcher pulled
+     * back in front halfway through 微信's own start because 微信 was not in front yet (2026-10-13,
+     * 18:50:00 and 18:52:04). ColorOS does not move its task for 微信 coming up either.
+     *
+     * Heard straight from the system, as an ITaskStackListener of our own - a bare Binder, the way
+     * the assist receiver is ([PickupAssist]), its transaction codes read off the platform's own Stub.
+     * Two of its calls mean "this task was brought up":
+     *  - onActivityRestartAttempt: an activity start that landed on a task already there. Opening the
+     *    mini program from 微信's list is one, and it is the *only* word of it: the task is already
+     *    on top of the hidden display, so nothing moves to the front (2026-10-13 19:02:28 - opened,
+     *    resumed on the hidden display, and not a sound from onTaskMovedToFront).
+     *  - onTaskMovedToFront: anything else that moves it, the park itself included, which is not
+     *    taken for the user's ([ownMoveUntil]).
+     * SystemUI's own TaskStackChangeListeners would have done for the second, but R8 has cut its
+     * interface down on this build and the first is not on it.
+     */
+    private fun watch() {
+        if (watching) return
+        watching = true
+        runCatching {
+            val stub = Class.forName("android.app.ITaskStackListener\$Stub")
+            fun code(name: String): Int = runCatching {
+                stub.getDeclaredField("TRANSACTION_$name").apply { isAccessible = true }.getInt(null)
+            }.getOrDefault(-1)
+            val restart = code("onActivityRestartAttempt")
+            val front = code("onTaskMovedToFront")
+            if (restart < 0 && front < 0) error("no transaction codes on ITaskStackListener.Stub")
+            val listener = object : android.os.Binder() {
+                override fun onTransact(code: Int, data: android.os.Parcel, reply: android.os.Parcel?, flags: Int): Boolean {
+                    if (code < FIRST_CALL_TRANSACTION || code > LAST_CALL_TRANSACTION) {
+                        return super.onTransact(code, data, reply, flags)
+                    }
+                    // Every call on this interface is oneway; the ones not wanted are only taken.
+                    if (code != restart && code != front) return true
+                    val info = runCatching {
+                        data.enforceInterface("android.app.ITaskStackListener")
+                        if (data.readInt() != 0) android.app.ActivityManager.RunningTaskInfo.CREATOR.createFromParcel(data) else null
+                    }.getOrNull() ?: return true
+                    val task = info.taskId
+                    val why = if (code == restart) "opened by its app" else "moved to the front"
+                    if (task in parked) bg.post { broughtUp(task, why) }
+                    return true
+                }
+            }
+            listener.attachInterface(null, "android.app.ITaskStackListener")
+            val proxy = stub.getMethod("asInterface", android.os.IBinder::class.java).invoke(null, listener)
+            val atm = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null)
+            atm.javaClass.methods.first { it.name == "registerTaskStackListener" }.invoke(atm, proxy)
+            Xp.log(TAG + "watching for a parked task opened by its app (codes $restart/$front)")
+        }.onFailure {
+            watching = false
+            Xp.log(TAG + "not watching for a parked task opened by its app: $it")
+        }
+    }
+
+    /**
+     * [task], parked, was brought up - by its app, unless it is the move of our own just made. The
+     * system may already have moved it to the phone's display itself (19:02:43: 微信's second open
+     * landed it there, and moving it again threw "to its current taskDisplayArea"); then it is only
+     * let go of here.
+     */
+    private fun broughtUp(task: Int, why: String) {
+        if (task !in parked || SystemClock.uptimeMillis() < ownMoveUntil) return
+        Xp.log(TAG + "task $task $why while parked")
+        if (displayOf(task) == 0) {
+            parked = parked - task
+            Xp.log(TAG + "released $task ($why): already on display 0")
+            if (parked.isEmpty()) letGoSoon()
+            return
+        }
+        release(task, why, front = true)
+    }
+
+    /** The display [task] is on, or -1. */
+    private fun displayOf(task: Int): Int = runCatching {
+        val ctx = Main.appContext() ?: return@runCatching -1
+        val displayId = android.app.TaskInfo::class.java.getField("displayId")
+        @Suppress("DEPRECATION")
+        ctx.getSystemService(android.app.ActivityManager::class.java).getRunningTasks(64)
+            .firstOrNull { it.taskId == task }?.let { displayId.getInt(it) } ?: -1
+    }.getOrDefault(-1)
+
     /**
      * [task] onto the hidden display and left there, beside whatever is already on it: the reads are
      * the observer's (PickupObserver), and [release] - or the display going away with this process -
@@ -246,10 +358,14 @@ internal object PickupPark {
      */
     private fun park(task: Int): String {
         if (task in parked) return "already parked: $task"
+        bg.removeCallbacksAndMessages(LET_GO)
         val made = ensure()
         if (made.startsWith("no display")) return made
         val id = vd?.display?.displayId ?: return "no display"
+        watch()
+        ownMoveUntil = SystemClock.uptimeMillis() + OWN_MOVE
         val moved = move(task, id)
+        ownMoveUntil = SystemClock.uptimeMillis() + OWN_MOVE
         if (moved.startsWith("move failed")) {
             if (parked.isEmpty()) letGo()
             return "$made, $moved"

@@ -34,8 +34,9 @@ import android.os.SystemClock
  * And one is not done the same way: ColorOS borrows the task onto its display for each round and puts
  * it back at the *bottom* of the phone's display after (`moveTaskToDisplay(task, 0, false)`). The
  * platform has no bottom-of-the-display move - moveRootTaskToDisplay always lands on top - so the task
- * stays on the hidden display between rounds, and goes back when the task ends, or for as long as its
- * app is in front ([standAside]).
+ * stays on the hidden display between rounds, and goes back when the task ends, when the island is
+ * tapped, or when its app opens it from the hidden display (PickupPark.watch) - not merely for its app
+ * being in front, which flashed the page up over 微信 each time.
  *
  * Up to three orders at once, as ColorOS's `max_task_count`, each on its own rounds; they share the
  * one hidden display, and so a reload of one is a reload of all.
@@ -165,17 +166,6 @@ internal object PickupObserver {
     fun endAll(why: String) {
         tasks.keys.toList().forEach { end(it, why) }
         PickupPark.releaseAllFrom(why)
-    }
-
-    /**
-     * [host] is in front: its orders come off the hidden display - a mini program opened from its list
-     * would come up there, out of sight - and are waited on still. Each goes back on at its next round
-     * once the user is out of the app again (see [round]); ending here would drop every other order
-     * the moment one was looked at in 微信.
-     */
-    fun standAside(host: String, why: String) {
-        tasks.values.filter { it.page.host == host && PickupPark.isParked(it.task) }
-            .forEach { PickupPark.releaseFrom(it.task, why) }
     }
 
     fun describe(): String = if (tasks.isEmpty()) "obs: -" else "obs: " + tasks.values.joinToString("; ") { o ->

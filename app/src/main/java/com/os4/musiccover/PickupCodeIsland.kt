@@ -389,11 +389,8 @@ internal object PickupCodeIsland {
         val ctx = Main.appContext()
         val pkg = if (sOn && ctx != null && top != null) miniHost(ctx, top) else null
         if (ctx == null || top == null || pkg == null) {
-            // A parked task must not stay on the hidden display once its own app is in front again:
-            // the mini program tapped from its list would come back on a display nobody can see.
-            if (top != null && (top.packageName == WECHAT || top.packageName == ALIPAY)) {
-                PickupObserver.standAside(top.packageName, "its app is in front again")
-            }
+            // Its app coming to the front leaves a parked task where it is: it comes back only when
+            // the app opens it (PickupPark.watch), not on 微信 being opened at all.
             left(top)
             return
         }
