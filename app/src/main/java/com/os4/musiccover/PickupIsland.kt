@@ -96,8 +96,10 @@ internal object PickupIsland {
     private const val LIFE = 30 * 60_000L
     /** The logo's fade-in, in ms: ColorOS's own `alpha_up_in` is 300ms on `coui_ease_move`. */
     private const val LOGO_FADE = 300L
-    /** The opacity a floated card starts at; [fade] steps it up to 1. */
+    /** The opacity a floated card's picture is posted at; [fadePictureIn] takes it up to 1. */
     private const val FADE_FROM = 0.15f
+    /** That fade, in ms: the four 80ms steps it used to be posted as. */
+    private const val PICTURE_FADE = 320L
 
     /**
      * What a card is about: the task it was read from, that task's app, its brand and rule, and the
@@ -110,7 +112,7 @@ internal object PickupIsland {
     // All below on [bg].
 
     /**
-     * The card up for one task: what it was posted with, under which notification, and its fade.
+     * The card up for one task: what it was posted with, and under which notification.
      * One per task, as ColorOS keeps one per observe task - several orders are several cards.
      */
     private class Card(var page: Page) {
@@ -120,10 +122,6 @@ internal object PickupIsland {
         /** The notification tag and id [key] was posted under; the back screen's widget is keyed on the id. */
         var tag: String? = null
         var id = ID
-        /** The picture opacity the card is drawn at; 1f except while [fade] is stepping it up. */
-        var alpha = 1f
-        /** Bumped by every fresh post's [fade] and by [clear], so only the latest fade steps run. */
-        var fadeGen = 0
     }
 
     private val cards = LinkedHashMap<Int, Card>()
@@ -172,6 +170,7 @@ internal object PickupIsland {
                 if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon) runCatching {
                     (v.drawable as? android.graphics.drawable.AnimatedImageDrawable)?.start()
                     fadeLogoIn(v)
+                    fadePictureIn(v)
                 }
                 out
             }
@@ -206,6 +205,35 @@ internal object PickupIsland {
             }
         }, if (ms > 0) ms.toLong() else 0L)
     }
+
+    /**
+     * The drink folding in on a card that floats up: [post] draws a fresh card's picture at
+     * [FADE_FROM], and this takes the live view from there to opaque.
+     *
+     * It used to be four more posts of the whole notification, 80ms apart, each drawing the picture
+     * a little more opaque - five posts in 320ms, every one carrying four RemoteViews (day, night,
+     * always-on, island) and the back screen's card, every one applied, inflated and run through
+     * the shade's list again, right while the island was floating open. That was the stutter as a
+     * code came up (#79). The view is in this process, as the drink's own start is.
+     *
+     * Read a frame later, because the RemoteViews sets the picture before it sets its alpha. A card
+     * updated in place sets no alpha (it is posted opaque), so only a fresh one fades.
+     */
+    private fun fadePictureIn(picture: android.widget.ImageView) {
+        picture.post {
+            runCatching {
+                val from = picture.imageAlpha
+                if (from >= 255) return@runCatching
+                (picture.getTag(R.id.mc_pickup_icon) as? android.animation.Animator)?.cancel()
+                val fade = android.animation.ValueAnimator.ofInt(from, 255).setDuration(PICTURE_FADE)
+                fade.interpolator = android.view.animation.DecelerateInterpolator()
+                fade.addUpdateListener { picture.imageAlpha = it.animatedValue as Int }
+                picture.setTag(R.id.mc_pickup_icon, fade)
+                fade.start()
+            }
+        }
+    }
+
     /**
      * The back screen, or null on a phone that has none.
      *
@@ -236,41 +264,12 @@ internal object PickupIsland {
         // changing again while it is already ready only updates, and so does the shop.
         val sameCode = card.key?.startsWith("$brand|${r.code}|") == true
         val fresh = !sameCode || ready(r.status) && !ready(card.status)
-        card.alpha = if (fresh) FADE_FROM else 1f
         runCatching { post(ctx, r, card, fresh) }
             .onSuccess {
                 card.key = key
                 card.status = r.status
-                if (fresh) fade(ctx, r, card)
             }
-            .onFailure {
-                Xp.log(TAG + "not posted: $it")
-                card.alpha = 1f
-            }
-    }
-
-    /**
-     * The card's pictures folding in.
-     *
-     * A RemoteViews cannot animate - there is no animator to hand it, and nothing in the island's
-     * renderer will run one - so the only fade available is to post the notification again with
-     * the pictures drawn more opaque, and let each post be a frame. Four steps over ~300ms, silent
-     * (the tag is unchanged, so it is an update of the same island and not a new one), and only
-     * for a code that is being floated up; a steady state re-read leaves the card alone.
-     */
-    private fun fade(c: Context, r: PickupParse.Result, card: Card) {
-        if (!PickupCodeIsland.sCard) return
-        // A newer fade, or the card coming down, ends this one.
-        val g = ++card.fadeGen
-        val steps = floatArrayOf(0.3f, 0.6f, 0.85f, 1f)
-        steps.forEachIndexed { i, a ->
-            bg.postDelayed({
-                if (g != card.fadeGen || cards[card.page.task] !== card) return@postDelayed
-                card.alpha = a
-                runCatching { post(c, r, card, false) }
-                    .onFailure { Xp.log(TAG + "fade step $i not posted: $it") }
-            }, 80L * (i + 1))
-        }
+            .onFailure { Xp.log(TAG + "not posted: $it") }
     }
 
     private fun ready(status: String?): Boolean = PickupParse.isReady(status)
@@ -303,7 +302,6 @@ internal object PickupIsland {
 
     /** Nothing is up for [card]: forget what it was showing. */
     private fun clear(card: Card) {
-        card.fadeGen++
         card.key = null
         card.status = null
         card.tag = null
@@ -737,11 +735,13 @@ internal object PickupIsland {
         // when it was actually built: a RemoteViews that fails to inflate takes the whole island
         // with it, and a card with a missing layout is worse than the template.
         if (PickupCodeIsland.sCard) {
+            // A card that floats up comes in faint and is faded on the live view; see [fadePictureIn].
+            val alpha = if (fresh) FADE_FROM else 1f
             runCatching {
                 PickupCard.build(c, oemRule, r.code, meal, r.temperature, store, brand, tap,
-                    card.alpha, false, action, actionTap) to
+                    alpha, false, action, actionTap) to
                     PickupCard.build(c, oemRule, r.code, meal, r.temperature, store, brand, tap,
-                        card.alpha, true, action, actionTap)
+                        alpha, true, action, actionTap)
             }.onSuccess { (day, night) ->
                 // Every key Xiaomi's own focus notification sets, which is what this copies (the
                 // assistant's card builder, `jd3.b`): the card in both themes, the always-on form,

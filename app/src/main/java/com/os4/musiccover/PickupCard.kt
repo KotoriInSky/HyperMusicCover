@@ -77,10 +77,8 @@ internal object PickupCard {
     const val PICKED = "我已取餐"
 
     /**
-     * [alpha] is the picture's opacity, and it is a parameter because it is the only way this card
-     * can be animated: a RemoteViews carries no animation of any kind, so a fade has to be posted
-     * as a series of notifications that each draw the pictures a little more opaque (see
-     * [PickupIsland]'s fade). 1f is the resting state.
+     * [alpha] is the picture's opacity. A card that floats up is posted faint and [PickupIsland]
+     * fades the live view in from there (its `fadePictureIn`); 1f is the resting state.
      */
     fun build(
         c: Context,
