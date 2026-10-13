@@ -323,7 +323,7 @@ final class ClockMove {
             // The ink box: what the eye is tracking, and the only reading that can show a glyph
             // size change, because the clock's view bounds do not move with the variable font.
             try {
-                sb.append(" box=").append(ClockViews.boxOf(Main.measureLiveBox()));
+                sb.append(" box=").append(ClockViews.boxOf(Diagnostics.measureLiveBox()));
             } catch (Throwable t) {
                 sb.append(" box=?");
             }

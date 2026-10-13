@@ -321,7 +321,7 @@ public final class ClockViews {
         // through a layout pass, and the box that would come out of it is the block, not the
         // glyphs - the same half-a-box mistake clockPivotX() already documents.
         if (times.isEmpty()) return null;
-        boolean trace = Main.sGeomTraceUntil != 0L;
+        boolean trace = Diagnostics.sGeomTraceUntil != 0L;
         StringBuilder who = trace ? new StringBuilder("inkBox target=" + Main.viewIdOf(target)
                 + " collected=" + times.size() + " :") : null;
         for (View v : times) {
