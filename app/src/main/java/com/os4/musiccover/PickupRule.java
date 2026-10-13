@@ -62,6 +62,15 @@ final class PickupRule {
         return target != null && target.useCloud; // m6.k.w does not consult blacklist.
     }
 
+    /**
+     * The brand as ColorOS's card names it: the rule's brand name, else its app name, else the label.
+     * The label is the mini program's own name (「益禾堂手机点单」), which is what the config matches
+     * pages by, not what it shows.
+     */
+    String displayName() {
+        return !brandName.isEmpty() ? brandName : (!appName.isEmpty() ? appName : label);
+    }
+
     PickupEvent event(String activity, String appId, String route, String query,
                       String href, String content, Target target, String ruleVersion) {
         PickupEvent event = new PickupEvent();
@@ -72,7 +81,7 @@ final class PickupRule {
         event.query = PickupEvent.clean(query).replaceFirst("^\\?+", "");
         event.href = PickupEvent.clean(href);
         event.content = PickupEvent.truncate(PickupEvent.clean(content), PickupConst.MAX_CONTENT_LENGTH);
-        event.brand = !brandName.isEmpty() ? brandName : (!appName.isEmpty() ? appName : label);
+        event.brand = displayName();
         event.ruleAppName = appName;
         event.ruleOriginId = originId;
         event.webView = webView;

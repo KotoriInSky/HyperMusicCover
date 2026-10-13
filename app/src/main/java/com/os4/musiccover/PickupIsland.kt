@@ -357,7 +357,7 @@ internal object PickupIsland {
                         muted = k.split('|').take(2).joinToString("|")
                         mutedUntil = SystemClock.elapsedRealtime() + LIFE
                         clear()
-                        PickupPark.releaseFrom("swiped away")
+                        PickupObserver.end("swiped away")
                         Xp.log(TAG + "swiped away")
                     }
                 }
@@ -402,7 +402,7 @@ internal object PickupIsland {
         if (PickupPark.parked() >= 0) {
             // §6.5: the task goes back to the display the user can see before it is brought to the
             // front - moved to the front while parked, it would come up on the hidden one.
-            PickupPark.releaseFrom("the island was tapped") { openNow(c, tasks, pkg, scheme) }
+            PickupObserver.end("the island was tapped", front = true) { openNow(c, tasks, pkg, scheme) }
         } else {
             openNow(c, tasks, pkg, scheme)
         }

@@ -2034,6 +2034,7 @@ public class Main extends XposedModule {
                     // Read back at startup, so it has to be written too: without it
                     // `--ez card false` lasted until the next SystemUI restart.
                     + "\ncard=" + (PickupCodeIsland.sCard ? 1 : 0)
+                    + "\nxiaoai=" + (PickupCodeIsland.sXiaoai ? 1 : 0)
                     + "\nminicfg=" + android.util.Base64.encodeToString(
                             MiniPlayerRuntime.configJson(sAppCtx).getBytes(java.nio.charset.StandardCharsets.UTF_8),
                             android.util.Base64.NO_WRAP)
@@ -2147,6 +2148,7 @@ public class Main extends XposedModule {
                         else if ("transit".equals(k)) AmapTransitScene.sOn = "1".equals(v);
                         else if ("pickup".equals(k)) PickupCodeIsland.sOn = "1".equals(v);
                         else if ("card".equals(k)) PickupCodeIsland.sCard = "1".equals(v);
+                        else if ("xiaoai".equals(k)) PickupCodeIsland.sXiaoai = "1".equals(v);
                         // Not applyConfig: this file is migration data, and a config the user has
                         // since changed must win over what was saved here (see restoreLegacyConfig).
                         else if ("minicfg".equals(k)) MiniPlayerRuntime.restoreLegacyConfig(sAppCtx,
@@ -2890,6 +2892,11 @@ public class Main extends XposedModule {
                         }
                         // --ez card false draws the island with the system's focus template again,
                         // which is the way back if ColorOS's card does not come up on this build.
+                        // --ez xiaoai false: no 小爱 reading of the order pages the module finds.
+                        if (i.hasExtra("xiaoai")) {
+                            PickupCodeIsland.sXiaoai = i.getBooleanExtra("xiaoai", true);
+                            saveState();
+                        }
                         if (i.hasExtra("card")) {
                             PickupCodeIsland.sCard = i.getBooleanExtra("card", true);
                             saveState();
@@ -2902,7 +2909,7 @@ public class Main extends XposedModule {
                             else setResultData(PickupPark.INSTANCE.experiment(task,
                                     i.getIntExtra("min", 5), 0));
                         } else if ("vdoff".equals(doIt)) {
-                            PickupPark.INSTANCE.releaseFrom("the probe said so", null);
+                            PickupPark.INSTANCE.releaseFrom("the probe said so");
                             setResultData(PickupPark.INSTANCE.describe());
                         } else {
                             setResultData(PickupCodeIsland.INSTANCE.describe()
@@ -3018,6 +3025,7 @@ public class Main extends XposedModule {
                         out.putBoolean("transit", AmapTransitScene.sOn);
                         out.putBoolean("pickup", PickupCodeIsland.sOn);
                         out.putBoolean("card", PickupCodeIsland.sCard);
+                        out.putBoolean("xiaoai", PickupCodeIsland.sXiaoai);
                         // 设置页那行「手动刷新取餐码云端规则」的副标题，和这一份名单有几个小程序。
                         out.putString("rulesdate", PickupCloud.INSTANCE.stamp(PickupCloud.INSTANCE.getUpdatedAt()));
                         out.putInt("rulescount", PickupCloud.INSTANCE.count());

@@ -53,6 +53,8 @@ internal object PickupPark {
     private var vd: VirtualDisplay? = null
     private var reader: ImageReader? = null
     @Volatile private var parked = -1
+    /** The hidden display's id while it is up, -1 otherwise; read by [tap] from the tracker's thread. */
+    @Volatile private var vdId = -1
     /** When the current park began, for whoever decides it has lasted long enough. */
     @Volatile private var since = 0L
     private var until = 0L
@@ -80,6 +82,7 @@ internal object PickupPark {
                 ?: error("createVirtualDisplay returned null")
             reader = r
             vd = d
+            vdId = d.display.displayId
             Xp.log(TAG + "hidden display ${d.display.displayId} (${W}x${H}@${DPI}, flags $FLAGS)")
             "display ${d.display.displayId}"
         }.getOrElse {
@@ -108,11 +111,20 @@ internal object PickupPark {
     /**
      * Whatever is parked goes back to the phone's own display first, always, and only then is the
      * display let go. Worth re-reading before changing.
+     *
+     * moveRootTaskToDisplay puts the task on *top* of display 0 - AOSP passes onTop = true and offers
+     * no other way - and most releases are not the user asking for it: the order turning ready, 微信
+     * coming to the front, another mini program being opened. The order page then came up over
+     * whatever the user was in, 微信 included, and swiping it away parked it again, so it came back the
+     * next time 微信 was opened (2026-10-13, 「卡在前台划不出去」). So unless [front] - the island was
+     * tapped - the task the user was looking at is put back over it.
      */
-    fun release(why: String): String {
+    fun release(why: String, front: Boolean = false): String {
         val t = parked
         parked = -1
+        val keep = if (t >= 0 && !front) frontTask(except = t) else -1
         val back = if (t >= 0) move(t, 0) else "nothing parked"
+        if (keep >= 0) restore(keep)
         val out = runCatching {
             vd?.release()
             reader?.close()
@@ -121,23 +133,85 @@ internal object PickupPark {
             s
         }.getOrElse { "release failed: $it" }
         vd = null
+        vdId = -1
         reader = null
         since = 0L
         until = 0L
         return out
     }
 
-    /** [release] from any thread: the display's own thread does the work, [then] after it. */
-    fun releaseFrom(why: String, then: (() -> Unit)? = null) {
+    /**
+     * The task in front on the phone's own display, other than [except] - the one the user is looking
+     * at - or -1. The running tasks come most recently active first, across every display, so the
+     * hidden one's is skipped by its display rather than by its place in the list.
+     */
+    private fun frontTask(except: Int): Int = runCatching {
+        val ctx = Main.appContext() ?: return@runCatching -1
+        val displayId = android.app.TaskInfo::class.java.getField("displayId")
+        @Suppress("DEPRECATION")
+        ctx.getSystemService(android.app.ActivityManager::class.java).getRunningTasks(16)
+            .firstOrNull { it.taskId != except && displayId.getInt(it) == 0 }?.taskId ?: -1
+    }.onFailure { Xp.log(TAG + "front task not found: $it") }.getOrDefault(-1)
+
+    /** [task] back in front, with no animation: it was in front a moment ago and is only kept there. */
+    private fun restore(task: Int) {
+        runCatching {
+            val ctx = Main.appContext() ?: return
+            ctx.getSystemService(android.app.ActivityManager::class.java).moveTaskToFront(task, 0,
+                android.app.ActivityOptions.makeCustomAnimation(ctx, 0, 0).toBundle())
+            Xp.log(TAG + "task $task kept in front")
+        }.onFailure { Xp.log(TAG + "task $task not kept in front: $it") }
+    }
+
+    /**
+     * [release] from any thread: the display's own thread does the work, [then] after it. [front] is
+     * for a tap on the island, the one release that is meant to bring the order page up.
+     */
+    @JvmOverloads
+    fun releaseFrom(why: String, front: Boolean = false, then: (() -> Unit)? = null) {
         if (parked < 0 && vd == null) {
             then?.invoke()
             return
         }
         bg.post {
-            release(why)
+            release(why, front)
             then?.invoke()
         }
     }
+
+    /**
+     * The parked page reloaded, ColorOS's `refreshData` without its JS: where ColorOS runs
+     * `wx.redirectTo(<the page>)` inside 微信, the hidden display is switched off for [OFF_HOLD] and
+     * on again. The mini program goes through what a screen-off does to it - onHide, then onShow
+     * - and an order page asks for its order again on onShow. Nothing is sent into 微信 and nothing
+     * is tapped. [then] runs on this object's thread once the display is back on.
+     *
+     * Off is VirtualDisplay.setDisplayState(false) where the platform has it (hidden, Android 14+),
+     * and a detached surface otherwise, which is the older way a virtual display goes dark.
+     */
+    fun cycleFrom(then: () -> Unit) {
+        bg.post {
+            val d = vd
+            if (d == null || parked < 0) {
+                then()
+                return@post
+            }
+            val state = runCatching {
+                VirtualDisplay::class.java.getMethod("setDisplayState", Boolean::class.javaPrimitiveType)
+            }.getOrNull()
+            fun power(on: Boolean) = runCatching {
+                if (state != null) state.invoke(d, on) else d.surface = if (on) reader?.surface else null
+            }.onFailure { Xp.log(TAG + "display ${if (on) "on" else "off"} failed: $it") }
+            power(false)
+            bg.postDelayed({
+                if (vd === d) power(true)
+                then()
+            }, OFF_HOLD)
+        }
+    }
+
+    /** How long the hidden display stays off in [cycleFrom]: long enough for the page to be stopped. */
+    private const val OFF_HOLD = 800L
 
     /** [park] from any thread, once the order on screen is one worth waiting on. */
     fun parkFrom(task: Int) {

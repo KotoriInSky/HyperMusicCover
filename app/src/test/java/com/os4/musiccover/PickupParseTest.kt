@@ -164,6 +164,49 @@ class PickupParseTest {
         assertEquals(listOf("取餐码", "222"), PickupParse.frontPage(nodes).map { it.text })
     }
 
+    @Test
+    fun aShopInBracketsAfterItsBrand() {
+        // 蜜雪冰城's older order pages, 2026-10-13 (8628).
+        val r = PickupParse.parse(n("订单详情", "取餐码", "8628", "订单已完成，祝您用餐愉快",
+            "蜜雪冰城（示例工业园店）", "直线距离1016.8km", "珍珠奶茶", "¥ ", "10", "大杯/芋圆/少冰/不额外加糖", "X1"))!!
+        assertEquals("示例工业园店", r.store)
+        assertEquals("珍珠奶茶", r.product)
+    }
+
+    // ---------------------------------------------------------------- the item
+
+    @Test
+    fun theItemIsReadOffItsRow() {
+        assertEquals("香柠蓝莓霸气桶", PickupParse.parse(page("mixue"))!!.product)
+        assertEquals("轻因·单丛柠檬奶", PickupParse.parse(page("chagee"))!!.product)
+        // A meal's own name, not the parts it lists as 「1 x <part>」.
+        assertEquals("人气经典随心配", PickupParse.parse(page("mcd"))!!.product)
+    }
+
+    @Test
+    fun anItemWithItsOptionsInBrackets() {
+        // 益禾堂's order page, 2026-10-13.
+        val r = PickupParse.parse(n("请取餐", "740", "取单号", "芋泥啵啵奶绿", "[", "]", ",", "默认糖", "x1", "￥", "10"))!!
+        assertEquals("芋泥啵啵奶绿", r.product)
+    }
+
+    @Test
+    fun aDrinkNamedForIceIsNotAnOption() {
+        assertEquals("草莓牛乳冰", PickupParse.product(listOf("草莓牛乳冰", "少冰", "x1")))
+    }
+
+    @Test
+    fun theItemBeatsTheRecognizersList() {
+        val r = PickupParse.choose(n("订单信息", "A307", "制作中", "芋泥啵啵奶绿", "默认糖", "x1"),
+            PickupParse.Oem("A307", true, "uncompleted", "芋泥啵啵牛奶", ""))!!
+        assertEquals("芋泥啵啵奶绿", r.product)
+    }
+
+    @Test
+    fun noRowNoItem() {
+        assertNull(PickupParse.parse(n("取餐号", "A123", "制作中"))!!.product)
+    }
+
     // ---------------------------------------------------------------- order state
 
     @Test

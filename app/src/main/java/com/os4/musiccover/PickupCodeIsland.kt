@@ -61,10 +61,10 @@ internal object PickupCodeIsland {
     private const val SLOW = 30_000L
     /** How long a task is read on after the mini program leaves the front before it is let go. */
     private const val LEFT = 2 * 60_000L
-    /** A parked task is let go after this, as ColorOS's observeagent does. */
-    private const val PARK_MAX = 30 * 60_000L
     /** How long a task stays unparked after the island was tapped. */
     private const val NO_PARK = 5 * 60_000L
+    /** How long the front has to stay off the mini program before its task is parked (see [left]). */
+    private const val PARK_SETTLE = 1_500L
     /** Reads of one stay in front, at most: an hour at [EVERY]. */
     private const val MAX_READS = 720
     private const val TIMEOUT = 3_000L
@@ -104,6 +104,13 @@ internal object PickupCodeIsland {
      */
     @Volatile @JvmField var sCard = true
 
+    /**
+     * Whether 小爱 is asked to read an order page the module has found ([XiaoaiMemory]) - which sends
+     * a screenshot of that page to Xiaomi's cloud, as the user's own three-finger swipe does. On
+     * unless turned off (probe: `op pickup --ez xiaoai false`).
+     */
+    @Volatile @JvmField var sXiaoai = true
+
     val bg: Handler by lazy { Handler(HandlerThread("mc-pickup").apply { start() }.looper) }
 
     // All below on [bg].
@@ -126,10 +133,17 @@ internal object PickupCodeIsland {
     /** The read waiting on its answer, so a late answer after its timeout is not a second loop. */
     private var readSeq = 0
     private var inFlight = false
-    /** Reads finished since this task was parked, which is what OPPO's first-after interval counts. */
-    private var parkedReads = 0
-    /** The task [parkedReads] belongs to, so a new park starts the count over. */
-    private var parkedTask = -1
+    /** When [lastTop] last changed, so that a park waits for the front to settle (see [maybePark]). */
+    private var lastTopAt = 0L
+    /** The [LEFT] timer that is running, so that leaving again starts it over rather than beside it. */
+    private var leftTimer: Runnable? = null
+    /** The code last read, and whether it was on the front page - what an observe task is made from. */
+    private var lastCode: PickupParse.Result? = null
+    private var codeOnFront = false
+    /** What 小爱 read for each code it was asked about: the item and the shop, which outrank ours. */
+    private val answers = HashMap<String, XiaoaiMemory.Answer>()
+    /** The code 小爱 was last asked about, so that one order is asked about once. */
+    private var asked = ""
     private var gen = 0
     private var lastRead = ""
     /** The front page's first texts when no code was found, for the probe only (not logged). */
@@ -172,6 +186,8 @@ internal object PickupCodeIsland {
         }, STARTUP_LOOK)
 
         PickupIsland.install()
+        XiaoaiMemory.install(cl)
+        XiaoaiMemory.onAnswer = { a -> bg.post { answered(a) } }
     }
 
     fun setOn(on: Boolean) {
@@ -180,9 +196,48 @@ internal object PickupCodeIsland {
             if (!on) {
                 stop()
                 PickupIsland.takeDown("switched off")
-                PickupPark.releaseFrom("switched off")
+                PickupObserver.end("switched off")
             }
         }
+    }
+
+    /**
+     * [r] with what 小爱 read for its code, where it read anything: its item and its shop are the
+     * cloud's reading of the order and ours is a guess at the page's layout.
+     */
+    fun enrich(r: PickupParse.Result): PickupParse.Result {
+        val a = answers[r.code] ?: return r
+        return r.copy(product = a.product ?: r.product, store = a.store ?: r.store)
+    }
+
+    /**
+     * 小爱 asked about [r], once, under ColorOS's gate for its own cloud reading
+     * (`remoteTextEligible`): a code already read on the phone, an order not over, and the page that
+     * shows it - here, in front, since 小爱 reads a screenshot.
+     */
+    private fun askXiaoai(ctx: Context, r: PickupParse.Result) {
+        if (!sXiaoai || !inFront || !codeOnFront || PickupParse.isOver(r.status)) return
+        if (r.code == asked || answers.containsKey(r.code)) return
+        asked = r.code
+        XiaoaiMemory.ask(ctx, r.code)
+    }
+
+    private fun answered(a: XiaoaiMemory.Answer) {
+        answers[a.code] = a
+        val r = lastCode
+        if (r == null || r.code != a.code || taskId < 0) {
+            Xp.log(TAG + "小爱 read ${a.code}, the page is at ${r?.code}")
+            return
+        }
+        PickupIsland.show(enrich(r), PickupIsland.Page(taskId, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
+    }
+
+    /**
+     * The observer let [task] go. Back in front, the tracker reads it on as before; otherwise the
+     * wait is over, as ColorOS's ends when its task does.
+     */
+    fun observeEnded(task: Int) = bg.post {
+        if (task == taskId && !inFront) stop()
     }
 
     /** The task the front mini program is being read from, -1 for none (the probe's `do vdtest`). */
@@ -201,7 +256,7 @@ internal object PickupCodeIsland {
      * request a tracked read makes, handed back parsed and counted rather than shown. [done] runs on
      * [bg]; the island's own state is not touched.
      */
-    fun readOnce(task: Int, done: (PickupParse.Result?, Int) -> Unit) {
+    fun readOnce(task: Int, frontOnly: Boolean = false, done: (PickupParse.Result?, Int) -> Unit) {
         // Answered once: the assist reply, or [TIMEOUT]. A request that is never answered would
         // otherwise park the caller's loop for good.
         val said = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -215,7 +270,8 @@ internal object PickupCodeIsland {
                 bg.removeCallbacks(timeout)
                 // Read for the experiment only: the tracked page's appId and brand stay as they are.
                 val nodes = if (st != null) runCatching { PickupAssist.nodes(st) }.getOrNull() else null
-                once(nodes?.let { recognize(it, oemRule) }, nodes?.size ?: 0)
+                val read = if (frontOnly) nodes?.let { PickupParse.frontPage(it) } else nodes
+                once(read?.let { recognize(it, oemRule) }, read?.size ?: 0)
             }
         }
         if (!asked) {
@@ -235,6 +291,7 @@ internal object PickupCodeIsland {
         append(" last=$lastRead")
         if (lastHead.isNotEmpty()) append(" head=[$lastHead]")
         if (lastOem.isNotEmpty()) append(" oem=[$lastOem]")
+        append(" | ").append(PickupObserver.describe())
     }
 
     /**
@@ -270,6 +327,7 @@ internal object PickupCodeIsland {
         if (retry == 0) {
             if (top == lastTop) return
             lastTop = top
+            lastTopAt = SystemClock.uptimeMillis()
         } else if (top != lastTop) {
             return
         }
@@ -280,7 +338,7 @@ internal object PickupCodeIsland {
         if (ctx == null || top == null || pkg == null) {
             // A parked task must not stay on the hidden display once its own app is in front again:
             // the mini program tapped from its list would come back on a display nobody can see.
-            if (top != null && top.packageName == host) PickupPark.releaseFrom("its app is in front again")
+            if (top != null && top.packageName == host) PickupObserver.end("its app is in front again")
             left(top)
             return
         }
@@ -311,7 +369,21 @@ internal object PickupCodeIsland {
         // different one than it did before - which is why this is set before the task is compared.
         host = pkg
         if (info.taskId == taskId) {
-            inFront = true
+            if (!inFront) {
+                inFront = true
+                // Back from whatever lay over the mini program - 微信's pay sheet, a share panel,
+                // the launcher. The loop is still on the [SLOW] gap it took when the user left, and
+                // the page they come back to is the one that changed: after paying, 益禾堂's order
+                // page sat there for twenty seconds before its code was read (2026-10-13). So the
+                // next read is brought forward, and the few after it are quick ones.
+                if (!inFlight && !PickupObserver.observing(taskId)) {
+                    val t = taskId
+                    val g = gen
+                    reads = 0
+                    bg.removeCallbacksAndMessages(READ)
+                    bg.postDelayed({ read(t, g) }, READ, QUICK_GAP)
+                }
+            }
             return
         }
         stop()
@@ -343,14 +415,40 @@ internal object PickupCodeIsland {
         inFront = false
         Xp.log(TAG + "left the mini program: top=" + (top?.flattenToShortString() ?: "none") +
             ", reading task $taskId on")
+        maybePark("left")
+        // A task that ends up observed is not stopped by this: the observer is what ends it. One timer
+        // at a time - one left over from an earlier visit stopped the tracking two minutes after
+        // *that* visit, while the user had only just left again (2026-10-13).
+        leftTimer?.let { bg.removeCallbacks(it) }
+        val t = Runnable { if (!inFront && taskId >= 0 && !PickupObserver.observing(taskId)) stop() }
+        leftTimer = t
+        bg.postDelayed(t, TRACK, LEFT)
+    }
+
+    /**
+     * The tracked task onto the hidden display, if the user is out of it and its order is worth
+     * waiting on. Asked when the mini program is left, and again whenever a read made while it is
+     * left finds a code: the code can come out only after the user has gone - 益禾堂's order page
+     * was still loading behind 微信's pay sheet when the user swiped home, its 制作中 code was read
+     * ten seconds later, and with the park decided only at the moment of leaving it was never made
+     * (2026-10-13).
+     */
+    private fun maybePark(why: String) {
+        if (inFront || taskId < 0 || PickupObserver.observing(taskId)) return
         // Whether the page is kept off-screen is the one thing about this path that the card cannot
         // show, and it decides whether the order is read at all from here on: unparked, the task is
         // let go after [LEFT] and the card freezes at whatever it last read - the state a drink that
         // was still being made then never leaves (2026-10-10).
-        val parkable = top?.packageName != host && waiting() && observes() &&
+        //
+        // And only from the page that shows the order. ColorOS makes its task on that page, remembers
+        // it, and sends the mini program back to it every round with wx.reLaunch; with no way back
+        // here, a task made on any other page reads that page for half an hour - 益禾堂's menu, with
+        // the island stuck at 制作中 while the drink was ready (2026-10-13).
+        val parkable = lastTop?.packageName != host && waiting() && codeOnFront && observes() &&
             SystemClock.uptimeMillis() >= noParkUntil
-        Xp.log(TAG + "left: park=" + parkable + " (waiting=" + waiting() + " observes=" + observes()
-            + " noParkFor=" + ((noParkUntil - SystemClock.uptimeMillis()).coerceAtLeast(0) / 1000) + "s)")
+        Xp.log(TAG + "$why: park=" + parkable + " (waiting=" + waiting() + " onFront=" + codeOnFront +
+            " observes=" + observes() +
+            " noParkFor=" + ((noParkUntil - SystemClock.uptimeMillis()).coerceAtLeast(0) / 1000) + "s)")
         // Out of the app altogether: the order is worth waiting on, so the task goes onto the hidden
         // display where the mini program keeps its own page current (PickupPark, §6). Not while the
         // app itself is in front: a mini program started from its own list would come back on a
@@ -359,11 +457,23 @@ internal object PickupCodeIsland {
         // front flickers through the launcher as they move about it - parking on that flicker took
         // the mini program away from them mid-use (2026-10-08). And not at all unless the rules ask
         // for it: `use_observer` is ColorOS's own switch for the polling this park is.
-        if (parkable) {
-            PickupPark.parkFrom(taskId)
-            return
-        }
-        bg.postDelayed({ if (!inFront && taskId >= 0 && PickupPark.parked() != taskId) stop() }, TRACK, LEFT)
+        //
+        // And not on the spot: the front turns to the launcher as the swipe home *starts*, and the
+        // task moved then is the one the swipe's own animation is running on - a park in the middle
+        // of a swipe from one app to the next handed the swipe 微信 instead (2026-10-13). So the
+        // front has to have stayed put for [PARK_SETTLE], out of the mini program and its app.
+        if (parkable) settleThenObserve(taskId, gen)
+    }
+
+    private fun settleThenObserve(t: Int, g: Int) {
+        bg.postDelayed({
+            if (g != gen || t != taskId || inFront || lastTop?.packageName == host) return@postDelayed
+            val still = SystemClock.uptimeMillis() - lastTopAt
+            if (still < PARK_SETTLE) return@postDelayed settleThenObserve(t, g)
+            val r = lastCode ?: return@postDelayed
+            PickupObserver.start(PickupIsland.Page(t, host, shownBrand(), oemRule, program?.scheme.orEmpty()),
+                r.code, r.status)
+        }, TRACK, PARK_SETTLE)
     }
 
     /**
@@ -384,70 +494,28 @@ internal object PickupCodeIsland {
     private fun waiting(): Boolean =
         PickupIsland.showing && !PickupParse.isOver(PickupIsland.status)
 
-    private fun battery(ctx: Context): Int =
-        ctx.getSystemService(android.os.BatteryManager::class.java)
-            ?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
-
-    /**
-     * A battery saver on, or a phone running hot. Neither is something ColorOS's observe config
-     * has a key for - its two battery keys are in [PickupObserve] - and neither is a level to wait
-     * out, so a read is skipped rather than slowed. ColorOS also skips while a game is being played
-     * or the camera is open; neither is something this process can see for nothing, so neither is
-     * here.
-     */
-    private fun tired(ctx: Context): Boolean {
-        val pm = ctx.getSystemService(android.os.PowerManager::class.java) ?: return false
-        return pm.isPowerSaveMode ||
-            pm.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_MODERATE
-    }
-
     private fun stop() {
         gen++
         taskId = -1
         inFront = false
         inFlight = false
-        PickupPark.releaseFrom("the tracked task was let go")
+        lastCode = null
+        codeOnFront = false
+        PickupObserver.end("the tracked task was let go")
         bg.removeCallbacksAndMessages(READ)
         bg.removeCallbacksAndMessages(TRACK)
     }
 
     private fun read(task: Int, g: Int) {
         if (g != gen || task != taskId || inFlight) return
+        // An observed task is the observer's to read (PickupObserver), on its own rounds.
+        if (PickupObserver.observing(task)) return
         val ctx = Main.appContext() ?: return
-        val parked = PickupPark.parked() == task
-        if (parked && parkedTask != task) {
-            parkedTask = task
-            parkedReads = 0
-        }
-        if (!parked) parkedTask = -1
-        if (parked) {
-            // §6.3's gates, in the order the doc has them: below 10% the wait is over, and a low
-            // battery, a battery saver or a phone running hot skip a read. The park's own clock is
-            // asked, not one kept here: the probe parks tasks too, and one of those would look like
-            // a park that had already lasted [PARK_MAX].
-            val level = battery(ctx)
-            val since = PickupPark.sinceMs()
-            when {
-                since > 0 && SystemClock.uptimeMillis() - since > PARK_MAX -> {
-                    Xp.log(TAG + "parked for ${PARK_MAX / 60_000} min")
-                    PickupPark.releaseFrom("parked long enough")
-                }
-                level in 0..PickupObserve.intervals.skipPercent -> {
-                    Xp.log(TAG + "battery $level%: the wait is over")
-                    PickupPark.releaseFrom("battery $level%")
-                }
-                tired(ctx) -> {
-                    next(task, g)
-                    return
-                }
-            }
-            parkedReads++
-        }
-        // Not while the screen is off or the phone is locked, parked or not: the page is not being
-        // looked at, and a parked order waiting behind a locked screen is where these reads spent
-        // most of their time. ColorOS skips them there too. The timer is left running, so the first
-        // read after the phone is picked up is at most one interval away - the lock screen's island
-        // shows the state as of the last read until then.
+        // Not while the screen is off or the phone is locked: these are the reads of a page the user
+        // has open or has just left, and with the phone down nobody is reading it. (An order being
+        // waited on is the observer's, and keeps ColorOS's rule: locked skips, merely dark does not.)
+        // The timer is left running, so the first read after the phone is picked up is at most one
+        // interval away.
         val power = ctx.getSystemService(android.os.PowerManager::class.java)
         val keyguard = ctx.getSystemService(android.app.KeyguardManager::class.java)
         if (power?.isInteractive == false || keyguard?.isKeyguardLocked == true) {
@@ -510,14 +578,14 @@ internal object PickupCodeIsland {
                     r == null -> "no code in ${nodes.size} texts (${ms}ms)"
                     else -> "code found in ${nodes.size} texts (${ms}ms)"
                 }
+                lastCode = r
+                codeOnFront = r != null && PickupParse.frontPage(nodes).any { it.text.contains(r.code) }
                 if (r != null) {
                     lastHead = ""
                     Xp.d(TAG + "$brand: ${r.code} ${r.label} ${r.status} ${r.store}")
-                    PickupIsland.show(r, PickupIsland.Page(task, host, brand, oemRule, program?.scheme.orEmpty()))
-                    // §6.6, and one state further: an order that is ready to collect is nothing to
-                    // wait for any more, so the park ends there and not only at 已完成 - the wait is
-                    // for the change, and the user is on their way to the counter.
-                    if (PickupParse.isOver(r.status)) PickupPark.releaseFrom("the order reads ${r.status}")
+                    askXiaoai(ctx, r)
+                    PickupIsland.show(enrich(r), PickupIsland.Page(task, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
+                    if (!inFront) maybePark("code read while away")
                 } else if (nodes != null) {
                     val front = nodes.maxOfOrNull { it.page } ?: -1
                     lastHead = "page $front: " + nodes.filter { it.page == front }.take(12)
@@ -535,25 +603,13 @@ internal object PickupCodeIsland {
     }
 
     private fun next(task: Int, g: Int) {
-        if (g != gen || task != taskId) return
+        if (g != gen || task != taskId || PickupObserver.observing(task)) return
         val gap = when {
-            PickupPark.parked() == task -> parkedGap()
             reads <= QUICK -> QUICK_GAP
             inFront -> EVERY
             else -> SLOW
         }
         bg.postDelayed({ read(task, g) }, READ, gap)
-    }
-
-    /** OPPO's intervals for an order being waited on: what it is doing decides how often to look. */
-    private fun parkedGap(): Long {
-        val cfg = PickupObserve.intervals
-        val s = PickupIsland.status
-        if (PickupParse.isReady(s)) return cfg.ready
-        if (parkedReads <= 1) return cfg.firstAfter
-        val gap = if (PickupParse.isMaking(s)) cfg.making else cfg.ordered
-        val level = Main.appContext()?.let { battery(it) } ?: -1
-        return if (level in 1 until cfg.lowBatteryPercent) maxOf(gap, cfg.lowBattery) else gap
     }
 
     /**
@@ -592,6 +648,13 @@ internal object PickupCodeIsland {
         }
         return r
     }
+
+    /**
+     * The brand the card shows: the matched rule's own name (`brand_name`, else `app_name`) as
+     * ColorOS's card has it - 「益禾堂」, where [brand] is the task's label, 「益禾堂手机点单」, which is
+     * what pages are matched by and not a name to show (2026-10-13). [brand] when no rule matched.
+     */
+    private fun shownBrand(): String = oemRule?.displayName()?.takeIf { it.isNotEmpty() } ?: brand
 
     /**
      * The brand of the page being read: its entry in ColorOS's rules, and what to call it.

@@ -170,7 +170,9 @@ internal object PickupParse {
             label = own?.label?.takeIf { it.isNotEmpty() } ?: "取餐码",
             status = if (same || at < 0) own?.status else status(t, at),
             store = if (same || at < 0) own?.store else store(t, at),
-            product = oem.product.ifEmpty { null },
+            // The order's own item row first; the recognizer's product only names what its list of
+            // each brand's best sellers holds (益禾堂's has 芋泥啵啵牛奶, the order was 芋泥啵啵奶绿).
+            product = product(t) ?: own?.product ?: oem.product.ifEmpty { null },
             oemStatus = oem.status.ifEmpty { null },
             temperature = oem.temperature.ifEmpty { null },
             strong = same && own?.strong == true,
@@ -183,7 +185,7 @@ internal object PickupParse {
             LABEL_AND_CODE.find(t[i])?.let { m ->
                 val code = m.groupValues[2].removePrefix("#")
                 if (plausible(t, i, code)) {
-                    return Result(code, m.groupValues[1], status(t, i), store(t, i), strong = true)
+                    return Result(code, m.groupValues[1], status(t, i), store(t, i), product(t), strong = true)
                 }
             }
         }
@@ -199,7 +201,8 @@ internal object PickupParse {
                 for (j in intArrayOf(i - d, i + d)) {
                     if (j in t.indices && isCode(t, j, i)) {
                         val code = t[j].removePrefix("#")
-                        return Result(code, t[i].trimEnd(':', '：'), status(t, j), store(t, j), strong = strong)
+                        return Result(code, t[i].trimEnd(':', '：'), status(t, j), store(t, j), product(t),
+                            strong = strong)
                     }
                 }
             }
@@ -256,12 +259,79 @@ internal object PickupParse {
         return null
     }
 
+    // ------------------------------------------------------------------ the item
+
+    /** A quantity in a node of its own: 「x1」 「X1」 「×2」. */
+    private val QTY = Regex("^[xX×*]\\s?\\d{1,3}$")
+    /** A quantity split over two nodes, 「1」 then 「份」. */
+    private val QTY_NUM = Regex("^\\d{1,3}$")
+    private val QTY_UNIT = setOf("份", "杯", "件", "个")
+    /** Brackets, commas, slashes and the like, alone in a node: spec lists are drawn out of these. */
+    private val PUNCT = Regex("^[\\[\\]【】()（）,，、/·.\\s-]*$")
+    /** A price or a bare number: 「8.9」 「¥」 「￥22」. */
+    private val PRICE = Regex("^[¥￥$]?\\s*[\\d.]*$")
+    /** One option of a drink: 少冰, 三分糖, 默认糖, 常温, 中杯 ... but not 草莓牛乳冰, which is a drink. */
+    private val OPTION = Regex("^(少|去|多|正常|标准|默认|微|半|无|全|三分|五分|七分|不另外加|不加|加)?(冰|糖|热|温|常温)$|^(大|中|小|超大)杯$")
+    /** Words that are never the item: the order's own headings and totals. */
+    private val NOT_ITEM = listOf("订单", "取餐", "取单", "实付", "合计", "小计", "共", "优惠", "配送", "打包", "备注", "发票")
+
+    /**
+     * The first item on the order, out of its own row: every brand lists an item as its name, then
+     * what it was made with, then how many - 「香柠蓝莓霸气桶 / ¥ / 8.9 / 少冰/三分糖 / X1」 (蜜雪冰城),
+     * 「轻因·单丛柠檬奶 / 热量≈186kcal/杯 / 中杯,少冰,不另外加糖 / x1」 (霸王茶姬),
+     * 「芋泥啵啵奶绿 / [ / ] / , / 默认糖 / x1」 (益禾堂), 「人气经典随心配 / 1 / x / 高达吉士双牛堡 /
+     * … / 1 / 份」 (麦当劳, whose meal lists what is in it as 「1 x <item>」). So the quantity is found and
+     * the row is walked back over the options, prices, punctuation and a meal's parts to the name.
+     *
+     * ColorOS's card gets the name from its cloud; on the phone it only matches a list of each brand's
+     * best sellers, which the order above is not on. Null when there is no row of that shape.
+     */
+    fun product(t: List<String>): String? {
+        for (q in t.indices) {
+            val s = t[q].trim()
+            val isQty = QTY.matches(s) || (QTY_NUM.matches(s) && t.getOrNull(q + 1)?.trim() in QTY_UNIT)
+            if (!isQty) continue
+            var k = q - 1
+            while (k >= 0 && k >= q - 10) {
+                val c = t[k].trim()
+                when {
+                    // A meal's part, 「1 / x / <item>」: the part, its 「x」 and its count are passed over.
+                    k >= 1 && t[k - 1].trim().let { it == "x" || it == "X" || it == "×" } -> k -= 2
+                    PUNCT.matches(c) || PRICE.matches(c) || QTY.matches(c) || QTY_NUM.matches(c) ||
+                        c in QTY_UNIT || c == "x" || c == "X" || c == "×" -> {}
+                    spec(c) -> {}
+                    item(c) -> return c
+                    else -> break
+                }
+                k--
+            }
+        }
+        return null
+    }
+
+    /** What an item was made with: a list of options, a single option, or its calories. */
+    private fun spec(c: String): Boolean =
+        c.contains("kcal") || c.contains("热量") || c.contains("≈") ||
+            OPTION.matches(c) || c.split(',', '，', '/', '、', ' ').filter { it.isNotBlank() }.let { parts ->
+                parts.size > 1 && parts.all { it.length <= 8 }
+            }
+
+    private fun item(c: String): Boolean =
+        c.length in 2..24 && c.any { it.code >= 0x4E00 && it.code <= 0x9FFF } &&
+            NOT_ITEM.none { c.contains(it) } && STATUSES.none { c.contains(it) } &&
+            !c.endsWith("店") && !c.endsWith("餐厅")
+
+    /** A shop named in brackets after its brand: 「蜜雪冰城（深圳工业园店）」, 「麦当劳(示例广场餐厅)」. */
+    private val BRACKETED = Regex(".+?[（(](.+(?:店|餐厅))[）)]")
+
     /** The shop: a short text ending in 店 or 餐厅, 「南门店-No.927639」 read as 「南门店」. */
     private fun store(t: List<String>, at: Int): String? {
         var best: String? = null
         var bestD = Int.MAX_VALUE
         for (k in t.indices) {
-            val s = t[k].substringBefore("-No.").trimEnd('>', ' ')
+            var s = t[k].substringBefore("-No.").trimEnd('>', ' ')
+            // 「蜜雪冰城（深圳工业园店）」: the brand, and the shop in brackets after it (2026-10-13).
+            BRACKETED.matchEntire(s)?.let { s = it.groupValues[1].trim() }
             if (s.length !in 3..24 || !(s.endsWith("店") || s.endsWith("餐厅"))) continue
             if (s.contains("联系") || s.contains("致电") || s.contains("附近") || s.contains("订单") ||
                 s.startsWith("到店") || s.startsWith("家")) continue
