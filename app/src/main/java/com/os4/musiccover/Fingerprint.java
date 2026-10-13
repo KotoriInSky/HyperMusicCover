@@ -196,8 +196,8 @@ final class Fingerprint {
                 return;
             }
             android.util.AtomicFile f = new android.util.AtomicFile(
-                    new java.io.File(c.getFilesDir(), Main.STATE_FILE));
-            if (!Main.stateExists(f)) return;
+                    new java.io.File(c.getFilesDir(), ModuleState.STATE_FILE));
+            if (!ModuleState.stateExists(f)) return;
             for (String line : new String(f.readFully()).split("\n")) {
                 if (line.startsWith("hidefp=")) {
                     sHideFp = "1".equals(line.substring(7).trim());

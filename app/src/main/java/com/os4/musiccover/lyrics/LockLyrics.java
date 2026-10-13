@@ -1,4 +1,5 @@
 package com.os4.musiccover.lyrics;
+import com.os4.musiccover.ModuleState;
 import com.os4.musiccover.MediaCard;
 import com.os4.musiccover.ClockCollapse;
 import com.os4.musiccover.CoverCardLayer;
@@ -1055,7 +1056,7 @@ public final class LockLyrics {
             boolean fromSession = source == LyricSource.SRC_LYRIC_INFO;
             if (fromSession != sSawSessionLyric) {
                 sSawSessionLyric = fromSession;
-                Main.saveState();
+                ModuleState.saveState();
             }
         }
         if (source == LyricSource.SRC_LYRIC_INFO) sSessionPkg = pkgOf(want);
@@ -1304,7 +1305,7 @@ public final class LockLyrics {
         sTapHidden = !sTapHidden;
         Xp.log(TAG + "two-finger tap: lyrics " + (sTapHidden ? "hidden" : "shown"));
         show(!sTapHidden, key, c, "hidden by the two-finger tap");
-        Main.saveState();
+        ModuleState.saveState();
     }
 
     /**

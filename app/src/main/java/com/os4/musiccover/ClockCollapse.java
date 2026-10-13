@@ -1215,7 +1215,7 @@ public final class ClockCollapse {
                 + " (was " + Main.r1(sFullNatural) + " for " + sFullStyle + ")");
         sFullStyle = style;
         sFullNatural = unit;
-        Main.saveState();
+        ModuleState.saveState();
     }
 
     /** For the state file: "style|unit", or null. */

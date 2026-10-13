@@ -386,7 +386,7 @@ public final class MediaCard {
         sCardH = h;
         Xp.log(Main.TAG + "media card at " + sCardL + "," + sCardT + " " + sCardW + "x" + sCardH);
         CoverCardLayer.refresh();
-        Main.saveStateSoon();
+        ModuleState.saveStateSoon();
     }
 
     /** How long between attempts to read the media card's radius, for a phone with no card. */

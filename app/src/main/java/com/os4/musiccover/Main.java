@@ -333,7 +333,6 @@ public class Main extends XposedModule {
     public static Context appContext() {
         return sAppCtx;
     }
-    static final String STATE_FILE = "mc_cover_state";
 
     /** The album cover is the wallpaper: depth cut-out hidden and the clock collapsed. */
     static volatile boolean sCoverMode;
@@ -382,7 +381,7 @@ public class Main extends XposedModule {
      * under CLOCK_HEIGHT_MIN_DP is one of the old ones, and the only thing that says what it
      * was worth is the box it used to multiply, so it waits for the first one measured.
      */
-    private static volatile float sClockLegacyK = Float.NaN;
+    static volatile float sClockLegacyK = Float.NaN;
     /**
      * The collapsed clock's size as a fraction of the style's own full-size clock - the one the
      * lock screen shows with cover mode off, before any notification squeezes it. 1 = unchanged.
@@ -552,7 +551,7 @@ public class Main extends XposedModule {
         }
     };
 
-    private static void refreshNotificationSink() {
+    static void refreshNotificationSink() {
         main().removeCallbacks(REFRESH_NOTIFICATION_SINK);
         main().post(REFRESH_NOTIFICATION_SINK);
     }
@@ -1844,251 +1843,6 @@ public class Main extends XposedModule {
         }
     }
 
-    public static void saveState() {
-        if (sAppCtx == null) return;
-        // Never while loadState is still walking the file. Some of the setters it applies values
-        // through save as part of their own contract - setClockHeightDp does - and a save taken
-        // mid-parse writes every key the parse has NOT reached yet at its DEFAULT. The keys that
-        // go through a setter sit ahead of mctap, tap, lyrickeep and lyrichdr in the file, so
-        // restoring a good file once quietly rewrote it with those four off. The run itself looked
-        // fine, because the loop went on to fill memory in correctly from the copy it had already
-        // read; the damage only showed at the NEXT SystemUI start, which is why it read as
-        // "installing the app turns some switches off". loadState saves once at the end instead.
-        if (sLoading) return;
-        android.util.AtomicFile af = new android.util.AtomicFile(
-                new java.io.File(sAppCtx.getFilesDir(), STATE_FILE));
-        java.io.FileOutputStream f = null;
-        try {
-            f = af.startWrite();
-            f.write(("cover=" + (sCoverMode ? 1 : 0)
-                    + "\ncoverfeature=" + (sCoverFeatureOn ? 1 : 0)
-                    + "\nbias=" + sBias
-                    // Only the mode. The square's size, place and corners, the clock's offset,
-                    // the glass end and the spring are all fixed now, and loadState does not read
-                    // any of them - writing them down would be a value nothing could ever have
-                    // set. See loadState.
-                    + "\ncoverstyle=" + sCoverCardStyle.mode
-                    // A pending pre-dp value is written as itself: it cannot be converted until
-                    // a confirmed box exists, and writing the default over it would lose the
-                    // setting the user actually had.
-                    + "\nclock=" + (Float.isNaN(sClockLegacyK) ? sClockHeightDp : sClockLegacyK)
-                    + (Float.isNaN(sClockSize) ? "" : "\nclocksize=" + sClockSize)
-                    // A measurement, like cardrect: the full clock the size is a fraction of.
-                    + (ClockCollapse.fullUnitState() == null ? ""
-                            : "\nclockfull=" + ClockCollapse.fullUnitState())
-                    + "\nmctap=" + (sMcTitleTap ? 1 : 0)
-                    + "\nmcpage=" + (sMcPageBtn ? 1 : 0)
-                    + "\ntap=" + (sTapToggle ? 1 : 0)
-                    + ShadeLayer.dumpCfg()
-                    + "\nfadewp=" + (sFadeWp ? 1 : 0)
-                    + "\nmotion=" + (MotionCover.sEnabled ? 1 : 0)
-                    + "\nvcfade=" + (sVideoFade ? 1 : 0)
-                    + "\nfsmode2=" + sFadeMode
-                    // A measurement rather than a setting, and kept for the same reason the
-                    // geometry is: a fresh SystemUI should not have to relearn it to use it.
-                    + "\ncovergap=" + CoverPush.sCoverFadeGapMs
-                    + "\nhidefp=" + (Fingerprint.sHideFp ? 1 : 0)
-                    // The lyrics master switch, a setting again (2026-10-14). A new key rather than
-                    // the old "lyrics": a file from when that one was written may still hold a
-                    // 0 nobody remembers setting. lyrichidden is the two-finger tap's page.
-                    + "\nlyricmaster=" + (LockLyrics.sEnabled ? 1 : 0)
-                    + "\ncolon=" + (HyperTweaks.sForceColon ? 1 : 0)
-                    + "\nseekglow=" + (HyperTweaks.sBarGlow ? 1 : 0)
-                    + "\nlyrickeep=" + (LockLyrics.sKeepOn ? 1 : 0)
-                    + "\nlyrichidden=" + (LockLyrics.sTapHidden ? 1 : 0)
-                    + "\nlyrichdr=" + (LockLyrics.sHdr ? 1 : 0)
-                    // Written as 1 or 0 like the rest, but read back as the default when absent:
-                    // the key did not exist before this setting did, and the lyrics are supposed
-                    // to look the way they always have on a file that predates it.
-                    + "\nlyrictrans=" + (LockLyrics.sTrans ? 1 : 0)
-                    + "\naodsmall=" + (sAodSmall ? 1 : 0)
-                    // Off when absent, which is what every file from before it had.
-                    + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
-                    // 0 left, 1 centre, 2 right, and left when the key is absent: a file from
-                    // before this setting is one where the lyrics always sat left.
-                    + "\nlyricalign=" + LockLyrics.sAlign
-                    // The band's five values are fixed now and are not written; see LyricStyle.
-                    // Not a setting - whether the last lookup got its lyric from the session.
-                    // Kept across restarts so the settings page does not accuse a working
-                    // provider module of doing nothing merely because nothing has played yet;
-                    // updated in both directions so it stops claiming one is working once it
-                    // is not.
-                    + "\nsawlyric=" + (LockLyrics.sSawSessionLyric ? 1 : 0)
-                    + "\nfpavoid=" + Fingerprint.sFpAvoid
-                    // On when absent: the trip's page and island shipped before their switch.
-                    + "\ntransit=" + (AmapTransitScene.sOn ? 1 : 0)
-                    + "\npickup=" + (PickupCodeIsland.sOn ? 1 : 0)
-                    // Read back at startup, so it has to be written too: without it
-                    // `--ez card false` lasted until the next SystemUI restart.
-                    + "\ncard=" + (PickupCodeIsland.sCard ? 1 : 0)
-                    + "\nxiaoai=" + (PickupCodeIsland.sXiaoai ? 1 : 0)
-                    + "\nminicfg=" + android.util.Base64.encodeToString(
-                            MiniPlayerRuntime.configJson(sAppCtx).getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                            android.util.Base64.NO_WRAP)
-                    // Not a setting - a measurement. Kept so the app's preview is to scale from
-                    // the first frame after a SystemUI restart, instead of only once the phone
-                    // has been locked again.
-                    + "\ncardrect=" + MediaCard.sCardL + "," + MediaCard.sCardT + "," + MediaCard.sCardW + "," + MediaCard.sCardH
-                    + "\n").getBytes());
-            af.finishWrite(f);
-        } catch (Throwable t) {
-            if (f != null) af.failWrite(f);
-            Xp.w(TAG + "saveState failed: " + t);
-        }
-    }
-
-    private static final Runnable sSaveState = new Runnable() {
-        @Override
-        public void run() { saveState(); }
-    };
-
-    /**
-     * For values that change as fast as the screen draws. The card rectangle is sampled from a
-     * pre-draw listener while the card is animating in, and writing the file on every frame of
-     * that would be a file write per frame for a number that settles in a few hundred ms.
-     */
-    static void saveStateSoon() {
-        main().removeCallbacks(sSaveState);
-        main().postDelayed(sSaveState, 500L);
-    }
-
-    /** Set while the file is being applied, to keep a setter from writing a half-read state back. */
-    private static volatile boolean sLoading;
-
-    /** The file, or the backup an interrupted write leaves (AtomicFile.exists is not in the SDK). */
-    static boolean stateExists(android.util.AtomicFile f) {
-        java.io.File base = f.getBaseFile();
-        return base.exists() || new java.io.File(base.getPath() + ".bak").exists();
-    }
-
-    private static void loadState() {
-        if (sAppCtx == null) return;
-        // An AtomicFile, so a SystemUI killed in the middle of saveState leaves the last whole
-        // file behind rather than a truncated one that silently resets every setting.
-        android.util.AtomicFile f = new android.util.AtomicFile(
-                new java.io.File(sAppCtx.getFilesDir(), STATE_FILE));
-        if (!stateExists(f)) return;
-        boolean cover = false;
-        sLoading = true;
-        try {
-            String body = new String(f.readFully()).trim();
-            // The first version of this file was a bare "1"/"0"; keep reading those so an
-            // upgrade does not silently drop a cover that is still on the phone.
-            if (body.length() <= 1) {
-                cover = "1".equals(body);
-            } else {
-                for (String line : body.split("\n")) {
-                    int eq = line.indexOf('=');
-                    if (eq <= 0) continue;
-                    String k = line.substring(0, eq).trim(), v = line.substring(eq + 1).trim();
-                    // Every key in its own try. The loop's outer catch RETURNS, so without this
-                    // one unreadable value takes every setting BELOW it in the file down with it,
-                    // silently - and the log would say "loadState failed" without ever naming the
-                    // key. One bad number should cost its own setting and nothing else.
-                    try {
-                        if ("cover".equals(k)) cover = "1".equals(v);
-                        else if ("coverfeature".equals(k)) sCoverFeatureOn = "1".equals(v);
-                        // "auto" was a stored setting; following the card is unconditional now.
-                        else if ("bias".equals(k)) sBias = Float.parseFloat(v);
-                        else if ("coverstyle".equals(k)) sCoverCardStyle =
-                                sCoverCardStyle.with("mode", Float.parseFloat(v));
-                        // covercardfill, covercardpos, covercardcorner and the dp covercardsize
-                        // before them are not read. The square's size, place and corners are
-                        // fixed, and a file from before that is not allowed to hold them open -
-                        // see CoverCardStyle. coverstyle IS read: which of the two shapes the
-                        // cover takes is still the user's.
-                        else if ("clock".equals(k)) setClockHeightDp(Float.parseFloat(v));
-                        else if ("clockfull".equals(k)) ClockCollapse.restoreFullUnit(v);
-                        else if ("clocksize".equals(k)) setClockSize(Float.parseFloat(v));
-                        // clockoff, glass and spring are not read: the clock's offset, the glass
-                        // clock's end and the transition's spring are all fixed. Each is still
-                        // reachable from its own op, for the session.
-                        else if ("mctap".equals(k)) sMcTitleTap = "1".equals(v);
-                        else if ("mcpage".equals(k)) sMcPageBtn = "1".equals(v);
-                        else if ("tap".equals(k)) sTapToggle = "1".equals(v);
-                        else if ("fadewp".equals(k)) sFadeWp = "1".equals(v);
-                        else if ("motion".equals(k)) MotionCover.sEnabled = "1".equals(v);
-                        else if ("vcfade".equals(k)) sVideoFade = "1".equals(v);
-                        else if ("fsmode2".equals(k)) sFadeMode = Integer.parseInt(v);
-                        else if ("covergap".equals(k)) CoverPush.sCoverFadeGapMs = Long.parseLong(v);
-                        else if ("hidefp".equals(k)) Fingerprint.sHideFp = "1".equals(v);
-                        else if ("colon".equals(k)) HyperTweaks.sForceColon = "1".equals(v);
-                        else if ("seekglow".equals(k)) HyperTweaks.sBarGlow = "1".equals(v);
-                        // The old "lyrics" key is not read, see saveState; lyricmaster is.
-                        else if ("lyricmaster".equals(k)) LockLyrics.sEnabled = "1".equals(v);
-                        else if ("lyrickeep".equals(k)) LockLyrics.sKeepOn = "1".equals(v);
-                        else if ("lyrichidden".equals(k)) LockLyrics.sTapHidden = "1".equals(v);
-                        else if ("lyrichdr".equals(k)) LockLyrics.sHdr = "1".equals(v);
-                        else if ("lyrictrans".equals(k)) LockLyrics.sTrans = "1".equals(v);
-                        else if ("aodsmall".equals(k)) sAodSmall = "1".equals(v);
-                        else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
-                        // Clamped in the setter; absent or unreadable means left, see saveState.
-                        else if ("lyricalign".equals(k)) LockLyrics.setAlign(Integer.parseInt(v));
-                        // The dp lyricoff and lyricgap from before the shares are dropped: what
-                        // they meant depends on the room, which is not known here. lyricfill,
-                        // lyricpos, lyricside, lyricsize and lyricweight are dropped with them:
-                        // the band and its type are fixed, see LyricStyle.DEFAULT.
-                        else if ("sawlyric".equals(k)) {
-                            LockLyrics.sSawSessionLyric = "1".equals(v);
-                        }
-                        else if ("fpavoid".equals(k)) Fingerprint.sFpAvoid = Integer.parseInt(v);
-                        else if ("transit".equals(k)) AmapTransitScene.sOn = "1".equals(v);
-                        else if ("pickup".equals(k)) PickupCodeIsland.sOn = "1".equals(v);
-                        else if ("card".equals(k)) PickupCodeIsland.sCard = "1".equals(v);
-                        else if ("xiaoai".equals(k)) PickupCodeIsland.sXiaoai = "1".equals(v);
-                        // Not applyConfig: this file is migration data, and a config the user has
-                        // since changed must win over what was saved here (see restoreLegacyConfig).
-                        else if ("minicfg".equals(k)) MiniPlayerRuntime.restoreLegacyConfig(sAppCtx,
-                                new String(android.util.Base64.decode(v, android.util.Base64.DEFAULT),
-                                        java.nio.charset.StandardCharsets.UTF_8));
-                        // The whole shade settings page, in one prefix - the keys and their
-                        // meaning belong to ShadeLayer.configure.
-                        else if (k.startsWith("shade_")) {
-                            ShadeLayer.configure(k.substring(6), Integer.parseInt(v));
-                        }
-                        else if ("cardrect".equals(k)) {
-                            String[] r = v.split(",");
-                            // Same sanity check the sampler applies, because a file written
-                            // before it existed can hold a reading taken from the shade.
-                            if (r.length == 4 && Integer.parseInt(r[1]) >= sScreenH / 3) {
-                                MediaCard.sCardL = Integer.parseInt(r[0]); MediaCard.sCardT = Integer.parseInt(r[1]);
-                                MediaCard.sCardW = Integer.parseInt(r[2]); MediaCard.sCardH = Integer.parseInt(r[3]);
-                            }
-                        }
-                    } catch (Throwable t) {
-                        Xp.log(TAG + "setting unreadable, keeping the default: "
-                                + k + "=" + v + " (" + t + ")");
-                    }
-                    // "offdelay" was the pause timer, before the card became the switch.
-                }
-            }
-        } catch (Throwable t) {
-            Xp.w(TAG + "loadState failed: " + t);
-            return;
-        } finally {
-            sLoading = false;
-        }
-        // The mode fpavoid has just come back to. A policy flow the OEM's combine already had
-        // attached was made with whatever this process started at - 0, "leave it to the system" -
-        // and NotificationSink.withAvoidance hands the decision to that flow whenever it carries
-        // one, so a phone restarted with 始终下沉 saved sank nothing until the setting was touched
-        // again. Nothing else refreshed this on the way up: 展开背景时下移通知 used to, by
-        // accident, on its scene changes and only while it was switched on (2026-10-09).
-        refreshNotificationSink();
-        Xp.log(TAG + "state restored: cover=" + cover + " bias=" + sBias);
-        if (cover) {
-            enterCoverMode(false);
-            // The composed cover the shade reveals does not survive a restart, and the wallpaper
-            // process has no reason to ask for art again - it kept its own texture on disk and
-            // believes it already has one. Without this the lock screen comes back correct and
-            // the shade stays empty until the next track change. Non-fresh, so it is not
-            // suppressed for being the same artwork as last time.
-            CoverPush.pushArtAsync(true, false);
-        }
-        // Always follow the card, whatever the file said.
-        setAuto(true);
-    }
-
     private static synchronized void registerReceiver(Context ctx) {
         if (sReceiverRegistered) {
             return;
@@ -2256,7 +2010,7 @@ public class Main extends XposedModule {
                         sCoverCardStyle = next;
                         CoverCardLayer.style(next);
                         CoverCardLayer.refresh();
-                        saveStateSoon();
+                        ModuleState.saveStateSoon();
                         if (sCoverMode && modeChanged) {
                             if (next.mode == CoverCardStyle.CARD) {
                                 CoverCardLayer.attach(CoverPush.coverLayer());
@@ -2324,7 +2078,7 @@ public class Main extends XposedModule {
                         if (i.hasExtra("pagebtn")) {
                             sMcPageBtn = i.getBooleanExtra("pagebtn", false);
                         }
-                        saveState();
+                        ModuleState.saveState();
                         Xp.log(TAG + "media card hideArt=" + sMcHideArt
                                 + " artInLyrics=" + sMcArtInLyrics
                                 + " titleTap=" + sMcTitleTap + " pageBtn=" + sMcPageBtn);
@@ -2344,28 +2098,28 @@ public class Main extends XposedModule {
                     } else if ("lyrics".equals(op)) {
                         boolean on = i.getBooleanExtra("on", !LockLyrics.sEnabled);
                         LockLyrics.setEnabled(on, sTrackKey, sWatched);
-                        saveState();
+                        ModuleState.saveState();
                     } else if ("lyrichdr".equals(op)) {
                         LockLyrics.sHdr = i.getBooleanExtra("on", !LockLyrics.sHdr);
                         Xp.log(TAG + "lyrics HDR highlight: " + LockLyrics.sHdr);
                         LockLyrics.refresh();
-                        saveState();
+                        ModuleState.saveState();
                     } else if ("lyrictrans".equals(op)) {
                         LockLyrics.sTrans = i.getBooleanExtra("on", !LockLyrics.sTrans);
                         Xp.log(TAG + "lyrics translations: " + LockLyrics.sTrans);
                         // The view notices the switch itself and lays the lines out again around
                         // it; refresh only has to start the frames that let it.
                         LockLyrics.refresh();
-                        saveState();
+                        ModuleState.saveState();
                     } else if ("lyricroma".equals(op)) {
                         LockLyrics.sRoma = i.getBooleanExtra("on", !LockLyrics.sRoma);
                         Xp.log(TAG + "lyrics romanisations: " + LockLyrics.sRoma);
                         LockLyrics.refresh();
-                        saveState();
+                        ModuleState.saveState();
                     } else if ("lyricstyle".equals(op)) {
                         String key = i.getStringExtra("key");
                         if (LockLyrics.setStyle(key, i.getFloatExtra("v", Float.NaN))) {
-                            saveStateSoon();
+                            ModuleState.saveStateSoon();
                         }
                     } else if ("lyricalign".equals(op)) {
                         // Same shape as the translation switch: the view notices the change and
@@ -2375,7 +2129,7 @@ public class Main extends XposedModule {
                         if (LockLyrics.setAlign(i.getIntExtra("v", LockLyrics.sAlign))) {
                             Xp.log(TAG + "lyrics alignment: " + LockLyrics.sAlign);
                             LockLyrics.refresh();
-                            saveStateSoon();
+                            ModuleState.saveStateSoon();
                         }
                     } else if ("lyricinfo".equals(op)) {
                         // The playing session's metadata, every string key, with lyricInfo written
@@ -2385,7 +2139,7 @@ public class Main extends XposedModule {
                         LockLyrics.sKeepOn = i.getBooleanExtra("on", !LockLyrics.sKeepOn);
                         Xp.log(TAG + "lyrics keep the screen on: " + LockLyrics.sKeepOn);
                         LockLyrics.refresh();
-                        saveState();
+                        ModuleState.saveState();
                     } else if ("lyricdemo".equals(op)) {
                         // Plays a database file by id on its own clock, whatever is playing:
                         //   --es id 101126 [--ez am true]   or   --ez clear true
@@ -2441,7 +2195,7 @@ public class Main extends XposedModule {
                         // cache; either way the answer is the state. See MotionCover.
                         if (i.hasExtra("on")) {
                             MotionCover.sEnabled = i.getBooleanExtra("on", false);
-                            saveState();
+                            ModuleState.saveState();
                             Xp.log(TAG + "motion covers " + (MotionCover.sEnabled ? "on" : "off"));
                             // The cover on screen now gets one, or loses its own.
                             if (sCoverMode) CoverPush.pushArtAsync(true, false);
@@ -2602,7 +2356,7 @@ public class Main extends XposedModule {
                     } else if ("colon".equals(op)) {
                         HyperTweaks.sForceColon = i.getBooleanExtra("on",
                                 !HyperTweaks.sForceColon);
-                        saveState();
+                        ModuleState.saveState();
                         // The always-on display draws its own clock in its own process, which
                         // can read neither this flag nor the file it is saved in, so the switch
                         // is mirrored somewhere both can see.
@@ -2613,7 +2367,7 @@ public class Main extends XposedModule {
                                 + (HyperTweaks.sForceColon ? "on" : "off"));
                     } else if ("seekglow".equals(op)) {
                         HyperTweaks.sBarGlow = i.getBooleanExtra("on", !HyperTweaks.sBarGlow);
-                        saveState();
+                        ModuleState.saveState();
                         // The card on screen was built before this switch was read, so it is
                         // changed in place - lit as applyBarGlow lights a new one, or put back to
                         // the flat bar it was built as (HyperTweaks.clearBarGlow).
@@ -2625,12 +2379,12 @@ public class Main extends XposedModule {
                         setResultData((HyperTweaks.sBarGlow ? "on " : "off ") + r);
                     } else if ("hidefp".equals(op)) {
                         Fingerprint.sHideFp = i.getBooleanExtra("on", !Fingerprint.sHideFp);
-                        saveState();
+                        ModuleState.saveState();
                         Xp.log(TAG + "hide fingerprint " + (Fingerprint.sHideFp ? "on" : "off"));
                         Fingerprint.applyHideFp();
                     } else if ("aodclock".equals(op)) {
                         sAodSmall = i.getBooleanExtra("small", !sAodSmall);
-                        saveState();
+                        ModuleState.saveState();
                         // The pose a held doze was drawn at is the small one, and the fall into an
                         // OEM doze aims at that remembered pose rather than at the live clock. Left
                         // standing, turning the setting off would still land on the small clock
@@ -2640,19 +2394,19 @@ public class Main extends XposedModule {
                                 + " (full-screen AOD now: " + fullAodOn() + ")");
                     } else if ("fpavoid".equals(op)) {
                         Fingerprint.sFpAvoid = i.getIntExtra("mode", 0);
-                        saveState();
+                        ModuleState.saveState();
                         refreshNotificationSink();
                         Xp.log(TAG + "fingerprint avoid mode=" + Fingerprint.sFpAvoid);
                     } else if ("fadewp".equals(op)) {
                         sFadeWp = i.getBooleanExtra("on", !sFadeWp);
-                        saveState();
+                        ModuleState.saveState();
                         Xp.log(TAG + "wallpaper crossfade " + (sFadeWp ? "on" : "off"));
                     } else if ("vcfade".equals(op)) {
                         // Off by default: see the note on sVideoFade. Setting it here re-pushes
                         // the art, because the cover video that is on the device right now was
                         // built with whichever value was in force when it was pushed.
                         sVideoFade = i.getBooleanExtra("on", !sVideoFade);
-                        saveState();
+                        ModuleState.saveState();
                         Xp.log(TAG + "cover video crossfade " + (sVideoFade ? "on" : "off")
                                 + (sCoverMode ? " - re-pushing the art" : ""));
                         if (sCoverMode) CoverPush.pushArtAsync(true, false);
@@ -2662,7 +2416,7 @@ public class Main extends XposedModule {
                         int mode = i.getIntExtra("mode", -1);
                         sFadeMode = mode >= 0 && mode <= FADE_MODE_STRETCH
                                 ? mode : (sFadeMode + 1) % (FADE_MODE_STRETCH + 1);
-                        saveState();
+                        ModuleState.saveState();
                         Xp.log(TAG + "cover fade mode = " + CoverPush.fadeModeName()
                                 + " (0 off, 1 hold for the wallpaper window, 2 stretch by the"
                                 + " last measured gap " + CoverPush.sCoverFadeGapMs + "ms)");
@@ -2695,7 +2449,7 @@ public class Main extends XposedModule {
                         if (sCoverMode) reassertAodDim();
                     } else if ("tap".equals(op)) {
                         sTapToggle = i.getBooleanExtra("on", !sTapToggle);
-                        saveState();
+                        ModuleState.saveState();
                         Xp.log(TAG + "tap-to-toggle " + (sTapToggle ? "on" : "off"));
                     } else if ("clockshot".equals(op)) {
                         // For telling the two candidate causes apart by hand: with this off the
@@ -2709,20 +2463,20 @@ public class Main extends XposedModule {
                         setBias(i.getFloatExtra("v", DEFAULT_BIAS));
                     } else if ("clockscale".equals(op)) {
                         setClockHeightDp(i.getFloatExtra("v", DEFAULT_CLOCK_HEIGHT_DP));
-                        saveState();
+                        ModuleState.saveState();
                         // A settled clock has no frames left to carry a new size on; ask for one.
                         ClockCollapse.refresh();
                     } else if ("clocksize".equals(op)) {
                         setClockSize(i.getFloatExtra("v", 1f));
-                        saveState();
+                        ModuleState.saveState();
                         ClockCollapse.refresh();
                     } else if ("clockoffset".equals(op)) {
                         setClockOffsetDp(i.getFloatExtra("v", 0f));
-                        saveState();
+                        ModuleState.saveState();
                         ClockCollapse.refresh();
                     } else if ("glassend".equals(op)) {
                         sGlassEnd = clamp01(i.getFloatExtra("v", DEFAULT_GLASS_END));
-                        saveState();
+                        ModuleState.saveState();
                         Xp.log(TAG + "glass end = " + sGlassEnd);
                         ClockCollapse.refresh();
                     } else if ("clockspring".equals(op)) {
@@ -2797,10 +2551,10 @@ public class Main extends XposedModule {
                         // clamped in ShadeLayer.configure, so adb and the UI go through exactly
                         // the same door.
                         ShadeLayer.configure(i.getStringExtra("key"), i.getIntExtra("v", 0));
-                        saveState();
+                        ModuleState.saveState();
                     } else if ("minicfg".equals(op)) {
                         MiniPlayerRuntime.applyConfig(c, i.getStringExtra("json"));
-                        saveState();
+                        ModuleState.saveState();
                     } else if ("pickup".equals(op)) {
                         // 取餐码: --ez on true|false from the app; --es do read for one read now;
                         // --es do vdtest [--ei task N] [--ei min M] for the hidden display's
@@ -2808,18 +2562,18 @@ public class Main extends XposedModule {
                         // of both halves is the result either way.
                         if (i.hasExtra("on")) {
                             PickupCodeIsland.INSTANCE.setOn(i.getBooleanExtra("on", true));
-                            saveState();
+                            ModuleState.saveState();
                         }
                         // --ez card false draws the island with the system's focus template again,
                         // which is the way back if ColorOS's card does not come up on this build.
                         // --ez xiaoai false: no 小爱 reading of the order pages the module finds.
                         if (i.hasExtra("xiaoai")) {
                             PickupCodeIsland.sXiaoai = i.getBooleanExtra("xiaoai", true);
-                            saveState();
+                            ModuleState.saveState();
                         }
                         if (i.hasExtra("card")) {
                             PickupCodeIsland.sCard = i.getBooleanExtra("card", true);
-                            saveState();
+                            ModuleState.saveState();
                         }
                         String doIt = i.getStringExtra("do");
                         if ("read".equals(doIt)) PickupCodeIsland.INSTANCE.readNow();
@@ -2876,7 +2630,7 @@ public class Main extends XposedModule {
                         // asking as it starts (AmapImmerse), and told what it is.
                         if (i.hasExtra("on")) {
                             AmapTransitScene.INSTANCE.setOn(c, i.getBooleanExtra("on", true));
-                            saveState();
+                            ModuleState.saveState();
                         } else {
                             AmapTransitScene.INSTANCE.tellAmap(c);
                         }
@@ -3115,7 +2869,7 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "hello to the wallpaper process failed: " + t);
         }
-        loadState();
+        ModuleState.loadState();
         // 高德 running already has the 「高德公交地铁」 switch's default until it is told.
         AmapTransitScene.INSTANCE.tellAmap(ctx);
         // Again at startup, not only when the switch is touched: the flag the always-on display
@@ -3387,7 +3141,7 @@ public class Main extends XposedModule {
                 : (dp > CLOCK_HEIGHT_MAX_DP ? CLOCK_HEIGHT_MAX_DP : dp);
         Xp.log(TAG + "clock scale " + r3(legacy) + " was a coefficient; " + r1(box.height())
                 + "px of glyphs makes that " + r1(sClockHeightDp) + "dp");
-        saveState();
+        ModuleState.saveState();
         return sClockHeightDp;
     }
 
@@ -3401,7 +3155,7 @@ public class Main extends XposedModule {
      * set aside rather than clamped, because what it is worth is boxHeight * k and the box is
      * whatever style and layout the phone is on. See sClockLegacyK.
      */
-    private static void setClockHeightDp(float v) {
+    static void setClockHeightDp(float v) {
         if (v < CLOCK_HEIGHT_MIN_DP) {
             sClockLegacyK = v;
             Xp.log(TAG + "clock value " + v + " predates the dp unit, converting when measured");
@@ -3413,7 +3167,7 @@ public class Main extends XposedModule {
     }
 
     /** The clock size as a fraction of the style's full clock. NaN = follow sClockHeightDp. */
-    private static void setClockSize(float v) {
+    static void setClockSize(float v) {
         if (Float.isNaN(v) || v <= 0f) {
             sClockSize = Float.NaN;
         } else {
@@ -3467,7 +3221,7 @@ public class Main extends XposedModule {
                 : (v > CLOCK_RESPONSE_MAX ? CLOCK_RESPONSE_MAX : v);
         Xp.log(TAG + "clock response = " + sClockResponse + "s, fades "
                 + fadeMsFor(sClockResponse) + "ms");
-        saveState();
+        ModuleState.saveState();
         CoverPush.pushFadeMs(sAppCtx);
     }
 
@@ -3837,7 +3591,7 @@ public class Main extends XposedModule {
      */
     private static void setBias(float v) {
         sBias = clamp01(v);
-        saveState();
+        ModuleState.saveState();
         Xp.log(TAG + "cover bias = " + sBias);
         if (sCoverMode) CoverPush.pushArtAsync(true, false);
     }
@@ -3947,7 +3701,7 @@ public class Main extends XposedModule {
      * One switch for the whole look. The clock collapse is not a separate thing the user turns
      * on - if the album cover is the wallpaper, the clock is small.
      */
-    private static void enterCoverMode(boolean animate) {
+    static void enterCoverMode(boolean animate) {
         sCoverMode = true;
         // The cover is the media card's alone: the focus notifications stay out of the stack.
         LockIslands.INSTANCE.setCoverMode(true);
@@ -3992,7 +3746,7 @@ public class Main extends XposedModule {
         CoverPush.pushFadeMs(sAppCtx);
         LockLyrics.attach();
         CoverCardLayer.refresh();
-        saveState();
+        ModuleState.saveState();
     }
 
     /**
@@ -4036,7 +3790,7 @@ public class Main extends XposedModule {
         if (!ClockCollapse.active()) onClockReleased();
         // The lyrics fade out on their own and leave the keyguard once they have.
         LockLyrics.refresh();
-        saveState();
+        ModuleState.saveState();
     }
 
     /** ClockCollapse let go of the clock. Outside cover mode, the card goes back with it. */
@@ -4560,7 +4314,7 @@ public class Main extends XposedModule {
                 if (hide) guardDepth(d); else releaseDepthGuard();
                 Xp.log(TAG + "deducted_image_view " + (hide ? "hidden" : "shown")
                         + (fg == null ? "" : " (+ the live wallpaper's cut-out)"));
-                saveState();
+                ModuleState.saveState();
                 // VideoDepthSurfaceHolder adds its TextureViews after SystemUI has started, so
                 // on a live wallpaper the first pass through here can be too early - measured:
                 // deducted_image_view was already there and the TextureView was not. Same
@@ -5286,7 +5040,7 @@ public class Main extends XposedModule {
     private static void setCoverFeature(boolean on) {
         sCoverFeatureOn = on;
         Xp.log(TAG + "cover feature " + (on ? "on" : "off"));
-        saveState();
+        ModuleState.saveState();
         if (!on) {
             CoverMorphLayer.cancel();
             if (sCoverMode) setCoverEnabled(false, true);
@@ -5297,10 +5051,10 @@ public class Main extends XposedModule {
         }
     }
 
-    private static synchronized void setAuto(boolean on) {
+    static synchronized void setAuto(boolean on) {
         sAuto = on;
         Xp.log(TAG + "auto mode " + (on ? "on" : "off"));
-        saveState();
+        ModuleState.saveState();
         if (!on) {
             main().removeCallbacks(MediaCard.sCardGone);
             return;

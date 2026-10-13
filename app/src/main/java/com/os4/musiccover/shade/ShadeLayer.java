@@ -1,4 +1,5 @@
 package com.os4.musiccover.shade;
+import com.os4.musiccover.ModuleState;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.Xp;
 import android.graphics.Bitmap;
@@ -202,7 +203,7 @@ public final class ShadeLayer {
      * The master switch. Ships off; off hands the shade back to SystemUI completely.
      *
      * Only an install that has never written a state file reads this: a phone's own answer comes
-     * back in through shade_enabled (Main.loadState), and that is what wins over the default.
+     * back in through shade_enabled (ModuleState.loadState), and that is what wins over the default.
      */
     private static volatile boolean sEnabled = false;
     /**
