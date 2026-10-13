@@ -151,22 +151,32 @@ final class MotionCover {
         stopVideo("track");
         final int gen = ++sGen;
         // A video already on disk plays now, not after whatever lookups are still queued.
-        String cached = cachedFile(ctx, key);
-        if (cached != null) {
-            sLast = "cached " + new File(cached).getName() + " for " + key;
-            if (Main.sCoverMode) startVideo(ctx, new File(cached), card);
-            return;
-        }
-        work().post(() -> {
-            // Skipped past before its turn came: the lookup is for a song no longer playing.
-            if (gen != sGen) return;
-            File f = resolve(ctx, key, title, artist, album, dur);
-            Main.main().post(() -> {
-                if (gen != sGen || f == null || !Main.sCoverMode) return;
-                startVideo(ctx, f, card);
+        // Not until the song has held still: skipping through, each song's video came on for a
+        // few hundred ms and went again, and with the metadata a song ahead of or behind the
+        // media card it could land on the wrong still - the cover jumping about (2026-10-13).
+        // The old video is already going (stopVideo above fades it out); the new one waits.
+        Main.main().postDelayed(() -> {
+            if (gen != sGen || !Main.sCoverMode) return;
+            String cached = cachedFile(ctx, key);
+            if (cached != null) {
+                sLast = "cached " + new File(cached).getName() + " for " + key;
+                startVideo(ctx, new File(cached), card);
+                return;
+            }
+            work().post(() -> {
+                // Skipped past before its turn came: the lookup is for a song no longer playing.
+                if (gen != sGen) return;
+                File f = resolve(ctx, key, title, artist, album, dur);
+                Main.main().post(() -> {
+                    if (gen != sGen || f == null || !Main.sCoverMode) return;
+                    startVideo(ctx, f, card);
+                });
             });
-        });
+        }, SETTLE_MS);
     }
+
+    /** How long a song has to stay before its video starts - or is looked up. */
+    private static final long SETTLE_MS = 700L;
 
     // ================================================================ players
 
