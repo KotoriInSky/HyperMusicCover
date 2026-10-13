@@ -896,7 +896,7 @@ public class Main extends XposedModule {
         hookKeyguardWallpaperManager(cl);
         MediaCard.hookMediaCard(cl);
         LockTaps.hookLockScreenTap(cl);
-        hookChargingAnimation(cl);
+        ChargeAnim.hookChargingAnimation(cl);
 
         // The notification shade's cover background. Its hooks and logic are ShadeLayer's own.
         ShadeLayer.install(cl);
@@ -1303,35 +1303,6 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "keyguard wallpaper manager hook failed, falling back to "
                     + "MIUI's files for the wallpaper type: " + t);
-        }
-    }
-
-    private static void hookChargingAnimation(final ClassLoader cl) {
-        // The charging animation going up and coming down, recorded rather than guessed at.
-        //
-        // This is not what holds the tap back - chargeAnimUp reads the live tree and would go on
-        // working with this hook missing entirely. It is the evidence for it: `op chargeanim`
-        // prints one line per attach and detach with the tree as it was at that instant, which
-        // is what tells "the walk finds the view" from "the walk is looking at the wrong root",
-        // and what puts a number on how long a tap is held off for.
-        try {
-            Class<?> chargeAnim = Xp.findClass(
-                    ChargeAnim.CLS_CHARGE_PKG + "container.MiuiChargeAnimationView", cl);
-            // After the call, not before: the point of the snapshot is what the tree looks like
-            // with the animation in it, and addChargeView is what puts it there.
-            Xp.hookAll(chargeAnim, "addChargeView", chain -> {
-                Object result = chain.proceed();
-                ChargeAnim.noteChargeAnim(true, chain.getThisObject());
-                return result;
-            });
-            Xp.hookAll(chargeAnim, "removeChargeView", chain -> {
-                Object result = chain.proceed();
-                ChargeAnim.noteChargeAnim(false, chain.getThisObject());
-                return result;
-            });
-            Xp.log(TAG + "charging animation hooked");
-        } catch (Throwable t) {
-            Xp.w(TAG + "charging animation hook failed: " + t);
         }
     }
 
