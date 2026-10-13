@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.transit
 /**
  * Which milestone a bus or subway trip is at - what 高德 tells ColorOS outright (the entity's
  * `status`) and never says here. Worked out of what it does say: which leg its card is on, and

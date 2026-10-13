@@ -136,7 +136,7 @@ public final class Xp {
     }
 
     /** The remembered lines containing `grep` (all of them for null), oldest first, at most `max`. */
-    static String tail(String grep, int max) {
+    public static String tail(String grep, int max) {
         java.util.ArrayList<String> hits = new java.util.ArrayList<>();
         synchronized (sTail) {
             for (String line : sTail) {
@@ -226,7 +226,7 @@ public final class Xp {
         return api().hook(target).intercept(hooker);
     }
 
-    static List<XposedInterface.HookHandle> hookAllConstructors(Class<?> cls,
+    public static List<XposedInterface.HookHandle> hookAllConstructors(Class<?> cls,
                                                                 XposedInterface.Hooker hooker) {
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         for (Constructor<?> c : cls.getDeclaredConstructors()) {
@@ -273,7 +273,7 @@ public final class Xp {
         }
     }
 
-    static void setObjectField(Object obj, String name, Object value) {
+    public static void setObjectField(Object obj, String name, Object value) {
         try {
             field(obj, name).set(obj, value);
         } catch (IllegalAccessException e) {

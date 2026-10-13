@@ -1,5 +1,5 @@
 package com.os4.musiccover.app
-import com.os4.musiccover.MetroCodeIsland
+import com.os4.musiccover.transit.MetroCodeIsland
 import com.os4.musiccover.MiniPlayerConfig
 import com.os4.musiccover.ProbeGuard
 import com.os4.musiccover.R

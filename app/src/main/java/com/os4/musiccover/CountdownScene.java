@@ -61,7 +61,7 @@ import java.util.Locale;
  * (LockLyrics.holdScreen): keepScreenOn on the page's view, which is in the shade window - never
  * in a doze, where it would pull the phone out of the AOD - and not with the phone in a pocket.
  */
-final class CountdownScene implements ImmersiveScene {
+public final class CountdownScene implements ImmersiveScene {
 
     static final String ID = "countdown";
     static final String PKG = "com.android.deskclock";
@@ -822,7 +822,7 @@ final class CountdownScene implements ImmersiveScene {
      * TRANSLUCENT, so its fade shows the wallpaper rather than the black an opaque SurfaceView is
      * backed with; faded by its SurfaceControl's alpha, as LiveAlertScene fades the map.
      */
-    static final class GroundSurface extends android.view.SurfaceView
+    public static final class GroundSurface extends android.view.SurfaceView
             implements android.view.SurfaceHolder.Callback {
 
         /** Over the blurred wallpaper, so the ring and the words read on a bright one. */
@@ -835,18 +835,18 @@ final class CountdownScene implements ImmersiveScene {
         private final Paint mPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
         private final RectF mRect = new RectF();
 
-        GroundSurface(Context ctx) {
+        public GroundSurface(Context ctx) {
             super(ctx);
             getHolder().setFormat(android.graphics.PixelFormat.TRANSLUCENT);
             getHolder().addCallback(this);
         }
 
-        void setBitmap(android.graphics.Bitmap bitmap) {
+        public void setBitmap(android.graphics.Bitmap bitmap) {
             mBitmap = bitmap;
             paint();
         }
 
-        void setFade(float alpha) {
+        public void setFade(float alpha) {
             if (mFade == alpha) return;
             mFade = alpha;
             setAlpha(alpha);

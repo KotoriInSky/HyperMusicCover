@@ -1,5 +1,7 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.transit;
+import com.os4.musiccover.LiveAlertScene;
+import com.os4.musiccover.ProbeGuard;
+import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -21,14 +23,14 @@ import android.os.SystemClock;
  * Opened from 高德's focus island - protocol 1, notification id 1236, re-posted every second
  * during the navigation (see the amap-nav-island-focus-notification notes).
  */
-final class AmapNavScene extends LiveAlertScene {
+public final class AmapNavScene extends LiveAlertScene {
 
-    static final String ID = "amap-nav";
-    static final String PKG = "com.autonavi.minimap";
+    public static final String ID = "amap-nav";
+    public static final String PKG = "com.autonavi.minimap";
     /** AmapImmerse's receiver in 高德's main process. */
     static final String AMAP_PROBE = "com.os4.musiccover.AMAPPROBE";
 
-    static final AmapNavScene INSTANCE = new AmapNavScene();
+    public static final AmapNavScene INSTANCE = new AmapNavScene();
 
     @Override
     public boolean isNavigation() {
@@ -73,7 +75,7 @@ final class AmapNavScene extends LiveAlertScene {
 
     /** ColorOS's host grows the map in from 1.1 (a6.l, type 1). */
     @Override
-    float enterScale() {
+    protected float enterScale() {
         return 1.1f;
     }
 
@@ -93,7 +95,7 @@ final class AmapNavScene extends LiveAlertScene {
      * what it was showing.
      */
     @Override
-    void onPage() {
+    protected void onPage() {
         mSentOverview = false;
         mSentAt = 0L;
         flushOverview();
@@ -101,7 +103,7 @@ final class AmapNavScene extends LiveAlertScene {
 
     /** The navigation ended: the next one starts following. */
     @Override
-    void setArmed(boolean armed) {
+    public void setArmed(boolean armed) {
         if (!armed) {
             mMain.removeCallbacks(mFlush);
             mOverview = false;
@@ -144,7 +146,7 @@ final class AmapNavScene extends LiveAlertScene {
      * answers with the same arm it sends on init. No answer is the answer - 高德 is not running,
      * or has no page up.
      */
-    void ask(Context ctx) {
+    public void ask(Context ctx) {
         try {
             ProbeGuard.send(ctx, new Intent(AMAP_PROBE).setPackage(PKG).putExtra("ask", true));
         } catch (Throwable t) {

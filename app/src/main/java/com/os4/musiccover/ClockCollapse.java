@@ -34,7 +34,7 @@ import android.view.ViewTreeObserver;
  *     AOD    cover mode is on but the screen is asleep: the OEM's clock as it is, watched, so the
  *            wake can start from exactly what the AOD was showing
  */
-final class ClockCollapse {
+public final class ClockCollapse {
     private ClockCollapse() {
     }
 
@@ -258,7 +258,7 @@ final class ClockCollapse {
      * carries but has hidden still has its height, and taken whole it put the bottom some 150px
      * below a small clock with nothing under it. For laying out against the clock as it looks.
      */
-    static float contentBottomShown() {
+    public static float contentBottomShown() {
         float ink = inkBottomOnScreen();
         if (Float.isNaN(ink)) return Float.NaN;
         float bottom = ink;
@@ -318,7 +318,7 @@ final class ClockCollapse {
     }
 
     /** A drawn screen y taken into v's unzoomed frame; see contentBottomFor. */
-    static float unzoomY(View v, float screenY) {
+    public static float unzoomY(View v, float screenY) {
         if (v == null || Float.isNaN(screenY)) return screenY;
         float k = chainScaleY(v);
         if (k <= 0f) return screenY;

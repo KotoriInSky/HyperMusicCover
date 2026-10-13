@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.transit
+import com.os4.musiccover.Xp
 import android.content.ContentProviderClient
 import android.content.ContentResolver
 import android.os.Bundle

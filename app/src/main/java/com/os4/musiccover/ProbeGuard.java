@@ -92,7 +92,7 @@ public final class ProbeGuard {
     }
 
     /** A receiver that knows which of its two registrations it came in through, and whom it trusts. */
-    abstract static class Receiver extends BroadcastReceiver {
+    public abstract static class Receiver extends BroadcastReceiver {
         private boolean viaDump;
         private String[] trusted = new String[0];
         private String tag = "";
@@ -102,7 +102,7 @@ public final class ProbeGuard {
      * Registers two receivers from [make] for [filter]. [trusted] are the packages whose
      * broadcasts are answered; [tag] prefixes the log line for a broadcast that is not.
      */
-    static void register(Context ctx, IntentFilter filter, String tag,
+    public static void register(Context ctx, IntentFilter filter, String tag,
                          java.util.function.Supplier<? extends Receiver> make, String... trusted) {
         Receiver open = make.get();
         open.trusted = trusted;
@@ -124,7 +124,7 @@ public final class ProbeGuard {
      * onReceive; a refused broadcast is left exactly as it arrived, so an ordered one comes back
      * unanswered. An admitted one has the token taken out, so no log line from its extras has it.
      */
-    static boolean admit(Receiver r, Intent i) {
+    public static boolean admit(Receiver r, Intent i) {
         boolean ok = check(r, i);
         // Only from a broadcast already let through: the wallpaper process learns SystemUI's
         // token from what SystemUI sends it, not from whoever claims to have one.

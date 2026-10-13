@@ -50,7 +50,7 @@ import android.widget.FrameLayout;
  * backed by an opaque black layer (SurfaceView.updateBackgroundVisibility shows it only for an
  * opaque format), and ours never draws a pixel of its own - the app's page is a child layer.
  */
-class LiveAlertScene implements ImmersiveScene {
+public class LiveAlertScene implements ImmersiveScene {
 
     private static final int MSG_BIND = 11;
     private static final int MSG_RESIZE = 12;
@@ -97,7 +97,7 @@ class LiveAlertScene implements ImmersiveScene {
      * @param cardId  its LiveAlert card id on ColorOS; the apps do not read it, but the plugin
      *                always sends one
      */
-    LiveAlertScene(String id, String pkg, String service, String cardId) {
+    public LiveAlertScene(String id, String pkg, String service, String cardId) {
         mId = id;
         mTag = "MCImmersive: " + id + ": ";
         mPkg = pkg;
@@ -121,7 +121,7 @@ class LiveAlertScene implements ImmersiveScene {
     }
 
     /** The app says its page can be drawn, or can no longer be. */
-    void setArmed(boolean armed) {
+    public void setArmed(boolean armed) {
         if (mArmed == armed) return;
         mArmed = armed;
         ImmersiveHost.readyChanged(this);
@@ -215,7 +215,7 @@ class LiveAlertScene implements ImmersiveScene {
      * 1 is none. ColorOS's host scales the page surface itself (SystemUIPlugin a6.l,
      * enterContent/exitContent): 1.1 for the navigation map, 0.4 for the countdown.
      */
-    float enterScale() {
+    protected float enterScale() {
         return 1f;
     }
 
@@ -468,7 +468,7 @@ class LiveAlertScene implements ImmersiveScene {
     });
 
     /** A page came back (21): the first, or a new one after the app re-rendered. */
-    void onPage() {
+    protected void onPage() {
     }
 
     private Bundle resizeData() {
@@ -563,7 +563,7 @@ class LiveAlertScene implements ImmersiveScene {
         return extra;
     }
 
-    boolean send(int what, Bundle data) {
+    protected boolean send(int what, Bundle data) {
         Messenger server = mServer;
         if (server == null) return false;
         Message m = Message.obtain(null, what);

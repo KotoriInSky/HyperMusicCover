@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.transit
+import com.os4.musiccover.Xp
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager

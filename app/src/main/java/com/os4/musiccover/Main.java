@@ -1,5 +1,11 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.transit.AmapFocus;
+import com.os4.musiccover.transit.AmapImmerse;
+import com.os4.musiccover.transit.AmapNavScene;
+import com.os4.musiccover.transit.AmapTransitScene;
+import com.os4.musiccover.transit.MetroCodeIsland;
+import com.os4.musiccover.transit.RideCodeExit;
 import com.os4.musiccover.pickup.PickupCloud;
 import com.os4.musiccover.pickup.PickupCodeIsland;
 import com.os4.musiccover.pickup.PickupConst;
@@ -4884,7 +4890,7 @@ public class Main extends XposedModule {
      * last and clears its caches when it changes: a date that alternated between two
      * candidates on consecutive frames would re-adopt the offset every frame.
      */
-    static View visibleDate() {
+    public static View visibleDate() {
         View last = sDateView;
         if (usableDate(last)) return last;
         for (String id : DATE_IDS) {

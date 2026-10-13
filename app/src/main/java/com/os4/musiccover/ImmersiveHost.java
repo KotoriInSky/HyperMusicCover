@@ -1,5 +1,7 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.transit.AmapNavScene;
+import com.os4.musiccover.transit.AmapTransitScene;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
@@ -87,7 +89,7 @@ import java.util.Set;
  *
  * Probe: {@code op immersive [--es id <scene>] [--es do state|open|close|arm|disarm|rowtap]}.
  */
-final class ImmersiveHost {
+public final class ImmersiveHost {
 
     private ImmersiveHost() {
     }
@@ -483,7 +485,7 @@ final class ImmersiveHost {
     }
 
     /** From a scene: it has become ready, or stopped being. */
-    static void readyChanged(ImmersiveScene scene) {
+    public static void readyChanged(ImmersiveScene scene) {
         boolean ready = scene.ready();
         Xp.log(TAG + scene.id() + (ready ? " ready" : " not ready"));
         if (ready) {
@@ -508,7 +510,7 @@ final class ImmersiveHost {
     }
 
     /** From a scene: its page arrived, or went. */
-    static void contentChanged(ImmersiveScene scene) {
+    public static void contentChanged(ImmersiveScene scene) {
         Xp.log(TAG + scene.id() + (scene.hasContent() ? " has a page" : " lost its page"));
         if (scene.hasContent()) sLetGo.remove(scene);
         // An open page arriving on a lit lock screen - prepared again after an unlock, and woken
@@ -1348,7 +1350,7 @@ final class ImmersiveHost {
      * Returns whether a frame is coming. False: the page is not up in a doze, and whoever asked
      * asks again later rather than waiting on a draw that will not happen.
      */
-    static boolean lift(View drawer) {
+    public static boolean lift(View drawer) {
         FrameLayout slot = sSlot;
         if (slot == null || drawer == null || !drawer.isAttachedToWindow() || !sShown
                 || screenOn()) {

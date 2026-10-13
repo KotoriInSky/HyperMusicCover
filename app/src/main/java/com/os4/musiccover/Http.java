@@ -18,7 +18,7 @@ import java.net.URL;
  * one cost 48-66ms instead of the ~250ms the first one does. The saving is the DNS lookup, the
  * TCP handshake and the TLS handshake, measured at ~50ms of TLS alone on this device.
  */
-final class Http {
+public final class Http {
 
     private Http() {
     }
@@ -34,14 +34,14 @@ final class Http {
         /** The body, or null when there is none to read - including for a 404. */
         final String body;
         /** The HTTP status, or 0 when the request did not arrive at all. */
-        final int code;
+        public final int code;
 
         Reply(String body, int code) {
             this.body = body;
             this.code = code;
         }
 
-        boolean ok() {
+        public boolean ok() {
             return body != null;
         }
     }
@@ -90,7 +90,7 @@ final class Http {
      * recognises), and the body as bytes (Kuwo's is compressed and not UTF-8). `postBody` null is
      * a GET; `headers` are name, value pairs. Null body and code 0 when nothing arrived.
      */
-    static Raw request(String url, String tag, String postBody, String... headers) {
+    public static Raw request(String url, String tag, String postBody, String... headers) {
         long started = android.os.SystemClock.uptimeMillis();
         HttpURLConnection conn = null;
         try {
@@ -132,20 +132,20 @@ final class Http {
     }
 
     /** request()'s answer: the bytes as they came, and the status. */
-    static final class Raw {
-        final byte[] body;
-        final int code;
+    public static final class Raw {
+        public final byte[] body;
+        public final int code;
 
         Raw(byte[] body, int code) {
             this.body = body;
             this.code = code;
         }
 
-        boolean ok() {
+        public boolean ok() {
             return body != null;
         }
 
-        String text() {
+        public String text() {
             try {
                 return body == null ? null : new String(body, "UTF-8");
             } catch (Exception e) {

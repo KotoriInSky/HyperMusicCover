@@ -18,7 +18,7 @@ import android.view.ViewGroup;
  *
  * Everything is called on the main thread.
  */
-interface ImmersiveScene {
+public interface ImmersiveScene {
 
     /** For logs and the probe: {@code op immersive --es id <id>}. */
     String id();

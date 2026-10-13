@@ -1,5 +1,5 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.transit;
+import com.os4.musiccover.Xp;
 import java.lang.reflect.Constructor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * watched here: every class loader the process builds passes through BaseDexClassLoader's
  * constructor, and the first one that can see the class is the plugin's.
  */
-final class AmapFocus {
+public final class AmapFocus {
 
     private static final String TAG = "MCAmapFocus: ";
     /** The notification owner whose own layout is kept. */
@@ -63,7 +63,7 @@ final class AmapFocus {
     }
 
     /** Called from SystemUI's own loader: finds nothing there, and waits for the plugin's. */
-    static void install(ClassLoader cl) {
+    public static void install(ClassLoader cl) {
         try {
             soft(cl, "systemui");
         } catch (Throwable t) {

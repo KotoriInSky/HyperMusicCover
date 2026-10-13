@@ -1,5 +1,7 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.transit
+import com.os4.musiccover.BuildConfig
+import com.os4.musiccover.ProbeGuard
+import com.os4.musiccover.Xp
 import android.app.Application
 import android.content.Context
 import android.content.Intent

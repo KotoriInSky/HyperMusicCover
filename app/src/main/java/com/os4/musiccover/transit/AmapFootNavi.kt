@@ -1,5 +1,6 @@
-package com.os4.musiccover
+package com.os4.musiccover.transit
 
+import com.os4.musiccover.Xp
 /**
  * 高德's own walking navigation of one walk of a trip, for the walking card's 「步行导航」 button.
  *

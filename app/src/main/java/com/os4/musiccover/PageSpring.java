@@ -10,18 +10,18 @@ import android.animation.TimeInterpolator;
  *
  * The countdown's scale is bounce 0.2, the map's 0, both response 0.45s.
  */
-final class PageSpring {
+public final class PageSpring {
 
     private PageSpring() {
     }
 
     /** How long it takes to come within a thousandth of the way. */
-    static long durationMs(float response, float bounce) {
+    public static long durationMs(float response, float bounce) {
         return Math.round(span(response, bounce) * 1000);
     }
 
     /** 0 to 1 over durationMs: 1 - e^(-zwt) (cos(wd t) + zw / wd sin(wd t)), or its z = 1 limit. */
-    static TimeInterpolator interpolator(float response, float bounce) {
+    public static TimeInterpolator interpolator(float response, float bounce) {
         final double w = 2 * Math.PI / response;
         final double z = Math.min(1.0, Math.max(0.0, 1.0 - bounce));
         final double span = span(response, bounce);

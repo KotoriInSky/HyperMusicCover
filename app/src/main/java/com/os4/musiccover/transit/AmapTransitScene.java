@@ -1,5 +1,15 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.transit;
+import com.os4.musiccover.ClockCollapse;
+import com.os4.musiccover.CountdownScene;
+import com.os4.musiccover.Http;
+import com.os4.musiccover.ImmersiveHost;
+import com.os4.musiccover.ImmersiveScene;
+import com.os4.musiccover.LockIslands;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.MiniPlayerRuntime;
+import com.os4.musiccover.PageSpring;
+import com.os4.musiccover.ProbeGuard;
+import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -62,7 +72,7 @@ import java.util.concurrent.Executors;
  * Probe: {@code op transit} - the state; {@code --es json '<entity>'} feeds one in by hand,
  * {@code --ez demo true} a made-up ride past 天安门, {@code --es do end} ends it.
  */
-final class AmapTransitScene implements ImmersiveScene {
+public final class AmapTransitScene implements ImmersiveScene {
 
     static final String ID = "amap-transit";
 
@@ -71,7 +81,7 @@ final class AmapTransitScene implements ImmersiveScene {
         return true;
     }
     static final String PKG = AmapNavScene.PKG;
-    static final AmapTransitScene INSTANCE = new AmapTransitScene();
+    public static final AmapTransitScene INSTANCE = new AmapTransitScene();
 
     private static final String TAG = "MCImmersive: " + ID + ": ";
 
@@ -119,10 +129,10 @@ final class AmapTransitScene implements ImmersiveScene {
      * The app's 「高德公交地铁」 switch: off, neither this page nor the trip's island in 高德
      * (AmapTransitShare.setEnabled) is put up. Held here, in Main's state file; 高德 is told.
      */
-    static volatile boolean sOn = true;
+    public static volatile boolean sOn = true;
 
     /** The switch moved ({@code op transitcfg --ez on}): 高德 told, and a page up taken down. */
-    void setOn(Context ctx, boolean on) {
+    public void setOn(Context ctx, boolean on) {
         sOn = on;
         Xp.log(TAG + "switch " + (on ? "on" : "off"));
         if (!on) mMain.post(() -> end("switch off"));
@@ -130,7 +140,7 @@ final class AmapTransitScene implements ImmersiveScene {
     }
 
     /** Tells 高德 the switch: when it asks, when SystemUI starts, when it changes. */
-    void tellAmap(Context ctx) {
+    public void tellAmap(Context ctx) {
         try {
             ProbeGuard.send(ctx, new Intent(AmapNavScene.AMAP_PROBE).setPackage(PKG)
                     .putExtra("transiton", sOn));
@@ -142,7 +152,7 @@ final class AmapTransitScene implements ImmersiveScene {
     // ---------------------------------------------------------------- what 高德 says
 
     /** {@code op transit}, any thread. The answer is the state as it is now. */
-    String command(String json, String what, boolean demo) {
+    public String command(String json, String what, boolean demo) {
         if (!sOn) {
             // A 高德 that has not heard yet - started before SystemUI, or missed the change.
             if (json != null && !demo && Main.appContext() != null) tellAmap(Main.appContext());
