@@ -364,7 +364,7 @@ public final class ClockCollapse {
      * The glyphs redrawn when the scale has moved far enough that their glass edge would show it.
      *
      * The edge's width reaches the shader from TimeView.onDraw, scaled there to what the glyph is
-     * drawn at (Main.armMiGlassGuard, #39) - but a scale set on the time_group is a RenderNode
+     * drawn at (ClockGlass.armMiGlassGuard, #39) - but a scale set on the time_group is a RenderNode
      * property and redraws nothing under it, so a clock that settled without one more draw kept
      * the edge it last drew with. A few percent of scale is not visible in the edge; per frame it
      * would be three glyph paths rebuilt for nothing.
@@ -374,7 +374,7 @@ public final class ClockCollapse {
         float was = last == null ? 1f : last;
         if (Math.abs(scale - was) <= 0.03f * Math.max(scale, was)) return;
         sGlassScale.put(g, scale);
-        Main.invalidateGlass(g);
+        ClockGlass.invalidateGlass(g);
     }
 
     /** The scale each time_group's glyphs last redrew their glass at. A tag key would be this
@@ -589,7 +589,7 @@ public final class ClockCollapse {
             // The colour too: a held doze is showing the lock screen's clock, so it holds the
             // lock screen's glass instead of the doze's neutral. Read here because this is the
             // last moment it is still the lock screen's - the doze inks its own over it.
-            Main.captureAodGlass();
+            ClockGlass.captureAodGlass();
             stopFrame();
             sT = 1f;
             sTv = 0f;
@@ -1476,7 +1476,7 @@ public final class ClockCollapse {
                 sPhase = Phase.AOD;
                 clearAodPend();
                 clearTransforms();
-                Main.restoreGlass();
+                ClockGlass.restoreGlass();
                 Xp.log(TAG + "clock: in the AOD");
             } else {
                 releaseNow("exit landed");
@@ -1512,7 +1512,7 @@ public final class ClockCollapse {
         // roomForRows, and the raw figure squeezed the clock the exit had just landed full.
         float natural = exitY(naturalY());
         if (held != null && !Float.isNaN(natural)) Main.applyY(natural);
-        Main.restoreGlass();
+        ClockGlass.restoreGlass();
         Main.onClockReleased();
         if (was) Xp.log(TAG + "clock: released (" + why + ")");
     }
@@ -1562,7 +1562,7 @@ public final class ClockCollapse {
     }
 
     private static void prepareGlass() {
-        Main.armGlassMorph();
+        ClockGlass.armGlassMorph();
     }
 
     private static final ViewTreeObserver.OnPreDrawListener PRE_DRAW =
@@ -2014,7 +2014,7 @@ public final class ClockCollapse {
         }
         android.os.Trace.beginSection("MC c.card"); try { MediaCard.setCardProgressFrom(card); } finally { android.os.Trace.endSection(); }
         sGlassP = glass;
-        android.os.Trace.beginSection("MC c.glass"); try { Main.applyGlassMorph(glass); } finally { android.os.Trace.endSection(); }
+        android.os.Trace.beginSection("MC c.glass"); try { ClockGlass.applyGlassMorph(glass); } finally { android.os.Trace.endSection(); }
         // The colour band describes the lock screen; the AOD's layout is not that.
         if (!(phase == Phase.EXIT && sExitToAod)) { android.os.Trace.beginSection("MC c.band"); try { Main.updateColorBand(); } finally { android.os.Trace.endSection(); } }
     }

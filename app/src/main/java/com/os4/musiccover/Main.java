@@ -237,13 +237,13 @@ public class Main extends XposedModule {
      * with is taken down to its own lightness and then held, so the clock keeps the neutral the
      * OEM starts from and the palette arriving late cannot repaint it. See the setMiGlass guard.
      */
-    private static volatile float sAodGrey = Float.NaN;
+    static volatile float sAodGrey = Float.NaN;
     /**
      * The glass clock's dark/light switch (`TimeView.setBrightness`) as the OEM last decided it
      * from the palette of the cover, and as it last set it outside cover mode. See the
      * setBrightness hook: null until the OEM has said.
      */
-    private static volatile Boolean sBrightCover, sBrightOutside;
+    static volatile Boolean sBrightCover, sBrightOutside;
     /**
      * The strip of the cover that gets sampled for that reading, in dp from the top of the
      * screen. Generous on purpose: the date rests near the top and the collapsed clock
@@ -308,23 +308,6 @@ public class Main extends XposedModule {
             sBandBotPx = bot;
         }
     }
-    /**
-     * Liquid-glass -> filled morph across the collapse. AllInOneBase.updateGlassValue(float)
-     * writes glassData[36] and fades the glyph interior from fully transparent (the liquid
-     * glass look, which degenerates into hairlines once the clock is small) to solid. NaN = off.
-     */
-    private static volatile float sGlassV0 = Float.NaN, sGlassV1 = Float.NaN;
-    private static volatile float sAppliedGlassV = Float.NaN;
-    /**
-     * The cover's entry morph has reached the solid end. While it stands, the glass value is
-     * held there against spurious collapse-progress frames - see applyGlassMorph. Cleared
-     * wherever the glass state itself is.
-     */
-    private static volatile boolean sGlassSettled;
-    /** Armed once the HyperLight (统一柔光玻璃) counter-hook is installed; see armMiGlassGuard(). */
-    private static volatile boolean sMiGlassGuardArmed;
-    /** How many times the counter-hook actually fired on a clock glyph, for the one-line proof. */
-    private static volatile int sMiGlassGuardHits;
 
     /** ClockViewType constants by name, resolved once. See oemPart(). */
     private static volatile java.util.Map<String, Object> sViewTypes;
@@ -466,7 +449,7 @@ public class Main extends XposedModule {
     static volatile float sClockOffsetDp = 0f;
     static final float CLOCK_OFFSET_MIN_DP = -60f;
     static final float CLOCK_OFFSET_MAX_DP = 300f;
-    private static volatile float sGlassEnd = DEFAULT_GLASS_END;
+    static volatile float sGlassEnd = DEFAULT_GLASS_END;
     /** The session we are mirroring, plus the callback that keeps the cover on the right track. */
     static MediaController sWatched;
 
@@ -1021,7 +1004,7 @@ public class Main extends XposedModule {
                 // modules' onPackageLoaded, so arming the HyperLight counter-hook here - not
                 // from setGlassColor, which this build never calls on the all_in_one clock -
                 // guarantees it registers after HyperLight's own View.setMiGlass hook.
-                armMiGlassGuard();
+                ClockGlass.armMiGlassGuard();
                 Xp.log(TAG + "clock container attached: " + sContainer);
                 try {
                     registerReceiver(sContainer.getContext().getApplicationContext());
@@ -1255,7 +1238,7 @@ public class Main extends XposedModule {
                         sScreenOn = true;
                         CoverCardLayer.refresh();
                         sAodGrey = Float.NaN;
-                        applyGlassBrightness();
+                        ClockGlass.applyGlassBrightness();
                         ClockCollapse.enter(true, true, "doAnim");
                         recolorClock();
                     }
@@ -1846,14 +1829,14 @@ public class Main extends XposedModule {
             // own dark/light flag and used to be hooked alongside these - deliberately is not.
             Xp.hookAll(timeView, "setGlassColor", chain -> {
                 View self = (View) chain.getThisObject();
-                if (!glassStyleFor(self)) return chain.proceed();
+                if (!ClockGlass.glassStyleFor(self)) return chain.proceed();
                 Object[] args = chain.getArgs().toArray();
                 args[0] = legible(self, (Integer) args[0]);
                 return chain.proceed(args);
             });
             Xp.hookAll(timeView, "setTextColor", chain -> {
                 View self = (View) chain.getThisObject();
-                if (!glassStyleFor(self)) return chain.proceed();
+                if (!ClockGlass.glassStyleFor(self)) return chain.proceed();
                 Object[] args = chain.getArgs().toArray();
                 args[0] = legible(self, (Integer) args[0]);
                 return chain.proceed(args);
@@ -1871,7 +1854,7 @@ public class Main extends XposedModule {
                 Object[] args = chain.getArgs().toArray();
                 if (!sCoverMode) {
                     if (sScreenOn && args[0] instanceof Boolean) sBrightOutside = (Boolean) args[0];
-                } else if (sScreenOn && sBrightCover != null && glassStyleFor((View) chain.getThisObject())) {
+                } else if (sScreenOn && sBrightCover != null && ClockGlass.glassStyleFor((View) chain.getThisObject())) {
                     args[0] = sBrightCover;
                 }
                 return chain.proceed(args);
@@ -2907,7 +2890,7 @@ public class Main extends XposedModule {
                                 i.getFloatExtra("f", 0f), i.getIntExtra("n", 0),
                                 i.getBooleanExtra("b", false));
                     } else if ("glass".equals(op)) {
-                        setGlass(i.getBooleanExtra("on", false));
+                        ClockGlass.setGlass(i.getBooleanExtra("on", false));
                     } else if ("scale".equals(op)) {
                         float k = i.getFloatExtra("k", -1f);
                         sSizeScale = k > 0 ? k : Float.NaN;
@@ -3118,7 +3101,7 @@ public class Main extends XposedModule {
                         // measurement, and the app needs it even on a frame where the clock
                         // could not be measured - that is exactly when the slider it disables
                         // would otherwise look like it was doing something.
-                        out.putBoolean("clockglass", clockHasGlass());
+                        out.putBoolean("clockglass", ClockGlass.clockHasGlass());
                         // Every op is acknowledged below; this tells the app it can rely on that,
                         // where a build from before it could only be sent to and hoped for.
                         out.putBoolean("acks", true);
@@ -3298,7 +3281,7 @@ public class Main extends XposedModule {
                 if (Intent.ACTION_SCREEN_ON.equals(a)) {
                     sScreenOn = true;
                     sAodGrey = Float.NaN;
-                    applyGlassBrightness();
+                    ClockGlass.applyGlassBrightness();
                 } else if (Intent.ACTION_SCREEN_OFF.equals(a)) {
                     sScreenOn = false;
                     sAodGrey = Float.NaN;
@@ -3361,7 +3344,7 @@ public class Main extends XposedModule {
      * wrong in that direction costs a screenshot's worth of wrongness rather than a clock nobody
      * can read.
      */
-    private static volatile boolean sScreenOn = true;
+    static volatile boolean sScreenOn = true;
 
     /** The cached reading, for LockLyrics' per-frame questions. */
     public static boolean screenOnCached() {
@@ -4256,7 +4239,7 @@ public class Main extends XposedModule {
      * layer has a controller of its own and only one of the two is reachable from the container
      * this module hooks.
      */
-    private static View clockViewOf(View root) {
+    static View clockViewOf(View root) {
         if (!(root instanceof ViewGroup)) return null;
         ViewGroup g = (ViewGroup) root;
         return g.getChildCount() > 0 ? g.getChildAt(0) : null;
@@ -5263,7 +5246,7 @@ public class Main extends XposedModule {
           // whose clock view has updateGlassValue, and this is what tells the app which those
           // are. The first thing to look at when the slider appears to do nothing.
           .append(" anchored=").append(anchoredStyle())
-          .append(" glassStyle=").append(clockHasGlass())
+          .append(" glassStyle=").append(ClockGlass.clockHasGlass())
           .append("\ndate: rest=").append(r1(ClockCollapse.coverDateY(visibleDate())))
           .append("px from the top; cover mode leaves the date there and hangs the clock under"
                   + " it")
@@ -6014,7 +5997,7 @@ public class Main extends XposedModule {
             // For a size the slider has never set: the dp default, in this style's terms.
             out.putFloat("clocksize", effectiveClockSize());
         }
-        out.putBoolean("clockglass", clockHasGlass());
+        out.putBoolean("clockglass", ClockGlass.clockHasGlass());
         // Which route the lyric came from changes mid-track - the session's payload turns up
         // after the file, a network lookup lands after that - and the row that names it is read
         // while the page is open.
@@ -6775,7 +6758,7 @@ public class Main extends XposedModule {
     private static void exitCoverMode(boolean animate) {
         CoverCardLayer.leaving();
         sCoverMode = false;
-        applyGlassBrightness();
+        ClockGlass.applyGlassBrightness();
         LockIslands.INSTANCE.setCoverMode(false);
         CoverCardLayer.refresh();
         // The cover is on its way out, so the reading that coloured the clock describes the
@@ -7050,7 +7033,7 @@ public class Main extends XposedModule {
         if (sScreenOn) return;
         sScreenOn = true;
         sAodGrey = Float.NaN;
-        applyGlassBrightness();
+        ClockGlass.applyGlassBrightness();
         forgetSysReads();
         recolorClock();
     }
@@ -7238,26 +7221,6 @@ public class Main extends XposedModule {
         View card = MediaCard.sCardGuarded;
         if (card == null || !card.isAttachedToWindow()) card = findSysuiView("mi_media_controls");
         if (card != null) MediaCard.assertMediaCard(card);
-    }
-
-    /** Arms the liquid-glass -> filled morph across the collapse. See applyGlassMorph(). */
-    static void armGlassMorph() {
-        sGlassV0 = 0f;
-        sGlassV1 = sGlassEnd;
-        sAppliedGlassV = Float.NaN;
-        // Each entry morphs from the start again. Left set by the previous cover, the hold in
-        // applyGlassMorph() jumped every later entry to the solid end on its first frame.
-        sGlassSettled = false;
-    }
-
-    /** Puts the glass back where the collapse found it, and stops morphing it. */
-    static void restoreGlass() {
-        if (Float.isNaN(sGlassV0)) return;
-        float back = sGlassV0;
-        sGlassV0 = sGlassV1 = Float.NaN;
-        sAppliedGlassV = Float.NaN;
-        sGlassSettled = false;
-        callOnClockViews("updateGlassValue", "f", back, 0, false);
     }
 
     /**
@@ -10042,72 +10005,6 @@ public class Main extends XposedModule {
         }
     }
 
-    /** The clock's glass as the screen fell asleep: r, g, b and the fill. See captureAodGlass. */
-    private static final float[] sAodCoverGlass = new float[4];
-    private static volatile boolean sAodCoverGlassSet;
-
-    /**
-     * Remembers what colour and fill the clock's glyphs were in as the screen falls asleep, for a
-     * doze that keeps the cover's clock.
-     *
-     * The doze repaints those glyphs from the wallpaper's palette, and in cover mode the wallpaper
-     * is the album art - which is what turned the always-on clock gold, and is why an ordinary
-     * doze is held at a neutral instead. A held doze is meant to be the lock screen's clock
-     * carried into sleep, so it is held at the lock screen's own values. Called from toAod(), the
-     * last moment they are still the lock screen's: the doze inks its own over them a frame later.
-     */
-    static void captureAodGlass() {
-        sAodCoverGlassSet = false;
-        for (View root : clockRoots()) {
-            for (String id : new String[]{"hour_view", "minute_view", "colon_view"}) {
-                try {
-                    int rid = root.getContext().getResources()
-                            .getIdentifier(id, "id", "com.android.systemui");
-                    View t = rid == 0 ? null : root.findViewById(rid);
-                    if (t == null || t.getVisibility() != View.VISIBLE) continue;
-                    float[] g = (float[]) Xp.getObjectField(t, "glassData");
-                    if (g == null || g.length < 42) continue;
-                    sAodCoverGlass[0] = g[11];
-                    sAodCoverGlass[1] = g[12];
-                    sAodCoverGlass[2] = g[13];
-                    // glassData[36] carries the fill our own morph last pushed, which is what the
-                    // lock screen is drawn with - not sAppliedGlassV, which is the value asked
-                    // for rather than the one that landed.
-                    sAodCoverGlass[3] = g[36];
-                    sAodCoverGlassSet = true;
-                    return;
-                } catch (Throwable ignored) {
-                }
-            }
-        }
-    }
-
-    /**
-     * Puts the glass clock's dark/light switch where it belongs now: the cover's in cover mode,
-     * the OEM's own reading of the wallpaper out of it. Needed at the two moments nothing of the
-     * OEM's re-sends it - a wake in cover mode whose extraction ran while still dozing, and the
-     * exit, which otherwise leaves the cover's answer on the wallpaper until the next doze.
-     */
-    static void applyGlassBrightness() {
-        final Boolean want = sCoverMode ? sBrightCover : sBrightOutside;
-        final View v = sContainer;
-        if (want == null || v == null) return;
-        v.post(() -> {
-            for (View root : clockRoots()) {
-                for (String id : new String[]{"hour_view", "minute_view", "colon_view"}) {
-                    try {
-                        int rid = root.getContext().getResources()
-                                .getIdentifier(id, "id", "com.android.systemui");
-                        View t = rid == 0 ? null : root.findViewById(rid);
-                        if (t == null || !glassStyleFor(t)) continue;
-                        Xp.callMethod(t, "setBrightness", want);
-                    } catch (Throwable ignored) {
-                    }
-                }
-            }
-        });
-    }
-
     /**
      * Whether the doze clock's colour is ours to hold at all.
      *
@@ -10124,7 +10021,7 @@ public class Main extends XposedModule {
      * "音乐封面模式开启 + 全屏息屏显示保持小时钟关闭" and the big clock came up grey. Only this
      * one configuration is left alone; the other two are held exactly as before.
      */
-    private static boolean aodColourOurs() {
+    static boolean aodColourOurs() {
         return ClockCollapse.aodHeld() || !ClockCollapse.aodFullScreen();
     }
 
@@ -10147,7 +10044,7 @@ public class Main extends XposedModule {
         // colour and the fill the lock screen had. Read at the moment of sleep, before the doze had
         // inked anything with its own palette. The capture is only ever taken for a held doze, so
         // this also says whether the reading below is the lock screen's or a dead one.
-        boolean cover = ClockCollapse.aodHeld() && sAodCoverGlassSet;
+        boolean cover = ClockCollapse.aodHeld() && ClockGlass.sAodCoverGlassSet;
         boolean wrote = false;
         for (View root : clockRoots()) {
             for (String id : new String[]{"hour_view", "minute_view", "colon_view"}) {
@@ -10159,15 +10056,15 @@ public class Main extends XposedModule {
                     float[] g = (float[]) Xp.getObjectField(t, "glassData");
                     if (g == null || g.length < 42) continue;
                     if (cover) {
-                        if (g[11] != sAodCoverGlass[0] || g[12] != sAodCoverGlass[1]
-                                || g[13] != sAodCoverGlass[2]) {
-                            g[11] = sAodCoverGlass[0];
-                            g[12] = sAodCoverGlass[1];
-                            g[13] = sAodCoverGlass[2];
+                        if (g[11] != ClockGlass.sAodCoverGlass[0] || g[12] != ClockGlass.sAodCoverGlass[1]
+                                || g[13] != ClockGlass.sAodCoverGlass[2]) {
+                            g[11] = ClockGlass.sAodCoverGlass[0];
+                            g[12] = ClockGlass.sAodCoverGlass[1];
+                            g[13] = ClockGlass.sAodCoverGlass[2];
                             wrote = true;
                         }
-                        if (g[36] != sAodCoverGlass[3]) {
-                            g[36] = sAodCoverGlass[3];
+                        if (g[36] != ClockGlass.sAodCoverGlass[3]) {
+                            g[36] = ClockGlass.sAodCoverGlass[3];
                             wrote = true;
                         }
                         if (wrote) t.invalidate();
@@ -10202,20 +10099,8 @@ public class Main extends XposedModule {
                 }
             }
         }
-        if (wrote) pushGlassFill(cover ? sAodCoverGlass[3] : 1f);
+        if (wrote) ClockGlass.pushGlassFill(cover ? ClockGlass.sAodCoverGlass[3] : 1f);
         return wrote;
-    }
-
-    /** One `updateGlassValue` on both clock trees, screen on or off. */
-    private static void pushGlassFill(float v) {
-        for (View root : clockRoots()) {
-            try {
-                if (!(root instanceof ViewGroup)) continue;
-                View c = ((ViewGroup) root).getChildAt(0);
-                if (c != null) Xp.callMethod(c, "updateGlassValue", v);
-            } catch (Throwable ignored) {
-            }
-        }
     }
 
     /** One line about the doze clock's colour state, readable from `am broadcast`. */
@@ -10226,11 +10111,11 @@ public class Main extends XposedModule {
                 + " aodsmall=" + sAodSmall + " fullAod=" + fullAodOn()
                 + " aodFull=" + ClockCollapse.aodFullScreen()
                 + " held=" + ClockCollapse.aodHeld()
-                + " coverGlass=" + (sAodCoverGlassSet
-                        ? sAodCoverGlass[0] + "," + sAodCoverGlass[1] + ","
-                          + sAodCoverGlass[2] + " fill=" + sAodCoverGlass[3]
+                + " coverGlass=" + (ClockGlass.sAodCoverGlassSet
+                        ? ClockGlass.sAodCoverGlass[0] + "," + ClockGlass.sAodCoverGlass[1] + ","
+                          + ClockGlass.sAodCoverGlass[2] + " fill=" + ClockGlass.sAodCoverGlass[3]
                         : "none")
-                + " guardHits=" + sMiGlassGuardHits);
+                + " guardHits=" + ClockGlass.sMiGlassGuardHits);
         // The clock's own state, because the whole setting is about where it is drawn: phase,
         // the pose being held, and the two the AOD recorded for the wake to start from.
         sb.append(" | ").append(ClockCollapse.describe());
@@ -10382,15 +10267,15 @@ public class Main extends XposedModule {
                         if (!(root instanceof ViewGroup)) continue;
                         View c = ((ViewGroup) root).getChildAt(0);
                         if (c == null) continue;
-                        if (glassGlyphs(root)) {
+                        if (ClockGlass.glassGlyphs(root)) {
                             // The glass is driven from our own morph, and re-running one frame of
                             // it is what makes it re-colour - the same call applyGlassMorph()
                             // makes on every frame of a collapse, so nothing new is being asked
                             // of it. updateClockColor, which is the other path, is deliberately
                             // NOT called here: the OEM only reaches for it on a solid style, and
                             // it writes the glyphs' paint colour as well as their glass data.
-                            if (!Float.isNaN(sAppliedGlassV)) {
-                                Xp.callMethod(c, "updateGlassValue", sAppliedGlassV);
+                            if (!Float.isNaN(ClockGlass.sAppliedGlassV)) {
+                                Xp.callMethod(c, "updateGlassValue", ClockGlass.sAppliedGlassV);
                             }
                         } else if (hasField(c, "mClockStyleInfo")) {
                             Object info = Xp.getObjectField(c, "mClockStyleInfo");
@@ -10564,59 +10449,6 @@ public class Main extends XposedModule {
     }
 
     /**
-     * Whether the clock this view belongs to is the liquid-glass one.
-     *
-     * The colour takeover is FOR the glass style and stays there. On every other style the clock
-     * is coloured by the SystemUI palette and it is to stay that way: our substitution was
-     * replacing a colour the OEM had already worked out with one derived from a single average
-     * over the cover, and on a cover with a bright face under a dark border that average reads
-     * "dark cover", so the clock comes out white on white. Passing the OEM value straight
-     * through is both less machinery and a better answer.
-     *
-     * Read off the view itself first - the glyphs are TimeViews and carry the flag - and then by
-     * walking up to whichever of the clock views answers.
-     */
-    private static boolean glassStyleFor(View v) {
-        for (View p = v; p != null; p = p.getParent() instanceof View ? (View) p.getParent() : null) {
-            if (declaresGlass(p)) return true;
-            if (p == sContainer) break;
-        }
-        // Nothing on the walk answered. Asked of the tree instead: all_in_one is the family whose
-        // clock is built this way, and it is the one that answers `time_group`. The date used to
-        // be the view that landed here; it is no longer coloured at all. See anchoredStyle().
-        return anchoredStyle();
-    }
-
-    /**
-     * Whether this view is built on the glass TimeView - asked of its CLASS, not of the switch.
-     *
-     * The first version read `isMiGlassEffectEnable` and returned its VALUE, which is the
-     * question "is the glass switched on right now". It is false once the morph has run all the
-     * way to solid, which is exactly the state the clock is in when it is collapsed - so the
-     * takeover switched itself off for the whole time it was needed and the clock kept the
-     * palette's colour. Measured: two frames with the cover's luma forced to 0.95 and to 0.05
-     * came out grey-white and grey-white.
-     */
-    private static boolean declaresGlass(View v) {
-        Class<?> c = v.getClass();
-        Boolean hit = sGlassClasses.get(c);
-        if (hit != null) return hit;
-        boolean glass = false;
-        for (Class<?> k = c; k != null && !glass; k = k.getSuperclass()) {
-            for (java.lang.reflect.Method m : k.getDeclaredMethods()) {
-                if ("setGlassColor".equals(m.getName())) { glass = true; break; }
-            }
-            if (!glass) {
-                for (java.lang.reflect.Field f : k.getDeclaredFields()) {
-                    if ("isMiGlassEffectEnable".equals(f.getName())) { glass = true; break; }
-                }
-            }
-        }
-        sGlassClasses.put(c, glass);
-        return glass;
-    }
-
-    /**
      * Counter-hook for HyperLight's "统一柔光玻璃" (its SoftGlassMaterialHook).
      *
      * HyperLight hooks {@code View.setMiGlass(float[])} and, for any view its classifier admits,
@@ -10639,171 +10471,22 @@ public class Main extends XposedModule {
      * and runs last in the chain, where the last writer to args[0] is what the original receives.
      */
     /** Rec. 709 luminance of a glass colour triple, which is what an even grey has to match. */
-    private static float luminance(float r, float g, float b) {
+    static float luminance(float r, float g, float b) {
         return 0.2126f * r + 0.7152f * g + 0.0722f * b;
     }
-
-    /** Redraws the glass glyphs under `root`, so their next setMiGlass carries the scale now. */
-    static void invalidateGlass(View root) {
-        if (root == null) return;
-        if (declaresGlass(root)) {
-            root.invalidate();
-            return;
-        }
-        if (root instanceof ViewGroup) {
-            ViewGroup g = (ViewGroup) root;
-            for (int i = 0; i < g.getChildCount(); i++) invalidateGlass(g.getChildAt(i));
-        }
-    }
-
-    /** TimeView.GLASS_EDGE_PX_INDEX: the glass edge band's width, in pixels (default 30). */
-    private static final int GLASS_EDGE_PX = 19;
 
     /**
      * How big a view is drawn against its own size: every ancestor's scale multiplied in, the
      * collapse's time_group and the keyguard's zoom among them. The mean of the two axes, since
      * the collapse may scale the width a little differently from the height.
      */
-    private static float drawnScale(View v) {
+    static float drawnScale(View v) {
         float sx = 1f, sy = 1f;
         for (View p = v; p != null; p = p.getParent() instanceof View ? (View) p.getParent() : null) {
             sx *= p.getScaleX();
             sy *= p.getScaleY();
         }
         return (float) Math.sqrt(Math.abs(sx * sy));
-    }
-
-    private static void armMiGlassGuard() {
-        if (sMiGlassGuardArmed) return;
-        sMiGlassGuardArmed = true;
-        try {
-            Xp.hookAll(View.class, "setMiGlass", chain -> {
-                Object self = chain.getThisObject();
-                if (!(self instanceof View) || !declaresGlass((View) self)) return chain.proceed();
-                Object[] args = chain.getArgs().toArray();
-                boolean restored = false;
-                if (args.length >= 1 && args[0] instanceof float[]) {
-                    try {
-                        float[] oem = (float[]) Xp.getObjectField((View) self, "glassData");
-                        if (oem != null && oem.length >= 42) {
-                            args[0] = oem;
-                            restored = true;
-                        }
-                    } catch (Throwable ignored) {
-                    }
-                }
-                // The always-on displays whose colour is ours (aodColourOurs). The colour pushed
-                // here is the OEM's palette, computed from the wallpaper - which in cover mode is
-                // our album art - and that palette would repaint the clock a moment after the
-                // screen goes off. So the colour is dropped and the first lightness the doze inks
-                // with is held instead, which is what holdAodColour() holds too.
-                if (sCoverMode && !sScreenOn && aodColourOurs() && args[0] instanceof float[]) {
-                    float[] a = (float[]) args[0];
-                    if (a.length >= 42) {
-                        // Luminance, not max: the palette's gold is (1.0, 0.694, 0.384), whose
-                        // max is 1.0 - neutralising on that turns the clock pure white. Its
-                        // luminance is 0.736, which is the neutral the doze was inking before the
-                        // palette landed (measured 189/255 = 0.741 on screen).
-                        float mx = luminance(a[11], a[12], a[13]);
-                        if (Float.isNaN(sAodGrey)) sAodGrey = mx;
-                        float[] neutral = a.clone();
-                        neutral[11] = neutral[12] = neutral[13] = sAodGrey;
-                        args[0] = neutral;
-                    }
-                }
-                // The glass edge as wide on screen as the glyph it is the edge of (#39). The
-                // collapsed clock is the OEM's full-size clock scaled down on its time_group, and
-                // TimeView strokes its glyph with glassData[GLASS_EDGE_PX_INDEX] in its own
-                // coordinates - scaled with it - while the same number reaches the glass shader as
-                // screen pixels, which are not. At the small clock's 10-30% the strokes are a few
-                // pixels thick against a 30px edge band, the whole glyph is edge, and it refracts
-                // like a chrome bevel: the background through it lands far from where it is
-                // ("柔光玻璃背景显示异常"). The shader's copy is scaled by what the glyph is drawn
-                // at; the field, which the stroke reads, is left as the OEM has it.
-                //
-                // What shows through the glass is not fixed by this: it is sampled where the glyph
-                // would be at full size, before the collapse's scale and lift, and nothing here
-                // moves the sampling. Filling the glyph solid to hide it was tried and was too
-                // bright (user, 2026-10-06).
-                if ((sCoverMode || ClockCollapse.active()) && args[0] instanceof float[]) {
-                    float[] a = (float[]) args[0];
-                    float k = drawnScale((View) self);
-                    if (a.length > GLASS_EDGE_PX && k > 0f && k < 0.995f) {
-                        float[] scaled = a.clone();
-                        scaled[GLASS_EDGE_PX] = a[GLASS_EDGE_PX] * k;
-                        args[0] = scaled;
-                    }
-                }
-                int hits = ++sMiGlassGuardHits;
-                // The first few fires prove which view carries the clock's glass and that the
-                // field is there to hand back; the rest are counted rather than spammed.
-                if (hits <= 5 || hits % 50 == 0) {
-                    Xp.d(TAG + "setMiGlass guard fired (" + hits + ") on "
-                            + viewIdOf((View) self) + " restored=" + restored);
-                }
-                return chain.proceed(args);
-            });
-            Xp.log(TAG + "HyperLight setMiGlass guard armed");
-        } catch (Throwable t) {
-            Xp.w(TAG + "HyperLight setMiGlass guard unavailable: " + t);
-        }
-    }
-
-    /**
-     * Asked once per class, because the question is asked constantly.
-     *
-     * getDeclaredMethod/getDeclaredField answer by THROWING when the member is absent, and the
-     * stack trace each throw fills in costs far more than the lookup. This runs from inside the
-     * colour setters, which the OEM calls for every glyph on every frame of a collapse - so the
-     * first version put dozens of exceptions per frame on the clock's own animation thread and
-     * the collapse stuttered. Measured symptom: the entry scaling "not normal", with every
-     * number in the log still correct. The answer cannot change while the process lives.
-     */
-    private static final java.util.HashMap<Class<?>, Boolean> sGlassClasses = new java.util.HashMap<>();
-
-    /** Whether these glyphs are drawn through the MiGlass shader, read off the views themselves. */
-    private static boolean glassGlyphs(View root) {
-        View v = sContainer;
-        if (v == null) return false;
-        for (String id : new String[]{"hour_view", "minute_view", "colon_view"}) {
-            int rid = v.getContext().getResources().getIdentifier(id, "id", "com.android.systemui");
-            View t = rid == 0 ? null : root.findViewById(rid);
-            if (t == null) continue;
-            try {
-                return Boolean.TRUE.equals(Xp.getObjectField(t, "isMiGlassEffectEnable"));
-            } catch (Throwable ignored) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether the clock style on screen right now has a glass channel to drive at all.
-     *
-     * The liquid-glass morph is AllInOneBase.updateGlassValue(float) - the OEM's own continuous
-     * glass -> solid ramp - and it exists exactly where the glass shader does. A rhombus clock
-     * draws vector digits, a doodle clock bitmaps, the oriental and magazine clocks plain text:
-     * none of them has anything to drive, and a slider that pretends otherwise is a slider that
-     * silently does nothing, which is worse than one that says so.
-     *
-     * Asked of the live class rather than written down as a list of style names, so a style that
-     * gains the channel in a later build is picked up without a change here.
-     */
-    private static boolean clockHasGlass() {
-        for (View root : clockRoots()) {
-            View clock = clockViewOf(root);
-            if (clock == null) continue;
-            for (Class<?> k = clock.getClass(); k != null && k != Object.class;
-                 k = k.getSuperclass()) {
-                try {
-                    k.getDeclaredMethod("updateGlassValue", float.class);
-                    return true;
-                } catch (Throwable ignored) {
-                }
-            }
-        }
-        return false;
     }
 
     // --------------------------------------------- the OEM's own translation function
@@ -10876,43 +10559,8 @@ public class Main extends XposedModule {
         return y;
     }
 
-    /** Rides the same progress as the scale, so one OEM spring drives size and look together. */
-    static void applyGlassMorph(float p) {
-        if (Float.isNaN(sGlassV0)) return;
-        if (perfOff("glass")) return;
-        // Not while the screen is off, and this is the one that matters for the AOD. The clock
-        // keeps its hold through doze - the re-asserts below put the placement back on the doze
-        // layout - but they drove this on the way, and cover mode's glass value is not the one
-        // the AOD was inked with: the clock came up system-coloured and turned to the glass
-        // tint a moment later, every time. The placement is ours; the colour is not.
-        if (!sScreenOn) return;
-        float g = sGlassV0 + p * (sGlassV1 - sGlassV0);
-        // While the cover is up, the clock's glass belongs at the solid end. The collapse
-        // progress p is read from the OEM's notifY, and a single frame of it reading the
-        // natural position - a keyguard rebuild, a wake, a notification relayout - drags the
-        // glass back toward the transparent end, where the hour glyphs vanish over the cover.
-        // The placement recovers on the next driven frame; the glass does not - it freezes at
-        // whatever was applied last, and that is exactly the broken clock being reported. So
-        // once the entry morph has reached the solid end, the value holds there until cover
-        // mode itself goes.
-        if (sCoverMode) {
-            if (g >= sGlassV1 - 0.01f) sGlassSettled = true;
-            if (sGlassSettled) g = sGlassV1;
-        }
-        if (!Float.isNaN(sAppliedGlassV) && Math.abs(g - sAppliedGlassV) < 0.004f) return;
-        sAppliedGlassV = g;
-        for (View root : clockRoots()) {
-            try {
-                View c = ((android.view.ViewGroup) root).getChildAt(0);
-                if (c == null) continue;
-                Xp.callMethod(c, "updateGlassValue", g);
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
     /** Calls a method on the AllInOneHourClock / AllInOneMinuteClock views of both trees. */
-    private static void callOnClockViews(final String method, final String kind, final float f,
+    static void callOnClockViews(final String method, final String kind, final float f,
                                          final int n, final boolean b) {
         final View v = sContainer;
         if (v == null || method == null) { Xp.log(TAG + "callclock: need m="); return; }
@@ -10962,32 +10610,6 @@ public class Main extends XposedModule {
                     }
                 }
                 Xp.log(TAG + "call " + method + "(" + arg + ") applied to " + hits + " views");
-            }
-        });
-    }
-
-    /** The MiGlass shader samples the wallpaper and does not follow a child View's scale. */
-    private static void setGlass(final boolean on) {
-        final View v = sContainer;
-        if (v == null) { Xp.log(TAG + "no clock container"); return; }
-        v.post(new Runnable() {
-            @Override
-            public void run() {
-                for (View root : clockRoots()) {
-                    for (String id : new String[]{"hour_view", "minute_view", "colon_view"}) {
-                        try {
-                            int rid = v.getContext().getResources()
-                                    .getIdentifier(id, "id", "com.android.systemui");
-                            View t = rid == 0 ? null : root.findViewById(rid);
-                            if (t == null) continue;
-                            Xp.callMethod(t, "setMiGlassEffectEnable", on);
-                            t.invalidate();
-                        } catch (Throwable e) {
-                            Xp.w(TAG + "setGlass " + id + " failed: " + e);
-                        }
-                    }
-                }
-                Xp.log(TAG + "glass=" + on);
             }
         });
     }
@@ -11086,7 +10708,7 @@ public class Main extends XposedModule {
         sRootsFor = null;
     }
 
-    private static String viewIdOf(View v) {
+    static String viewIdOf(View v) {
         try {
             return v.getResources().getResourceEntryName(v.getId());
         } catch (Throwable t) {
