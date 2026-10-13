@@ -613,6 +613,19 @@ private fun CardGroup(
                 ModuleBridge.setCardTitleTap(context, it)
             },
         )
+        // A visible way to the switch the two-finger tap already is. Only drawn in cover mode
+        // for a track with lyrics - see Main.sMcPageBtn. The one row here with a summary: it
+        // takes the player's own button to the right of "next", and that has to be said.
+        SwitchPreference(
+            title = stringResource(R.string.card_page_button),
+            summary = stringResource(R.string.card_page_button_summary),
+            checked = module.mcPageButton,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(mcPageButton = it))
+                ModuleBridge.setCardPageButton(context, it)
+            },
+        )
         // The progress bar's glow, the island's look on the card's own bar (#49). Not tied to
         // cover mode either: it is the OEM's card in every mode.
         SwitchPreference(

@@ -135,6 +135,8 @@
     <string name="donate_save_failed">Could not save</string>
     <string name="card_section">Media card</string>
     <string name="card_title_tap">Tap the title to pause</string>
+    <string name="card_page_button">Cover/lyrics button on the card</string>
+    <string name="card_page_button_summary">Hides the player button to the right of Next</string>
     <string name="media_bar_glow">Progress bar glow</string>
     <string name="lyrics_two_finger_tap">Two-finger tap the cover to switch to the lyrics</string>
     <!-- Three states rather than two; see the default strings for what they mean. -->

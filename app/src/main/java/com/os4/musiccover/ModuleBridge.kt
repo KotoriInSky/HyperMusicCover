@@ -107,6 +107,8 @@ object ModuleBridge {
         /** With [mcHideArt] on, show the thumbnail anyway while the lyrics are up. Also fixed on. */
         val mcArtInLyrics: Boolean = true,
         val mcTitleTap: Boolean = false,
+        /** The card's cover/lyrics page button. Off by default. */
+        val mcPageButton: Boolean = false,
         val hideFingerprint: Boolean = false,
         /** Apple Music motion artwork in place of the still cover. Off by default. */
         val motionCover: Boolean = false,
@@ -436,6 +438,9 @@ object ModuleBridge {
 
     fun setCardTitleTap(context: Context, on: Boolean) =
         send(context, "mediacard") { putExtra("titletap", on) }
+
+    fun setCardPageButton(context: Context, on: Boolean) =
+        send(context, "mediacard") { putExtra("pagebtn", on) }
 
     // Its own op rather than a third extra on "mediacard": the switch sits under the card
     // options on screen, but it has nothing to do with the card, and grouping it there on the
@@ -845,6 +850,7 @@ object ModuleBridge {
             mcHideArt = b.getBoolean("mcart", true),
             mcArtInLyrics = b.getBoolean("mclyricart", true),
             mcTitleTap = b.getBoolean("mctap", false),
+            mcPageButton = b.getBoolean("mcpage", false),
             hideFingerprint = b.getBoolean("hidefp", false),
             motionCover = b.getBoolean("motion", false),
             forceColon = b.getBoolean("colon", false),

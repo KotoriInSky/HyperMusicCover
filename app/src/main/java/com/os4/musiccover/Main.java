@@ -546,6 +546,14 @@ public class Main extends XposedModule {
      */
     private static volatile boolean sMcTitleTap;
     /**
+     * A button on the card that turns the cover page into the lyric page and back - the same
+     * switch as the two-finger tap, for anyone who would rather see it than know it. It covers
+     * the player's own button to the right of "next", which is why it is off by default. Only
+     * drawn in cover mode, on the lock screen, for a track that has lyrics: anywhere else there is
+     * only one page and nothing for it to do. See CardPageButton.
+     */
+    private static volatile boolean sMcPageBtn;
+    /**
      * Hide the lock screen fingerprint ring. Unlike the two card switches above, this one is not
      * tied to cover mode: an icon that appeared and vanished as the music started and stopped
      * would read as a glitch rather than as a setting.
@@ -626,7 +634,6 @@ public class Main extends XposedModule {
     private static View sCardGuarded, sCardArt, sCardTitle, sCardArtist;
     /** The title carrying our play/pause listener, and what it was clickable-wise before. */
     private static View sCardTitleTapped;
-    private static boolean sCardTitleClickable;
     /** Set only around a capture. See shootCard(). */
     private static volatile boolean sCardForced;
     /**
@@ -1688,6 +1695,17 @@ public class Main extends XposedModule {
                     } catch (Throwable t) {
                         MiniPlayerRuntime.noteTouch("card swipe failed: " + t);
                     }
+                    // The card's page button, ahead of the artwork for no reason but that the two
+                    // never overlap. Taken whole for the same reason the artwork's is: under it
+                    // is the card, whose own click opens the player.
+                    try {
+                        if (swallowPageTap(ev)) return Boolean.TRUE;
+                    } catch (Throwable ignored) {
+                    }
+                    try {
+                        if (swallowTitleTap(ev)) return Boolean.TRUE;
+                    } catch (Throwable ignored) {
+                    }
                     try {
                         if (swallowArtTap(ev)) return Boolean.TRUE;
                     } catch (Throwable ignored) {
@@ -2003,6 +2021,7 @@ public class Main extends XposedModule {
                     + (ClockCollapse.fullUnitState() == null ? ""
                             : "\nclockfull=" + ClockCollapse.fullUnitState())
                     + "\nmctap=" + (sMcTitleTap ? 1 : 0)
+                    + "\nmcpage=" + (sMcPageBtn ? 1 : 0)
                     + "\ntap=" + (sTapToggle ? 1 : 0)
                     + ShadeLayer.dumpCfg()
                     + "\nfadewp=" + (sFadeWp ? 1 : 0)
@@ -2127,6 +2146,7 @@ public class Main extends XposedModule {
                         // clock's end and the transition's spring are all fixed. Each is still
                         // reachable from its own op, for the session.
                         else if ("mctap".equals(k)) sMcTitleTap = "1".equals(v);
+                        else if ("mcpage".equals(k)) sMcPageBtn = "1".equals(v);
                         else if ("tap".equals(k)) sTapToggle = "1".equals(v);
                         else if ("fadewp".equals(k)) sFadeWp = "1".equals(v);
                         else if ("motion".equals(k)) MotionCover.sEnabled = "1".equals(v);
@@ -2446,10 +2466,13 @@ public class Main extends XposedModule {
                         if (i.hasExtra("titletap")) {
                             sMcTitleTap = i.getBooleanExtra("titletap", false);
                         }
+                        if (i.hasExtra("pagebtn")) {
+                            sMcPageBtn = i.getBooleanExtra("pagebtn", false);
+                        }
                         saveState();
                         Xp.log(TAG + "media card hideArt=" + sMcHideArt
                                 + " artInLyrics=" + sMcArtInLyrics
-                                + " titleTap=" + sMcTitleTap);
+                                + " titleTap=" + sMcTitleTap + " pageBtn=" + sMcPageBtn);
                         applyMediaCard();
                     } else if ("texfit".equals(op)) {
                         // The screen-sized keyguard texture, on by default (WallpaperProbe's half
@@ -3032,6 +3055,7 @@ public class Main extends XposedModule {
                         out.putBoolean("mcart", sMcHideArt);
                         out.putBoolean("mclyricart", sMcArtInLyrics);
                         out.putBoolean("mctap", sMcTitleTap);
+                        out.putBoolean("mcpage", sMcPageBtn);
                         out.putBoolean("tap", sTapToggle);
                         out.putBoolean("fadewp", sFadeWp);
                         out.putBoolean("motion", MotionCover.sEnabled);
@@ -3184,7 +3208,8 @@ public class Main extends XposedModule {
                         Xp.log(TAG + "card rect: " + sCardL + "," + sCardT + " "
                                 + sCardW + "x" + sCardH + " hideArt=" + sMcHideArt
                                 + " titleTap=" + sMcTitleTap
-                                + " title=" + (sCardTitleTapped != null) + " cardP=" + sCardP);
+                                + " title=" + (sCardTitleTapped != null) + " cardP=" + sCardP
+                                + " pageBtn=" + sMcPageBtn + " " + CardPageButton.describe());
                         Xp.log(TAG + "tap: toggle=" + sTapToggle
                                 + " suppressed=" + sTapSuppressed
                                 + " bouncer=" + bouncerUp()
@@ -7842,7 +7867,7 @@ public class Main extends XposedModule {
                     // Only worth waiting for while something still wants something from the
                     // card: the restyle on the way in, or the artwork tap that is the way back.
                     if (attempt < CARD_RETRIES
-                            && ((sCoverMode && (sMcHideArt || sMcTitleTap))
+                            && ((sCoverMode && (sMcHideArt || sMcTitleTap || sMcPageBtn))
                                 || wantsArtTap())) {
                         main().postDelayed(new Runnable() {
                             @Override
@@ -7866,7 +7891,7 @@ public class Main extends XposedModule {
                 sCardArtist = card.findViewById(card.getResources()
                         .getIdentifier("header_artist", "id", "com.android.systemui"));
                 assertMediaCard(card);
-                if (sCoverMode && (sMcHideArt || sMcTitleTap)) guardCard(card);
+                if (sCoverMode && (sMcHideArt || sMcTitleTap || sMcPageBtn)) guardCard(card);
                 else releaseCardGuard();
             }
         });
@@ -7956,6 +7981,17 @@ public class Main extends XposedModule {
         centreCardText(card, (TextView) sCardTitle, centreP);
         centreCardText(card, (TextView) sCardArtist, centreP);
         applyTitleTap((TextView) sCardTitle, sMcTitleTap && sCoverMode && onKeyguard);
+        // On the card's progress, so it comes and goes with the restyle - including the exit,
+        // where cover mode is already off but the card is still fading back. Not in a capture
+        // for the preview, and not in the AOD: that is a smaller stand-in card with no taps.
+        boolean pageBtn = sMcPageBtn && onKeyguard && !sCardForced
+                && LockLyrics.sEnabled && LockLyrics.hasLyrics()
+                && screenOnCached() && ClockCollapse.phase() != ClockCollapse.Phase.AOD;
+        // Which page it would go to. Asked of the lyrics' own intent while cover mode is on, so
+        // the icon flips with the tap rather than when the lyric view has finished fading; held
+        // through the exit like the thumbnail's exception above.
+        boolean onLyrics = sCoverMode ? LockLyrics.wantsAttached() : sLyricUp;
+        CardPageButton.apply(card, pageBtn ? p : 0f, onLyrics, (TextView) sCardTitle);
         if (onKeyguard && !sCardForced) sampleCardRect(card, p);
     }
 
@@ -8049,44 +8085,65 @@ public class Main extends XposedModule {
     }
 
     /**
-     * Makes the card's title a play/pause button, or hands the title back.
+     * Arms the card's title as a play/pause button, or disarms it.
      *
      * Asserted from the guard rather than set once when the card was found, because the same
      * view is also the shade's: the lock screen's title is ours and the shade's is the OEM's,
-     * and the guard is the only thing here that knows which of the two is on screen. Written
-     * only when the state actually changes - the guard runs every frame and this puts a
-     * listener on, which is not something to redo sixty times a second.
+     * and the guard is the only thing here that knows which of the two is on screen.
      *
-     * Java has no way to read a view's existing OnClickListener back off it, so what the title
-     * had is remembered as the two things that CAN be read - whether it was clickable, and
-     * whether it had a listener at all - and the latter is logged, because a title that already
-     * does something of its own would be silently swallowed here.
+     * Only a note of which view is armed. The tap itself is taken at the window's dispatch, on
+     * the words alone - see swallowTitleTap. It used to be an OnClickListener on the view, and
+     * the view is far wider than its words: centring moves the whole of it by translationX, and
+     * with a short title that put its right end over the output chip, which comes before it in
+     * the touch order. Tapping the chip paused the music (user, 2026-10-14).
      */
     private static void applyTitleTap(TextView title, boolean on) {
-        View mine = sCardTitleTapped;
-        boolean want = on && title != null;
-        if (mine == title && want) return;
-        if (mine == null && !want) return;
-        if (mine != null) {
-            sCardTitleTapped = null;
-            try {
-                mine.setOnClickListener(null);
-                mine.setClickable(sCardTitleClickable);
-            } catch (Throwable ignored) {
-            }
+        sCardTitleTapped = on ? title : null;
+    }
+
+    private static boolean sTitleSwallow;
+    private static long sTitleDownAt;
+
+    /**
+     * The title's play/pause, on the line of text as it is drawn - translation included, so
+     * the centred words and nothing either side of them. Whole gesture, acted on at a brief UP
+     * that stayed inside, as the artwork's is; anything else on the card is left to the OEM.
+     */
+    private static boolean swallowTitleTap(MotionEvent ev) {
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            sTitleSwallow = sCardTitleTapped != null
+                    && screenOn() && keyguardShowing() && onKeyguardNow()
+                    && !bouncerUp() && !sGestureOnCentre && !sGestureOnCharge
+                    && titleInkContains(ev.getRawX(), ev.getRawY());
+            if (sTitleSwallow) sTitleDownAt = android.os.SystemClock.uptimeMillis();
+            return sTitleSwallow;
         }
-        if (!want) return;
-        sCardTitleClickable = title.isClickable();
-        if (title.hasOnClickListeners()) {
-            Xp.log(TAG + "card title already had a click listener - it will not be restored");
-        }
-        sCardTitleTapped = title;
-        title.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        if (!sTitleSwallow) return false;
+        if (action == MotionEvent.ACTION_UP) {
+            sTitleSwallow = false;
+            long held = android.os.SystemClock.uptimeMillis() - sTitleDownAt;
+            if (held < ART_TAP_MS && titleInkContains(ev.getRawX(), ev.getRawY())) {
                 togglePlayback();
             }
-        });
+        } else if (action == MotionEvent.ACTION_CANCEL) {
+            sTitleSwallow = false;
+        }
+        return true;
+    }
+
+    private static boolean titleInkContains(float x, float y) {
+        View v = sCardTitleTapped;
+        if (!(v instanceof TextView) || !v.isShown() || v.getHeight() <= 0) return false;
+        TextView t = (TextView) v;
+        Layout lay = t.getLayout();
+        if (lay == null || lay.getLineCount() < 1) return false;
+        int[] loc = new int[2];
+        t.getLocationOnScreen(loc);
+        float left = loc[0] + t.getPaddingLeft() + lay.getLineLeft(0);
+        float right = left + lay.getLineWidth(0);
+        return x >= left - ART_TAP_SLOP && x < right + ART_TAP_SLOP
+                && y >= loc[1] - ART_TAP_SLOP && y < loc[1] + t.getHeight() + ART_TAP_SLOP;
     }
 
     /**
@@ -8372,6 +8429,37 @@ public class Main extends XposedModule {
      * inside and been brief: a drag that began on the artwork does nothing rather than toggling
      * on release.
      */
+    private static boolean sPageSwallow;
+    private static long sPageDownAt;
+
+    /**
+     * The card's page button, taken at the window's dispatch for the reasons swallowArtTap
+     * gives: nothing on the card itself is ever offered the gesture first. Acts at UP, inside
+     * and brief, so a drag that happens to start on it is a drag that does nothing.
+     */
+    private static boolean swallowPageTap(MotionEvent ev) {
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            sPageSwallow = screenOn() && keyguardShowing() && onKeyguardNow()
+                    && !bouncerUp() && !sGestureOnCentre && !sGestureOnCharge
+                    && CardPageButton.contains(ev.getRawX(), ev.getRawY());
+            if (sPageSwallow) sPageDownAt = android.os.SystemClock.uptimeMillis();
+            return sPageSwallow;
+        }
+        if (!sPageSwallow) return false;
+        if (action == MotionEvent.ACTION_UP) {
+            sPageSwallow = false;
+            long held = android.os.SystemClock.uptimeMillis() - sPageDownAt;
+            if (held < ART_TAP_MS && CardPageButton.contains(ev.getRawX(), ev.getRawY())) {
+                String why = toggleLyricPage();
+                Xp.log(TAG + "page button: " + (why == null ? sTwoWhy : why));
+            }
+        } else if (action == MotionEvent.ACTION_CANCEL) {
+            sPageSwallow = false;
+        }
+        return true;
+    }
+
     private static boolean swallowArtTap(MotionEvent ev) {
         int action = ev.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
@@ -9090,6 +9178,8 @@ public class Main extends XposedModule {
         // nothing would ever run the assert that would have done it, and the shade would keep a
         // title that pauses the music.
         applyTitleTap(null, false);
+        // The same for the page button: drawn on the card's overlay, which is the shade's too.
+        CardPageButton.release();
         if (d == null || g == null) return;
         try {
             d.getViewTreeObserver().removeOnPreDrawListener(g);
@@ -10223,6 +10313,16 @@ public class Main extends XposedModule {
      * with the switch off the tap does nothing at all. See LockLyrics.toggleByTap.
      */
     private static void onTwoFingerTap() {
+        String why = toggleLyricPage();
+        if (why == null) sTwoFired++;
+        else sTwoWhy = why;
+    }
+
+    /**
+     * The swap itself, for the two-finger tap and the card's page button alike, so the two
+     * cannot drift apart on what blocks it. Null when it ran; otherwise why it did not.
+     */
+    private static String toggleLyricPage() {
         View c = sContainer;
         String no = !screenOn() ? "the screen is off"
                 : !keyguardShowing() ? "the keyguard is not showing"
@@ -10234,23 +10334,18 @@ public class Main extends XposedModule {
                 : !sCardKnown ? "the card is not known"
                 : !sCardShowing ? "no track on the card"
                 : null;
-        if (no != null) {
-            sTwoWhy = "blocked: " + no;
-            return;
-        }
+        if (no != null) return "blocked: " + no;
         if (!LockLyrics.sEnabled) {
             // Nothing on the lock screen to switch. Answering the gesture by bringing the
             // lyrics back would be writing the app's setting from here, which is the whole of
             // what this gesture stopped doing.
-            sTwoWhy = "blocked: the lyrics switch is off";
-            return;
+            return "blocked: the lyrics switch is off";
         }
         if (!LockLyrics.hasLyrics()) {
             // The cover is the only page a track without lyrics has. Taken as a toggle, the tap
             // would flip the hidden flag with nothing changing, and the next song that does have
             // lyrics would then open on the cover for no reason anyone could see.
-            sTwoWhy = "blocked: this track has no lyrics";
-            return;
+            return "blocked: this track has no lyrics";
         }
         long t0 = android.os.SystemClock.uptimeMillis();
         if (sCoverMode) {
@@ -10263,10 +10358,12 @@ public class Main extends XposedModule {
             }
         }
         LockLyrics.toggleByTap(sTrackKey, sWatched);
-        sTwoFired++;
         // How long the swap took. Nothing is written down, so this is its whole cost.
         sTwoWhy = "lyrics " + (LockLyrics.sTapHidden ? "hidden" : "shown") + " in "
                 + (android.os.SystemClock.uptimeMillis() - t0) + "ms";
+        // The button's icon names the other page, and nothing else redraws the card for it.
+        kickCardFrame();
+        return null;
     }
 
     /**

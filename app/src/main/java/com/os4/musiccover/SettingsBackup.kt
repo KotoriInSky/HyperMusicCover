@@ -24,6 +24,7 @@ object SettingsBackup {
     /** The size as a fraction of the style's full clock; the same key the trimmed builds dropped. */
     private const val KEY_CLOCK_SIZE = "clockSizeFraction"
     private const val KEY_CARD_TITLE_TAP = "cardTitleTap"
+    private const val KEY_CARD_PAGE_BUTTON = "cardPageButton"
     private const val KEY_HIDE_FINGERPRINT = "hideFingerprint"
     private const val KEY_MOTION_COVER = "motionCover"
     private const val KEY_FORCE_COLON = "forceClockColon"
@@ -58,6 +59,7 @@ object SettingsBackup {
             json.put(KEY_COVER_STYLE, module.coverStyle)
             if (module.clockSize > 0f) json.put(KEY_CLOCK_SIZE, module.clockSize.toDouble())
             json.put(KEY_CARD_TITLE_TAP, module.mcTitleTap)
+            json.put(KEY_CARD_PAGE_BUTTON, module.mcPageButton)
             json.put(KEY_HIDE_FINGERPRINT, module.hideFingerprint)
             json.put(KEY_MOTION_COVER, module.motionCover)
             json.put(KEY_FORCE_COLON, module.forceColon)
@@ -99,6 +101,9 @@ object SettingsBackup {
             }
             if (obj.has(KEY_CARD_TITLE_TAP)) {
                 ModuleBridge.setCardTitleTap(context, obj.getBoolean(KEY_CARD_TITLE_TAP))
+            }
+            if (obj.has(KEY_CARD_PAGE_BUTTON)) {
+                ModuleBridge.setCardPageButton(context, obj.getBoolean(KEY_CARD_PAGE_BUTTON))
             }
             if (obj.has(KEY_HIDE_FINGERPRINT)) {
                 ModuleBridge.setHideFingerprint(context, obj.getBoolean(KEY_HIDE_FINGERPRINT))
