@@ -621,34 +621,6 @@ public class Main extends XposedModule {
     static View sCardTitleTapped;
     /** Set only around a capture. See shootCard(). */
     static volatile boolean sCardForced;
-    /** How small the thumbnail gets at the far end of the fade. Apple's shrinks as it goes. */
-    static final float CARD_ART_MIN_SCALE = 0.82f;
-    /**
-     * The lyrics exception as a number the card can move on, rather than a yes/no read off the
-     * frame it happens to land on. 1 is "the thumbnail the setting hides is back because the
-     * lyrics are up", 0 is "the card as the OEM draws it".
-     *
-     * Two reported bugs, one cause (2026-09-17). Read every frame with no progress of its own,
-     * the answer flipped mid-transition, and both flips are visible: leaving cover mode with the
-     * lyrics up put the thumbnail back for the first frames of the exit and took it away again
-     * for the rest of it - "从歌词界面到正常封面切换的时候缩略图会闪一下" - and the title it
-     * carries jumped between left and centre instead of sliding, which is the same number.
-     *
-     * Not a second animator. It is the same spring the cover itself moves on - EASE_COVER at the
-     * response the user set - stepped from the card's own per-frame pass (see stepLyricArt), so
-     * the thumbnail and the title cross at the speed of the transition they are part of and there
-     * is still exactly one curve on this lock screen.
-     */
-    private static volatile float sLyricArtP;
-    private static float sLyricArtV;
-    private static float sLyricArtTo = -1f;
-    private static long sLyricArtAt;
-    /**
-     * Whether the lyrics are up, remembered so the exit of cover mode does not re-ask it. The
-     * lyric view fades out with the card's own progress, so during the exit the lyrics are still
-     * on screen while they fade, and asking then is what made the thumbnail blink.
-     */
-    static boolean sLyricUp;
     /**
      * The artwork's scale as the OEM has it, and the last one we wrote over it.
      *
@@ -661,7 +633,7 @@ public class Main extends XposedModule {
      *
      * Keeping both numbers is what removes the guess. See scaleArt().
      */
-    private static float sArtBaseX = 1f, sArtBaseY = 1f;
+    static float sArtBaseX = 1f, sArtBaseY = 1f;
     static float sArtWroteX = Float.NaN, sArtWroteY = Float.NaN;
 
     /**
@@ -6726,10 +6698,10 @@ public class Main extends XposedModule {
         // the same blink with the direction reversed. wantsAttached() rather than wantsShown()
         // because nothing is on screen yet - it answers "will the lyrics be up", which is the
         // question this state is about.
-        sLyricUp = sMcArtInLyrics && LockLyrics.wantsAttached();
-        sLyricArtP = sLyricArtTo = sLyricUp ? 1f : 0f;
-        sLyricArtV = 0f;
-        sLyricArtAt = 0L;
+        CardArt.sLyricUp = sMcArtInLyrics && LockLyrics.wantsAttached();
+        CardArt.sLyricArtP = CardArt.sLyricArtTo = CardArt.sLyricUp ? 1f : 0f;
+        CardArt.sLyricArtV = 0f;
+        CardArt.sLyricArtAt = 0L;
         MediaCard.applyMediaCard();
         // The response is the slider's, read when the transition starts and nowhere else, which
         // is what makes a change land on the next transition and never mid-flight. The cut-out
@@ -7778,74 +7750,6 @@ public class Main extends XposedModule {
     }
 
     /**
-     * One step of the lyrics exception, and what it is now.
-     *
-     * Stepped, not switched: the two answers are two looks of the card, and moving between them
-     * is the same transition the cover itself moves on. Same spring constants as the clock's
-     * (EASE_COVER, at the response the user set for the transition), same integration, so the
-     * thumbnail and the title cross at the speed of the morph they belong to. Anything faster
-     * reads as the cut this replaces; anything slower stops matching the clock beside it.
-     *
-     * The frames come from the card's own pass - the guard already runs every frame of a
-     * transition, and the lyrics being up means the lyric view is redrawing on those same
-     * frames. Only the first step after a change has to be asked for (kickCardFrame): that step
-     * writes nothing new, so nothing would invalidate and the spring would sit at rest one frame
-     * short of moving.
-     *
-     * Snapped rather than sprung on the way into cover mode - see enterCoverMode - because a
-     * thumbnail fading out and back in over the entry would be the same blink, moved.
-     */
-    static float stepLyricArt(boolean want) {
-        float to = want ? 1f : 0f;
-        // A capture is the app asking what the settled card looks like (see shootCard), and the
-        // frame it lands on is not a thing to keep. Everywhere else the motion IS the state.
-        if (sCardForced) {
-            sLyricArtP = sLyricArtTo = to;
-            sLyricArtV = 0f;
-            sLyricArtAt = 0L;
-            return sLyricArtP;
-        }
-        if (to != sLyricArtTo) {
-            // Retargeted. The spring starts on the next frame: this one has nothing new to write.
-            sLyricArtTo = to;
-            sLyricArtAt = 0L;
-            MediaCard.kickCardFrame();
-        }
-        long now = android.os.SystemClock.uptimeMillis();
-        if (sLyricArtAt == 0L) {
-            sLyricArtAt = now;
-        } else {
-            // A frame that stalled must not be integrated whole, or the thumbnail jumps by
-            // whatever the stall was, in one step, on the very transition this is smoothing.
-            float dt = Math.min(0.05f, (now - sLyricArtAt) / 1000f);
-            sLyricArtAt = now;
-            if (dt > 0f) {
-                final float zeta = EASE_COVER[0];
-                final float w0 = (float) (2 * Math.PI / sClockResponse);
-                final float k = w0 * w0, damp = 2f * zeta * w0;
-                // Sub-stepped: a spring integrated at 60Hz with a response this short is not
-                // stable, and the clock's own loop substeps for the same reason.
-                int steps = Math.max(1, (int) Math.ceil(dt * 240f));
-                float h = dt / steps;
-                for (int i = 0; i < steps; i++) {
-                    float a = -k * (sLyricArtP - to) - damp * sLyricArtV;
-                    sLyricArtV += a * h;
-                    sLyricArtP += sLyricArtV * h;
-                }
-                if (sLyricArtP < 0f) sLyricArtP = 0f;
-                if (sLyricArtP > 1f) sLyricArtP = 1f;
-                // Both ends are exact: hideP is p at 0 and 0 at 1, which are the two states the
-                // card has always had, and an alpha left at 0.998 of one of them is not.
-                if (Math.abs(sLyricArtP - to) < 0.002f && Math.abs(sLyricArtV) < 0.02f) {
-                    sLyricArtP = to;
-                    sLyricArtV = 0f;
-                }
-            }
-        }
-        return sLyricArtP;
-    }
-
-    /**
      * `op keepawake`: the lock screen kept lit through a test run, by the mechanism the lyrics'
      * "屏幕常亮" uses (LockLyrics.holdScreen): keepScreenOn on a view in the shade window, whose
      * FLAG_KEEP_SCREEN_ON the window manager holds a screen wake lock for - which outranks the
@@ -8032,36 +7936,8 @@ public class Main extends XposedModule {
                 + " " + a.getWidth() + "x" + a.getHeight() + " shown=" + a.isShown();
     }
 
-    /**
-     * Shrinks the card's artwork to `factor` of whatever scale the OEM is giving it.
-     *
-     * Anything on the view that we did not put there is the OEM's, and remembering what we
-     * last wrote is what tells the two apart. So the baseline is re-read on the first frame,
-     * on a new card view, and on any frame the OEM's own animation has written over ours -
-     * it follows the OEM live rather than latching one frame of it - and factor 1 writes that
-     * baseline straight back. Sign included: see sArtBaseX for what a sampled scaleX cost.
-     */
-    static void scaleArt(View art, float factor) {
-        float x = art.getScaleX(), y = art.getScaleY();
-        // Only adopt a reading that could be a RESTING value. The OEM animates this view, and
-        // a frame caught mid-animation is not a baseline: catching a 0 made the thumbnail
-        // vanish for good, because from then on every frame wrote 0 * factor and the value it
-        // read back was its own 0. Magnitude has to be ~1 - and only the magnitude, because
-        // the sign is the OEM's mirror and taking that as "not resting" is what flipped the
-        // thumbnail before. Anything else leaves the last good baseline in place.
-        if ((x != sArtWroteX || y != sArtWroteY) && resting(x) && resting(y)) {
-            sArtBaseX = x;
-            sArtBaseY = y;
-        }
-        float nx = sArtBaseX * factor, ny = sArtBaseY * factor;
-        if (x != nx) art.setScaleX(nx);
-        if (y != ny) art.setScaleY(ny);
-        sArtWroteX = nx;
-        sArtWroteY = ny;
-    }
-
     /** A scale that could be the OEM's resting one: unit magnitude, either sign. */
-    private static boolean resting(float v) {
+    static boolean resting(float v) {
         return Math.abs(Math.abs(v) - 1f) < 0.02f;
     }
 

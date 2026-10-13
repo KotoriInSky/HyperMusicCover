@@ -210,11 +210,11 @@ public final class MediaCard {
             // drawing this card, lost the thumbnail every time the screen went dark. With the
             // screen off, or in the AOD a wake has not left yet, the question is the standing one
             // instead: are the lyrics what this lock screen is showing.
-            Main.sLyricUp = LockLyrics.wantsShown() || LockLyrics.heldForBlur()
+            CardArt.sLyricUp = LockLyrics.wantsShown() || LockLyrics.heldForBlur()
                     || ((ClockCollapse.phase() == ClockCollapse.Phase.AOD || !Main.screenOnCached())
                         && LockLyrics.wantsAttached());
         }
-        float exc = Main.stepLyricArt(Main.sMcArtInLyrics && Main.sLyricUp);
+        float exc = CardArt.stepLyricArt(Main.sMcArtInLyrics && CardArt.sLyricUp);
         // One number, on purpose. Centring is not a setting of its own any more - a title with no
         // thumbnail beside it belongs in the middle and a title that has one does not - so the
         // title follows the same value the thumbnail does, and both now ride the exception's
@@ -237,13 +237,13 @@ public final class MediaCard {
                 if (art.getVisibility() != View.INVISIBLE) art.setVisibility(View.INVISIBLE);
                 // Out of sight, but put back exactly as the OEM had it: the shade shows this
                 // same view, and a thumbnail left at 0.82 of its size there would be ours.
-                Main.scaleArt(art, 1f);
+                CardArt.scaleArt(art, 1f);
                 if (art.getAlpha() != 1f) art.setAlpha(1f);
             } else {
                 if (art.getVisibility() != View.VISIBLE) art.setVisibility(View.VISIBLE);
                 float a = 1f - hideP;
                 if (art.getAlpha() != a) art.setAlpha(a);
-                Main.scaleArt(art, 1f - hideP * (1f - Main.CARD_ART_MIN_SCALE));
+                CardArt.scaleArt(art, 1f - hideP * (1f - CardArt.CARD_ART_MIN_SCALE));
             }
             if (CoverMorphLayer.active()) {
                 // The moving copy owns these pixels until it reaches either endpoint. Keep the
@@ -267,7 +267,7 @@ public final class MediaCard {
         // Which page it would go to. Asked of the lyrics' own intent while cover mode is on, so
         // the icon flips with the tap rather than when the lyric view has finished fading; held
         // through the exit like the thumbnail's exception above.
-        boolean onLyrics = Main.sCoverMode ? LockLyrics.wantsAttached() : Main.sLyricUp;
+        boolean onLyrics = Main.sCoverMode ? LockLyrics.wantsAttached() : CardArt.sLyricUp;
         CardPageButton.apply(card, pageBtn ? p : 0f, onLyrics, (TextView) sCardTitle);
         if (onKeyguard && !Main.sCardForced) sampleCardRect(card, p);
     }
