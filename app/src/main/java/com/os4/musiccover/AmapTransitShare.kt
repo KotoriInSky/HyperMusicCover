@@ -121,6 +121,8 @@ internal object AmapTransitShare {
     private var walkMsgAt = 0L
     /** The walk (its capsule) close enough to the station after it for 到达起始站附近, or -1. */
     private var nearLeg = -1
+    /** What the ride last said of its stops left, so each change is logged once. */
+    private var lastHeard = ""
 
     /** A trip being played from its own plan (`transit sim`): 高德's own payloads wait meanwhile. */
     @Volatile private var simulating = false
@@ -351,6 +353,7 @@ internal object AmapTransitShare {
         finalOnExit = false
         walkMsg = null
         nearLeg = -1
+        lastHeard = ""
     }
 
     // ------------------------------------------------------------------ the trip
@@ -477,9 +480,30 @@ internal object AmapTransitShare {
         val cur = where?.optString("curStopName").orEmpty().replace(" ", "").trim()
         val seg = plan?.optJSONArray("segmentlist")?.optJSONObject(rideNumber(caps, at))
         val total = (seg?.optJSONArray("via_st_list")?.length() ?: -1) + 1
+        // Every count 高德 gives, and the one its stop name implies (named), once per change: the
+        // island ran a stop ahead early in a subway ride (user, 10-13) - which count moved first.
+        val heard = "card=$cardCount live=$liveCount said=$said cur=$cur named=${byName(seg, cur)}"
+        if (heard != lastHeard) {
+            lastHeard = heard
+            Xp.log(TAG + "ride $at/$total: $heard -> $remain")
+        }
         milestones.observe(remain, total, cur, now)
         return AmapTransitEntity.Live(remain, loc?.optDouble("persent", -1.0) ?: -1.0, cur,
             arrivals(seg, bus))
+    }
+
+    /**
+     * The stops left from the stop [name] - the boarding stop or one of the plan's between -
+     * as 高德 counts them (大学城南 3, 板桥 2, 员岗 1 on 10-05), or -1 when the plan has no such stop.
+     * Only logged.
+     */
+    private fun byName(seg: JSONObject?, name: String): Int {
+        if (seg == null || name.isEmpty()) return -1
+        val via = seg.optJSONArray("via_st_list") ?: JSONArray()
+        fun same(o: JSONObject?) = o?.optString("name")?.replace(" ", "")?.trim() == name
+        if (same(seg.optJSONObject("on_station"))) return via.length() + 1
+        for (i in 0 until via.length()) if (same(via.optJSONObject(i))) return via.length() - i
+        return -1
     }
 
     /**
