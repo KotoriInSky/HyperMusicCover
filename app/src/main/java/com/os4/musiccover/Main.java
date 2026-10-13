@@ -640,7 +640,7 @@ public class Main extends XposedModule {
      * A single tap on the cover puts the wallpaper back, the way tapping Apple's full-bleed
      * artwork does. Tapping again brings the cover back.
      */
-    private static volatile boolean sTapToggle = true;
+    static volatile boolean sTapToggle = true;
     /**
      * Whether the wallpaper crossfades between the album cover and the lock wallpaper instead of
      * swapping in one frame. The fade itself runs in the wallpaper process, which is the only
@@ -706,7 +706,6 @@ public class Main extends XposedModule {
      * decision that was made about a different song.
      */
     static volatile boolean sTapSuppressed;
-    private static GestureDetector sTapDetector;
     /** Set for the length of one gesture that started on the card's artwork and is ours. */
     static boolean sArtSwallow;
     private static long sArtDownAt;
@@ -714,27 +713,6 @@ public class Main extends XposedModule {
     static final long ART_TAP_MS = 500L;
     /** Px of forgiveness around the thumbnail. The card slides; fingers are not pixels. */
     static final int ART_TAP_SLOP = 24;
-
-    /**
-     * How long a tap on the cover is held back before it means anything.
-     *
-     * GestureDetector reports a single tap the moment the finger lifts, and a fast double tap
-     * is two gestures: the first one had already toggled the cover by the time the second
-     * arrived, and MIUI's own double-tap-to-sleep is decided downstream of this hook
-     * (KeyguardPanelViewInjector, over com.android.keyguard's DoubleTapHelper), so it cannot be
-     * asked first. So the tap is armed instead and fired only once the double tap window has
-     * passed. Reported as "double tap the lock screen and the wallpaper state has changed when
-     * it comes back on".
-     *
-     * The framework's own timeout plus a margin. GestureDetector measures the first DOWN to the
-     * second, MIUI measures the gap between the two taps, so the window it might still call a
-     * double tap can end later than ours - the margin is that difference. Not a guess to be
-     * trimmed without measuring first.
-     */
-    private static final long TAP_CONFIRM_MS =
-            android.view.ViewConfiguration.getDoubleTapTimeout() + 60L;
-    /** Armed by a tap on the cover, cancelled while it is still a candidate double tap. */
-    private static Runnable sPendingTap;
 
     /**
      * Whether the gesture in flight began on the control centre.
@@ -1599,12 +1577,12 @@ public class Main extends XposedModule {
                     // is open is aimed at the centre, whatever the gesture turns out to be.
                     if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
                         sGestureOnCentre = controlCenterUp();
-                        if (sGestureOnCentre) cancelPendingTap("gesture began on the control centre");
+                        if (sGestureOnCentre) LockTaps.cancelPendingTap("gesture began on the control centre");
                         // The charging animation, for the same reason and at the same point: a
                         // tap on it is what dismisses it, and asking later would be asking after
                         // it had gone. See chargeAnimUp.
                         sGestureOnCharge = chargeAnimUp();
-                        if (sGestureOnCharge) cancelPendingTap("gesture began on the charging animation");
+                        if (sGestureOnCharge) LockTaps.cancelPendingTap("gesture began on the charging animation");
                     }
                     // A tap on the open immersive page's own target in its row - 高德's turn
                     // arrow - is the page's, and the row must not see it. See
@@ -1656,7 +1634,7 @@ public class Main extends XposedModule {
                         if (swallowArtTap(ev)) return Boolean.TRUE;
                     } catch (Throwable ignored) {
                     }
-                    feedTap(ev);
+                    LockTaps.feedTap(ev);
                 }
                 return chain.proceed();
             });
@@ -2516,10 +2494,10 @@ public class Main extends XposedModule {
                             setResultData("slowlog failed: " + t);
                         }
                     } else if ("twotap".equals(op)) {
-                        setResultData("twoFingerDowns=" + sTwoSeen + " fired=" + sTwoFired
-                                + " maxPointersSeen=" + sTwoMaxPointers + " trail=" + sTwoTrail
-                                + " lastTwoTrail=" + sTwoTrailLast + " cancelled=" + sTwoCancelled
-                                + " last=" + sTwoWhy
+                        setResultData("twoFingerDowns=" + LockTaps.sTwoSeen + " fired=" + LockTaps.sTwoFired
+                                + " maxPointersSeen=" + LockTaps.sTwoMaxPointers + " trail=" + LockTaps.sTwoTrail
+                                + " lastTwoTrail=" + LockTaps.sTwoTrailLast + " cancelled=" + LockTaps.sTwoCancelled
+                                + " last=" + LockTaps.sTwoWhy
                                 + " lyrics=" + LockLyrics.sEnabled
                                 + " tap=" + (LockLyrics.sTapHidden ? "hidden" : "shown"));
                     } else if ("wpart".equals(op)) {
@@ -3261,7 +3239,7 @@ public class Main extends XposedModule {
                     if (sKeepAwakeView != null) keepAwake(false);
                     // A tap still waiting out its double tap window was aimed at a screen that
                     // is gone; whatever was going to cancel it cannot arrive now.
-                    cancelPendingTap("screen off");
+                    LockTaps.cancelPendingTap("screen off");
                 }
                 if (Intent.ACTION_USER_PRESENT.equals(a)) {
                     CoverMorphLayer.cancel();
@@ -7085,7 +7063,7 @@ public class Main extends XposedModule {
             long held = android.os.SystemClock.uptimeMillis() - sPageDownAt;
             if (held < ART_TAP_MS && CardPageButton.contains(ev.getRawX(), ev.getRawY())) {
                 String why = toggleLyricPage();
-                Xp.log(TAG + "page button: " + (why == null ? sTwoWhy : why));
+                Xp.log(TAG + "page button: " + (why == null ? LockTaps.sTwoWhy : why));
             }
         } else if (action == MotionEvent.ACTION_CANCEL) {
             sPageSwallow = false;
@@ -7294,7 +7272,7 @@ public class Main extends XposedModule {
      * Falling back to false when the tree cannot be resolved keeps the tap working on a build
      * that renamed these views, rather than silently switching the whole feature off.
      */
-    private static boolean controlCenterUp() {
+    static boolean controlCenterUp() {
         View cc = findSysuiView("control_center_container");
         if (!(cc instanceof ViewGroup)) return false;
         View content = findByName(cc, "content_container");
@@ -7320,7 +7298,7 @@ public class Main extends XposedModule {
      * dead. This way a build that renames the class answers "no" and leaves the tap exactly as
      * it was, which is the same bargain bouncerUp and controlCenterUp make.
      */
-    private static boolean chargeAnimUp() {
+    static boolean chargeAnimUp() {
         View v = sContainer;
         if (v == null) return false;
         View root = v.getRootView();
@@ -7467,7 +7445,7 @@ public class Main extends XposedModule {
         noteToggleCost("out", System.nanoTime() - t0);
     }
 
-    private static void enterFromTap(String why) {
+    static void enterFromTap(String why) {
         // Before the morph is begun, not only at setCoverEnabled: the morph would otherwise
         // start out of a card that then never turns into anything.
         if (!sCoverFeatureOn) return;
@@ -8286,192 +8264,10 @@ public class Main extends XposedModule {
     }
 
     /**
-     * Feeds the lock screen's touch stream to a detector without taking part in it.
-     *
-     * GestureDetector needs the whole DOWN..UP sequence, which is why this hangs off the shade
-     * window's dispatchTouchEvent rather than any one child: it is the single point every event
-     * passes through before the OEM decides what to do with it. The detector's answer is
-     * discarded - consuming a DOWN here would take swipe-to-unlock with it.
-     *
-     * What it reports is not acted on the moment it reports it: a tap on the cover is armed and
-     * fires only once it can no longer be the first half of a double tap. See armLockTap.
-     */
-    private static void feedTap(MotionEvent ev) {
-        if (ev == null) return;
-        feedTwoFingerTap(ev);
-        if (!sTapToggle) return;
-        // A gesture the system took away is never going to produce the second tap.
-        if (ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
-            cancelPendingTap("gesture cancelled");
-        }
-        if (sTapDetector == null) {
-            Context c = sAppCtx;
-            if (c == null) return;
-            // Constructed from inside the dispatch, so the looper it picks up is the one the
-            // lock screen draws on, which is where the callback has to land.
-            sTapDetector = new GestureDetector(c, new GestureDetector.SimpleOnGestureListener() {
-                @Override
-                public boolean onSingleTapUp(MotionEvent e) {
-                    armLockTap(e.getRawY());
-                    return false;
-                }
-
-                /**
-                 * Fired on the second DOWN, which is the whole point: two taps this close are
-                 * the user asking the lock screen to sleep, not asking the cover to leave.
-                 */
-                @Override
-                public boolean onDoubleTap(MotionEvent e) {
-                    cancelPendingTap("second tap");
-                    return false;
-                }
-            });
-        }
-        try {
-            sTapDetector.onTouchEvent(ev);
-        } catch (Throwable ignored) {
-        }
-    }
-
-    // ---- the two-finger tap: the lock screen's lyrics switch
-    /** Where the two fingers went down, and when; 0 = no candidate in progress. */
-    private static long sTwoDownAt;
-    private static float sTwoX0, sTwoY0, sTwoX1, sTwoY1;
-    /** Replaced by the framework's own slop as soon as there is a context to ask. */
-    private static float sTwoSlop = 48f;
-    /** The system cancelled this gesture. Watched on, not given up - see ACTION_CANCEL below. */
-    private static boolean sTwoCancelled;
-    /** Diagnostics for `op twotap`: how many two-finger downs were seen, and what became of them. */
-    private static int sTwoSeen, sTwoFired;
-    private static String sTwoWhy = "nothing yet";
-    private static int sTwoMaxPointers;
-
-    /**
-     * Two fingers tapped at once toggles the lyrics.
-     *
-     * Every other gesture on the cover is taken: one tap is the cover itself, two in a row is the
-     * OEM's sleep, a long press its lock screen editor. This one is free, and being anywhere on
-     * the screen it needs no control of its own.
-     *
-     * The single-tap detector is not disturbed by it: the lock screen cancels its own gesture the
-     * moment the second finger lands, and feedTap passes that cancel on to cancelPendingTap.
-     */
-    private static void feedTwoFingerTap(MotionEvent ev) {
-        if (ev.getPointerCount() > sTwoMaxPointers) sTwoMaxPointers = ev.getPointerCount();
-        noteTwoAction(ev);
-        switch (ev.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                sTwoDownAt = 0L;
-                sTwoCancelled = false;
-                break;
-            case MotionEvent.ACTION_CANCEL:
-                // Not the end of the touch stream here, and not a reason to drop the candidate.
-                // The lock screen cancels as soon as the second finger lands - measured trail
-                // DdXuU, with no move in it at all (2026-09-16) - and then delivers the real
-                // POINTER_UP and UP to this window anyway. Giving up on the cancel is what made
-                // all eight two-finger taps of that recording do nothing. A gesture the system
-                // has genuinely taken away is kept from firing by the slop and the long-press
-                // timeout below, both of which still apply, and by the next DOWN clearing this.
-                if (sTwoDownAt != 0L) sTwoCancelled = true;
-                break;
-            case MotionEvent.ACTION_POINTER_DOWN:
-                if (ev.getPointerCount() != 2) {
-                    // A third finger: not this gesture.
-                    sTwoDownAt = 0L;
-                    sTwoWhy = "a third finger (" + ev.getPointerCount() + ")";
-                    break;
-                }
-                sTwoSeen++;
-                sTwoWhy = "two fingers down";
-                sTwoCancelled = false;
-                sTwoDownAt = ev.getEventTime();
-                sTwoX0 = ev.getX(0);
-                sTwoY0 = ev.getY(0);
-                sTwoX1 = ev.getX(1);
-                sTwoY1 = ev.getY(1);
-                if (sAppCtx != null) {
-                    sTwoSlop = android.view.ViewConfiguration.get(sAppCtx).getScaledTouchSlop()
-                            * 1.5f;
-                }
-                break;
-            case MotionEvent.ACTION_MOVE:
-                if (sTwoDownAt == 0L || ev.getPointerCount() < 2) break;
-                if (moved(ev.getX(0), ev.getY(0), sTwoX0, sTwoY0)
-                        || moved(ev.getX(1), ev.getY(1), sTwoX1, sTwoY1)) {
-                    // A pinch, a two-finger swipe, a scroll: not a tap.
-                    sTwoDownAt = 0L;
-                    sTwoWhy = "moved more than " + Math.round(sTwoSlop) + "px";
-                }
-                break;
-            case MotionEvent.ACTION_POINTER_UP:
-            case MotionEvent.ACTION_UP:
-                if (sTwoDownAt == 0L) break;
-                long held = ev.getEventTime() - sTwoDownAt;
-                sTwoDownAt = 0L;
-                if (held <= android.view.ViewConfiguration.getLongPressTimeout()) {
-                    onTwoFingerTap();
-                } else {
-                    sTwoWhy = "held " + held + "ms, too long";
-                }
-                break;
-            default:
-                break;
-        }
-    }
-
-    /** The last gesture's actions, in order, for `op twotap`. */
-    private static final StringBuilder sTwoTrail = new StringBuilder();
-    /**
-     * The last gesture that had a second finger in it, kept whole. The live trail is overwritten
-     * by whatever is touched next, and a single tap on the way to reading it used to take the
-     * only record of the gesture being diagnosed with it.
-     */
-    private static String sTwoTrailLast = "";
-
-    private static void noteTwoAction(MotionEvent ev) {
-        int a = ev.getActionMasked();
-        if (a == MotionEvent.ACTION_DOWN) {
-            if (sTwoTrail.indexOf("d") >= 0) sTwoTrailLast = sTwoTrail.toString();
-            sTwoTrail.setLength(0);
-        }
-        if (a == MotionEvent.ACTION_MOVE && sTwoTrail.length() > 0
-                && sTwoTrail.charAt(sTwoTrail.length() - 1) == 'm') {
-            return;
-        }
-        if (sTwoTrail.length() > 40) return;
-        sTwoTrail.append(a == MotionEvent.ACTION_DOWN ? "D"
-                : a == MotionEvent.ACTION_POINTER_DOWN ? "d"
-                : a == MotionEvent.ACTION_MOVE ? "m"
-                : a == MotionEvent.ACTION_POINTER_UP ? "u"
-                : a == MotionEvent.ACTION_UP ? "U"
-                : a == MotionEvent.ACTION_CANCEL ? "X" : "?");
-    }
-
-    private static boolean moved(float x, float y, float fromX, float fromY) {
-        float dx = x - fromX, dy = y - fromY;
-        return dx * dx + dy * dy > sTwoSlop * sTwoSlop;
-    }
-
-    /**
-     * Swaps the cover and the lyrics on the lock screen, under the same guards as the cover's
-     * own tap: only the lock screen itself, not the bouncer, the control centre or a shade
-     * pulled down over an unlocked phone, and only while a track is on the card - there is
-     * nothing to show without one.
-     *
-     * It is a view and not a setting: the app's switch and the state file are left alone, and
-     * with the switch off the tap does nothing at all. See LockLyrics.toggleByTap.
-     */
-    private static void onTwoFingerTap() {
-        String why = toggleLyricPage();
-        if (why == null) sTwoFired++;
-        else sTwoWhy = why;
-    }
-
-    /**
      * The swap itself, for the two-finger tap and the card's page button alike, so the two
      * cannot drift apart on what blocks it. Null when it ran; otherwise why it did not.
      */
-    private static String toggleLyricPage() {
+    static String toggleLyricPage() {
         View c = sContainer;
         String no = !screenOn() ? "the screen is off"
                 : !keyguardShowing() ? "the keyguard is not showing"
@@ -8508,116 +8304,11 @@ public class Main extends XposedModule {
         }
         LockLyrics.toggleByTap(sTrackKey, sWatched);
         // How long the swap took. Nothing is written down, so this is its whole cost.
-        sTwoWhy = "lyrics " + (LockLyrics.sTapHidden ? "hidden" : "shown") + " in "
+        LockTaps.sTwoWhy = "lyrics " + (LockLyrics.sTapHidden ? "hidden" : "shown") + " in "
                 + (android.os.SystemClock.uptimeMillis() - t0) + "ms";
         // The button's icon names the other page, and nothing else redraws the card for it.
         MediaCard.kickCardFrame();
         return null;
-    }
-
-    /**
-     * Holds a tap on the cover back until it cannot be the first half of a double tap.
-     *
-     * This decides when the tap runs, not what it does: onLockTap re-reads the screen, the
-     * keyguard and the card when it fires, so a screen that went off inside the window drops
-     * the tap on its own - which is what covers a build whose double tap window is longer than
-     * ours, and every double tap the framework itself did not recognise as one.
-     */
-    private static void armLockTap(final float y) {
-        if (!sTapToggle) return;
-        // Decided at the DOWN, because by the time this runs the centre - or the charging
-        // animation - may have closed under the guard in onLockTap. See the dispatch hook for
-        // the full account.
-        if (sGestureOnCentre || sGestureOnCharge) return;
-        flushPendingTap();
-        Runnable r = new Runnable() {
-            @Override
-            public void run() {
-                sPendingTap = null;
-                onLockTap(y);
-            }
-        };
-        sPendingTap = r;
-        main().postDelayed(r, TAP_CONFIRM_MS);
-    }
-
-    /**
-     * Runs the tap that was waiting, because a new one has been armed on top of it.
-     *
-     * Reaching a second tap at all means the framework decided the first was not half of a
-     * double tap - it cancels the waiting one on the second DOWN when it is. So the wait is
-     * over: firing it here is what keeps "tap, pause, tap" meaning two toggles rather than the
-     * second tap quietly replacing the first.
-     */
-    private static void flushPendingTap() {
-        Runnable r = sPendingTap;
-        if (r == null) return;
-        sPendingTap = null;
-        main().removeCallbacks(r);
-        r.run();
-    }
-
-    /** A held-back tap that has stopped being one: log what ended it rather than guess later. */
-    private static void cancelPendingTap(String why) {
-        Runnable r = sPendingTap;
-        if (r == null) return;
-        sPendingTap = null;
-        main().removeCallbacks(r);
-        Xp.log(TAG + "held-back cover tap dropped (" + why + ")");
-    }
-
-    /**
-     * A tap on the cover toggles cover mode.
-     *
-     * "On the cover" is everything between the status bar and the top of the media card. The
-     * card and everything below it belongs to the OEM - the transport buttons, the notification
-     * list, the two shortcuts in the corners - and a tap down there still means what it always
-     * meant. The card rectangle is the one sampled for the app's preview, and the fallback is a
-     * fraction of the screen rather than a pixel count because it stands in for a measurement
-     * this device has simply not taken yet.
-     */
-    private static void onLockTap(float y) {
-        if (!sTapToggle) return;
-        if (!screenOn() || !keyguardShowing()) return;
-        // Only the keyguard shows the clock container, so this is also what rules out the shade
-        // being pulled down over an unlocked phone - the same test the card restyle uses.
-        View c = sContainer;
-        if (c == null || !c.isShown()) return;
-        // The pad is up, so the taps on it are its own.
-        if (bouncerUp()) return;
-        // The control centre covers the same region without hiding the clock, so none of the
-        // guards above see it: a tap aimed at a quick toggle must not toggle the cover.
-        if (controlCenterUp()) return;
-        // And the charging animation, which is a full-screen view over the same region. This is
-        // the second half of the pair - a tap that began before the animation was up is caught
-        // here, one that began under it was caught at the DOWN.
-        if (chargeAnimUp()) return;
-        // Nothing to toggle without music: the card is the switch, and this only chooses
-        // whether the cover follows it.
-        if (!MediaCard.sCardKnown || !MediaCard.sCardShowing) return;
-        // An immersive page is the picture here, not the cover: a tap on it is a tap on the
-        // page, and it put the cover and its card up over the map (user, 2026-09-29). The page
-        // is left by its island, as it was opened.
-        if (ImmersiveHost.holdsClock()) return;
-        float top = sScreenH * 0.08f;
-        // Measured live where possible. The sampled rectangle is a settled reading taken for
-        // the app's preview and it lags: seen at 1360 while the card was actually at 1700,
-        // which as a boundary would be 340px of cover that answers no tap at all.
-        float bottom;
-        View card = MediaCard.sCardGuarded;
-        if (card != null && card.isShown() && card.getHeight() > 0) {
-            int[] loc = new int[2];
-            card.getLocationOnScreen(loc);
-            bottom = loc[1];
-        } else {
-            bottom = MediaCard.sCardT > sScreenH / 3 ? MediaCard.sCardT : sScreenH * 0.62f;
-        }
-        if (y < top || y > bottom) return;
-        if (sCoverMode) {
-            exitFromTap("tap at y=" + y);
-        } else if (sTapSuppressed) {
-            enterFromTap("tap at y=" + y);
-        }
     }
 
     public static boolean screenOn() {

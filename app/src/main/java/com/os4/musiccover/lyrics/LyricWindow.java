@@ -1,4 +1,5 @@
 package com.os4.musiccover.lyrics;
+import com.os4.musiccover.LockTaps;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.Xp;
 import android.content.Context;
@@ -27,7 +28,7 @@ import android.view.WindowManager;
  * inside the shade window parents the window to it in ways it does not expect), while the parent
  * is named by the token of a view inside it. Touches fall through to the lock screen exactly as
  * they did when the view was a child of the keyguard, so the two-finger tap and the swipes are
- * untouched (Main.onTwoFingerTap hooks the keyguard's dispatch, not this view).
+ * untouched (LockTaps.onTwoFingerTap hooks the keyguard's dispatch, not this view).
  *
  * Only with the HDR switch on (LockLyrics.attach); with it off the view is a child of the
  * foreground layer as it always was, because the window is paid for in everything a child gets
