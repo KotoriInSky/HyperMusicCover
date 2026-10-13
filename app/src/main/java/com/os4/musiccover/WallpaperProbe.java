@@ -2211,8 +2211,13 @@ public class WallpaperProbe {
      * fade waits for one already in the air - the cover arriving, a track changing - to land
      * first, because a new fade starts from the picture it is handed, not from what is on screen.
      */
+    static boolean lyricBlurWanted() {
+        return sLyricBlurWant;
+    }
+
     private static void setLyricBlur(final boolean on) {
         sLyricBlurWant = on;
+        WallpaperVideo.setFrost(on);
         composer().post(new Runnable() {
             @Override
             public void run() {

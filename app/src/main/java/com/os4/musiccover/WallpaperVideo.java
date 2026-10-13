@@ -92,6 +92,27 @@ final class WallpaperVideo {
     private static float sAlpha;
     private static long sAlphaAt;
     private static final float FADE_MS = 350f;
+    /**
+     * The lyric page's frosting, 0..1, eased like sAlpha. Under the lyrics the wallpaper process
+     * puts up a frosted copy of the still (CoverCompose.frostedFor), and a sharp video drawn over
+     * it took the frosting away. The video is frosted the same way instead - its own blurred
+     * backdrop, saturated 1.3 and darkened - so it stays moving under the words.
+     */
+    private static volatile boolean sFrostWant;
+    private static volatile long sFrostChangedAt;
+    /** GL thread: the fade running now is the lyrics' frosting. */
+    private static boolean sFrostFade;
+    private static float sFrost;
+    private static long sFrostAt;
+
+    /** Any thread: the lyrics came up or went. */
+    static void setFrost(boolean on) {
+        if (sFrostWant == on) return;
+        sFrostWant = on;
+        sFrostChangedAt = SystemClock.uptimeMillis();
+        if (sOn) WallpaperProbe.videoFrame();
+    }
+
     /** GL thread: a still's crossfade is running, and whether it began with video on screen. */
     private static boolean sInFade, sOverlay;
     private static final float[] sStMatrix = new float[16];
@@ -140,6 +161,9 @@ final class WallpaperVideo {
             return;
         }
         sCurrent = false;
+        sRetries = 0;
+        sApp = ctx.getApplicationContext();
+        sFrostWant = WallpaperProbe.lyricBlurWanted();
         sOn = true;
         registerScreen(ctx);
         Xp.log(TAG + "on: " + path + " " + sVideoW + "x" + sVideoH + " bias=" + bias);
@@ -161,6 +185,7 @@ final class WallpaperVideo {
         sOn = false;
         MediaPlayer p = sPlayer;
         sPlayer = null;
+        sPrepared = false;
         if (p != null) {
             try {
                 p.release();
@@ -182,7 +207,7 @@ final class WallpaperVideo {
             @Override
             public void onReceive(Context c, Intent i) {
                 MediaPlayer p = sPlayer;
-                if (p == null) return;
+                if (p == null || !sPrepared) return;
                 try {
                     if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
                         if (p.isPlaying()) p.pause();
@@ -202,17 +227,56 @@ final class WallpaperVideo {
     }
 
     /** Main thread: point the player at a SurfaceTexture the GL thread has just made. */
+    /** The player in sPlayer has finished preparing. Main thread. */
+    private static boolean sPrepared;
+    private static Context sApp;
+    /** Players remade after an error since the last start(). */
+    private static int sRetries;
+
     private static void attachPlayer(SurfaceTexture st) {
         if (!sOn || st != sPendingTexture) return;
         sPendingTexture = null;
-        Surface surface = new Surface(st);
-        try {
-            if (sPlayer != null) {
-                // A new GL context: same player, new target.
+        if (sPlayer != null && sPrepared) {
+            // A new GL context: same player, new target - only once it is prepared. Moved while
+            // still preparing, it answered error 1/-19 and the video was gone until the next
+            // track (2026-10-13, every switch back that met a context rebuild).
+            Surface surface = new Surface(st);
+            try {
                 sPlayer.setSurface(surface);
                 Xp.log(TAG + "player moved to a new context's texture");
                 return;
+            } catch (Throwable t) {
+                Xp.w(TAG + "moving the player failed, making a new one: " + t);
+            } finally {
+                surface.release();
             }
+        }
+        newPlayer(st);
+    }
+
+    /** The screen is on. A player that finishes preparing in the dark waits for SCREEN_ON. */
+    private static boolean interactive() {
+        try {
+            android.os.PowerManager pm = sApp == null ? null
+                    : sApp.getSystemService(android.os.PowerManager.class);
+            return pm == null || pm.isInteractive();
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    private static void newPlayer(SurfaceTexture st) {
+        MediaPlayer old = sPlayer;
+        sPlayer = null;
+        sPrepared = false;
+        if (old != null) {
+            try {
+                old.release();
+            } catch (Throwable ignored) {
+            }
+        }
+        Surface surface = new Surface(st);
+        try {
             final MediaPlayer p = new MediaPlayer();
             sPlayer = p;
             p.setDataSource(sPath);
@@ -220,13 +284,21 @@ final class WallpaperVideo {
             p.setLooping(true);
             p.setVolume(0f, 0f);
             p.setOnErrorListener((mp, what, extra) -> {
-                Xp.w(TAG + "player error " + what + "/" + extra);
-                stop("player error");
+                if (sPlayer != mp) return true;
+                Xp.w(TAG + "player error " + what + "/" + extra + " (retry " + sRetries + ")");
+                SurfaceTexture now = sTexture;
+                if (sOn && now != null && sRetries < 2) {
+                    sRetries++;
+                    newPlayer(now);
+                } else {
+                    stop("player error");
+                }
                 return true;
             });
             p.setOnPreparedListener(mp -> {
                 if (sPlayer != mp || !sOn) return;
-                mp.start();
+                sPrepared = true;
+                if (interactive()) mp.start();
                 Xp.log(TAG + "playing");
             });
             p.prepareAsync();
@@ -296,22 +368,30 @@ final class WallpaperVideo {
                 makeFull(texW, texH);
             }
             long now = SystemClock.uptimeMillis();
-            if (fadeRunning) {
-                // The still's fade owns the texture; the video takes over when it has landed.
-                // If video was showing as it began, its last composite is what fades out.
-                if (!sInFade) {
-                    sInFade = true;
-                    sOverlay = sAlpha > 0f && sHasFrame;
-                }
+            if (fadeRunning && !sInFade) {
+                sInFade = true;
+                // The lyrics' frosting is a fade of the same cover, sharp to frosted. A video
+                // on screen frosts itself (sFrost), so it keeps drawing through that one: left
+                // to the still's fade, it went sharp video -> frosted still -> frosted video.
+                sFrostFade = sOn && sCurrent && sAlpha > 0f
+                        && SystemClock.uptimeMillis() - sFrostChangedAt < 1000L;
+                // Any other fade owns the texture and the video takes over when it has landed;
+                // if video was showing as it began, its last composite is what fades out.
+                sOverlay = sFrostFade || (sAlpha > 0f && sHasFrame);
+            }
+            if (fadeRunning && !sFrostFade) {
                 sSkippedFade++;
                 sAlphaAt = now;
+                sFrostAt = now;
                 return 0;
             }
-            if (sInFade) {
+            if (!fadeRunning && sInFade) {
                 sInFade = false;
-                // The fade took the video off the screen with it.
-                if (sOverlay) sAlpha = 0f;
+                // The fade took the video off the screen with it - unless it was the frosting,
+                // which the video drew itself.
+                if (sOverlay && !sFrostFade) sAlpha = 0f;
                 sOverlay = false;
+                sFrostFade = false;
             }
             if (sFullTex == 0) return 0;
             boolean fresh = false;
@@ -331,12 +411,20 @@ final class WallpaperVideo {
                         : Math.max(target, sAlpha - dt / FADE_MS);
             }
             sAlphaAt = now;
+            float frostTarget = sFrostWant ? 1f : 0f;
+            float frostWas = sFrost;
+            if (sFrost != frostTarget) {
+                float dt = sFrostAt == 0L ? 16f : Math.min(50f, Math.max(1f, now - sFrostAt));
+                sFrost = frostTarget > sFrost ? Math.min(frostTarget, sFrost + dt / FADE_MS)
+                        : Math.max(frostTarget, sFrost - dt / FADE_MS);
+            }
+            sFrostAt = now;
             if (sAlpha <= 0f) {
                 if (!sOn) release(ctx);
                 return 0;
             }
             if (!sHasFrame) return 0;
-            if (fresh || sAlpha != was) {
+            if (fresh || sAlpha != was || sFrost != frostWas) {
                 long t0 = System.nanoTime();
                 compose(stillTex);
                 long ns = System.nanoTime() - t0;
@@ -346,7 +434,7 @@ final class WallpaperVideo {
             }
             // A fade in either direction asks for its own frames: a paused or stopped player
             // sends none.
-            if (sAlpha != target) WallpaperProbe.videoFrame();
+            if (sAlpha != target || sFrost != frostTarget) WallpaperProbe.videoFrame();
             sDrawn++;
             return sFullTex;
         } catch (Throwable t) {
@@ -399,6 +487,7 @@ final class WallpaperVideo {
         sFrameWaiting = false;
         sCurrent = false;
         sAlpha = 0f;
+        sFrost = sFrostWant ? 1f : 0f;
         Xp.log(TAG + "GL objects made in context #" + sContexts + " ("
                 + GLES20.glGetString(GLES20.GL_VERSION) + ")");
     }
@@ -497,6 +586,7 @@ final class WallpaperVideo {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, stillTex);
         GLES20.glUniform1i(loc(sProgCompose, "uStill"), 2);
         GLES20.glUniform1f(loc(sProgCompose, "uAlpha"), stillTex == 0 ? 1f : sAlpha);
+        GLES20.glUniform1f(loc(sProgCompose, "uFrost"), sFrost);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
@@ -527,7 +617,7 @@ final class WallpaperVideo {
         }
         forget();
         sAlpha = 0f;
-        sInFade = sOverlay = false;
+        sInFade = sOverlay = sFrostFade = false;
         Xp.log(TAG + "GL objects released" + (ours ? "" : " (their context was already gone)"));
     }
 
@@ -690,6 +780,7 @@ final class WallpaperVideo {
             + "uniform sampler2D uBack;\n"
             + "uniform sampler2D uStill;\n"   // the OEM's texture: what shows without video
             + "uniform float uAlpha;\n"
+            + "uniform float uFrost;\n"
             + "uniform vec2 uFull;\n"
             + "uniform vec3 uBand;\n"   // top, height, feather
             + "void main() {\n"
@@ -700,6 +791,14 @@ final class WallpaperVideo {
             + "    float a = uBand.z > 0.0\n"
             + "        ? clamp(min(y, uBand.y - y) / uBand.z, 0.0, 1.0) : 1.0;\n"
             + "    c = mix(c, video(vec2(p.x / uFull.x, y / uBand.y)).rgb, a);\n"
+            + "  }\n"
+            // CoverCompose.frostedOf: saturation 1.3 (ColorMatrix luminance), 0x14 then 0x61.
+            + "  if (uFrost > 0.0) {\n"
+            + "    vec3 b = texture2D(uBack, p / uFull).rgb;\n"
+            + "    float l = dot(b, vec3(0.213, 0.715, 0.072));\n"
+            + "    vec3 f = clamp(mix(vec3(l), b, 1.3), 0.0, 1.0)\n"
+            + "        * (1.0 - 20.0 / 255.0) * (1.0 - 97.0 / 255.0);\n"
+            + "    c = mix(c, f, uFrost);\n"
             + "  }\n"
             + "  if (uAlpha < 1.0) c = mix(texture2D(uStill, p / uFull).rgb, c, uAlpha);\n"
             + "  gl_FragColor = vec4(c, 1.0);\n"
