@@ -928,6 +928,11 @@ final class LockLyrics {
      * with no lyrics until a relock (user, 2026-09-30; log 07:52:01, payload at +0.5s, lookup
      * done at +2s, read only at the next entry at +5s).
      */
+    /** A payload fetched by reference has come back (LyricSource.byRef). */
+    static void onSessionPayload() {
+        rereadIfNewPayload(sKey, sController);
+    }
+
     private static void rereadIfNewPayload(String key, MediaController c) {
         // Parked is loading only in name: nothing is running, it is waiting for exactly this.
         // A lookup still running with nothing on screen is no reason to wait either: it is on

@@ -241,6 +241,68 @@ final class LyricSource {
      */
     private static final String KEY_LYRIC_INFO = "lyricInfo";
 
+    /**
+     * Our Apple hook's lyric, by reference: the metadata carries this, and the payload is asked
+     * for with CMD_LYRIC. The payload in the metadata itself went to every controller on the
+     * session each time the player set it, and dropped the mini player's callback - see
+     * AppleLyrics.
+     */
+    static final String KEY_LYRIC_REF = "mcLyricRef";
+    static final String CMD_LYRIC = "com.os4.musiccover.LYRIC";
+
+    /** Which song's payload, and which payload: a lyric rebuilt for the same song is a new one. */
+    static String lyricRef(String id, String payload) {
+        return id + "#" + Integer.toHexString(payload.hashCode()) + "#" + payload.length();
+    }
+
+    /** The one payload fetched by reference, and the reference asked for last and when. */
+    private static final Object REF_LOCK = new Object();
+    private static String sRefHeld;
+    private static String sRefPayload;
+    private static String sRefAsked;
+    private static long sRefAskedAt;
+    /** Asked again after this, for an answer that never came or a player that had nothing yet. */
+    private static final long REF_RETRY_MS = 3000L;
+
+    /**
+     * The payload `ref` names, or null while it is being fetched. The answer comes on a binder
+     * thread; it is then the session's payload for every reader, and the lock screen is told the
+     * session is carrying a lyric it has not read, as a provider module's late one would.
+     */
+    private static String byRef(MediaController c, final String ref) {
+        long now = android.os.SystemClock.uptimeMillis();
+        synchronized (REF_LOCK) {
+            if (ref.equals(sRefHeld)) {
+                return sRefPayload;
+            }
+            if (ref.equals(sRefAsked) && now - sRefAskedAt < REF_RETRY_MS) {
+                return null;
+            }
+            sRefAsked = ref;
+            sRefAskedAt = now;
+        }
+        final String pkg = c.getPackageName();
+        android.os.Bundle args = new android.os.Bundle();
+        args.putString(KEY_LYRIC_REF, ref);
+        c.sendCommand(CMD_LYRIC, args, new android.os.ResultReceiver(null) {
+            @Override
+            protected void onReceiveResult(int code, android.os.Bundle data) {
+                String payload = data == null ? null : data.getString(KEY_LYRIC_INFO);
+                if (code != 0 || payload == null) {
+                    Xp.log("[MCLyric] " + pkg + " did not have " + ref);
+                    return;
+                }
+                synchronized (REF_LOCK) {
+                    sRefHeld = ref;
+                    sRefPayload = payload;
+                }
+                Xp.log("[MCLyric] " + pkg + " sent " + payload.length() + " chars for " + ref);
+                Main.main().post(LockLyrics::onSessionPayload);
+            }
+        });
+        return null;
+    }
+
     /** LRC-style timing, bracketed with [] or <>. <> is the word-level (enhanced) form. */
     static final java.util.regex.Pattern TIMED =
             java.util.regex.Pattern.compile("[\\[<][0-9]{1,3}:[0-9]{2}(?:[.:][0-9]{1,3})?[\\]>]");
@@ -261,7 +323,12 @@ final class LyricSource {
             if (md == null) {
                 return null;
             }
-            return md.getString(KEY_LYRIC_INFO);
+            String info = md.getString(KEY_LYRIC_INFO);
+            if (info != null) {
+                return info;
+            }
+            String ref = md.getString(KEY_LYRIC_REF);
+            return ref == null ? null : byRef(c, ref);
         } catch (Throwable t) {
             return null;
         }

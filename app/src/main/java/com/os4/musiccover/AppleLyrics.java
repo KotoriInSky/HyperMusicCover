@@ -29,11 +29,17 @@ import io.github.libxposed.api.XposedInterface;
  * reimplements; the code is ours, because their module is a Lyricon provider built on YukiHookAPI
  * and this one has to be a libxposed hook that answers to our own lock screen.
  *
- * Nothing here talks to SystemUI directly. What it does instead is write the lyric back into
- * Apple Music's own MediaSession, under the "lyricInfo" key the provider modules already use -
- * see {@link LyricSource}. So the lock screen reads it through the route it has read every other
- * player's lyric through, word timings and all, and this file is the only thing that had to be
- * written to make Apple Music work like the rest.
+ * Nothing here talks to SystemUI directly. The lyric goes through Apple Music's own
+ * MediaSession, and the lock screen reads it through the route it has read every other player's
+ * lyric through, word timings and all - see {@link LyricSource}.
+ *
+ * Not in the metadata itself, though, the way the provider modules put theirs. The payload runs
+ * to 50k characters, and the metadata goes to every controller on the session each time the
+ * player sets it - a dozen in SystemUI alone. Skipping through tracks, that filled SystemUI's
+ * binder buffer, and the system server drops a controller callback for good the first time a call
+ * to it fails: the lock screen's mini player went on showing a song long gone (2026-10-14). The
+ * metadata carries a reference to the lyric instead (LyricSource.KEY_LYRIC_REF), and the lock
+ * screen asks for the lyric itself with a session command, which only it receives.
  */
 final class AppleLyrics {
 
@@ -49,7 +55,7 @@ final class AppleLyrics {
      * previous build - and a change that only shows up as a line NOT being logged looks
      * identical to not having loaded at all. It cost a round trip once.
      */
-    private static final String BUILD = "respace-1";
+    private static final String BUILD = "ref-1";
 
     /** The player's package, and the only process this class ever runs in. */
     static final String PKG = "com.apple.android.music";
@@ -67,6 +73,11 @@ final class AppleLyrics {
             hookSetMetadata();
         } catch (Throwable t) {
             note("setMetadata hook failed: " + t);
+        }
+        try {
+            hookCommand();
+        } catch (Throwable t) {
+            note("command hook failed: " + t);
         }
         try {
             hookLyricBuild(cl);
@@ -136,7 +147,7 @@ final class AppleLyrics {
         if (id.equals(sHeldId) && sHeldPayload != null) {
             // Already built, from a previous play of this track. Attach it on the way past,
             // which is cheaper and earlier than publishing it again afterwards.
-            inject(md, sHeldPayload);
+            inject(md, id, sHeldPayload);
             return;
         }
         // Not built yet. Apple only builds a lyric when its own lyric page asks for one, so
@@ -736,12 +747,15 @@ final class AppleLyrics {
 
     // ---------------------------------------------------------------- publishing
 
-    /** Put the payload into a metadata on its way out, without disturbing anything else in it. */
-    private static void inject(MediaMetadata md, String payload) {
+    /**
+     * Put the reference to the payload into a metadata on its way out, without disturbing
+     * anything else in it. The payload itself is handed over on request - see hookCommand.
+     */
+    private static void inject(MediaMetadata md, String id, String payload) {
         try {
             Bundle b = (Bundle) Xp.getObjectField(md, "mBundle");
-            if (b != null) {
-                b.putString("lyricInfo", payload);
+            if (b != null && id != null) {
+                b.putString(LyricSource.KEY_LYRIC_REF, LyricSource.lyricRef(id, payload));
             }
         } catch (Throwable t) {
             note("could not attach to the metadata: " + t);
@@ -769,7 +783,7 @@ final class AppleLyrics {
                 note("session is holding no metadata to revise");
                 return;
             }
-            inject((MediaMetadata) md, payload);
+            inject((MediaMetadata) md, sHeldId, payload);
             sPublishing = true;
             try {
                 session.getClass().getMethod("setMetadata", MediaMetadata.class)
@@ -777,11 +791,46 @@ final class AppleLyrics {
             } finally {
                 sPublishing = false;
             }
-            note("published " + payload.length() + " chars to the session");
+            note("published the reference to " + payload.length() + " chars to the session");
         } catch (Throwable t) {
             sPublishing = false;
             note("republish failed: " + t);
         }
+    }
+
+    /**
+     * The lock screen asking for the lyric a metadata referred to.
+     *
+     * MediaSession.dispatchCommand is the framework's own, called on the binder thread for every
+     * command a controller sends: ours is answered here and never reaches the player, which
+     * would not know it. The answer goes back to the one controller that asked.
+     */
+    private static void hookCommand() throws Throwable {
+        Method m = android.media.session.MediaSession.class.getDeclaredMethod("dispatchCommand",
+                android.media.session.MediaSessionManager.RemoteUserInfo.class, String.class,
+                Bundle.class, android.os.ResultReceiver.class);
+        Xp.hook(m, (XposedInterface.Hooker) chain -> {
+            List<Object> args = chain.getArgs();
+            if (!LyricSource.CMD_LYRIC.equals(args.get(1))) {
+                return chain.proceed();
+            }
+            android.os.ResultReceiver cb = (android.os.ResultReceiver) args.get(3);
+            Bundle asked = (Bundle) args.get(2);
+            String ref = asked == null ? null : asked.getString(LyricSource.KEY_LYRIC_REF);
+            String id = sHeldId;
+            String payload = sHeldPayload;
+            boolean have = ref != null && id != null && payload != null
+                    && ref.equals(LyricSource.lyricRef(id, payload));
+            if (cb != null) {
+                Bundle out = new Bundle();
+                if (have) {
+                    out.putString("lyricInfo", payload);
+                }
+                cb.send(have ? 0 : 1, out);
+            }
+            note("asked for " + ref + (have ? ", sent " + payload.length() + " chars" : ", not held"));
+            return null;
+        });
     }
 
     // ---------------------------------------------------------------- asking for the download
