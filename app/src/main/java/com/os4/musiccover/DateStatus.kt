@@ -421,7 +421,10 @@ internal object DateStatus {
                 seg.alpha.to(1f, 0.35f)
             }
         }
-        for (seg in shown) {
+        // A copy: a segment still at alpha 0 (added, then unwanted before its first frame) ends its
+        // fade at once, and remove() takes it out of [shown] while this loop is still in it - the
+        // ConcurrentModificationException that crashed SystemUI on every boot (#80).
+        for (seg in shown.toList()) {
             if (seg.leaving || want.any { it.first == seg.key }) continue
             seg.leaving = true
             seg.alpha.to(0f, 0.25f) { remove(seg) }
