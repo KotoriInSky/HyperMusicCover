@@ -99,7 +99,7 @@ public class Main extends XposedModule {
     static final String CLS_TIME_VIEW = "com.miui.clock.allInOne.TimeView";
     /** The OEM's own per-style index of clock parts. See dumpClockViewTypes(). */
     static final String CLS_CLOCK_VIEW_TYPE = "com.miui.clock.module.ClockViewType";
-    private static final String CLS_MEDIA_CARD = "com.android.systemui.statusbar.notification"
+    static final String CLS_MEDIA_CARD = "com.android.systemui.statusbar.notification"
             + ".mediacontrol.MiuiMediaNotificationControllerImpl";
     private static final String CLS_KG_WALLPAPER_MANAGER =
             "com.android.keyguard.wallpaper.MiuiKeyguardWallPaperManager";
@@ -894,7 +894,7 @@ public class Main extends XposedModule {
         Fingerprint.hookFingerprintPrintView(cl);
         Fingerprint.hookFingerprintAvoidance(cl);
         hookKeyguardWallpaperManager(cl);
-        hookMediaCard(cl);
+        MediaCard.hookMediaCard(cl);
         hookLockScreenTap(cl);
         hookChargingAnimation(cl);
 
@@ -1303,25 +1303,6 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "keyguard wallpaper manager hook failed, falling back to "
                     + "MIUI's files for the wallpaper type: " + t);
-        }
-    }
-
-    private static void hookMediaCard(final ClassLoader cl) {
-        // The media card is the switch. Every add, track change and dismissal of the
-        // lockscreen card funnels through this one static - MediaData in means a card is on
-        // screen (and which track), null means it has gone. Playback state never reaches it,
-        // which is exactly what we want: pausing leaves the card up, so it leaves the cover up.
-        try {
-            Class<?> card = Xp.findClass(CLS_MEDIA_CARD, cl);
-            Xp.hookAll(card, "access$setTopMediaData", chain -> {
-                Object result = chain.proceed();
-                java.util.List<Object> args = chain.getArgs();
-                MediaCard.onCardChanged(args.size() > 1 ? args.get(1) : null);
-                return result;
-            });
-            Xp.log(TAG + "media card hooked");
-        } catch (Throwable t) {
-            Xp.w(TAG + "media card hook failed: " + t);
         }
     }
 
