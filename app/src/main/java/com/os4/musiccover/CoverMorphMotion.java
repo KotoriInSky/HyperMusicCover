@@ -1,23 +1,23 @@
 package com.os4.musiccover;
 
 /** The thumbnail-to-cover path and its frame-rate-independent, lightly sprung progress. */
-final class CoverMorphMotion {
-    static final class Box {
-        final float x, y, w, h;
-        Box(float x, float y, float w, float h) {
+public final class CoverMorphMotion {
+    public static final class Box {
+        public final float x, y, w, h;
+        public Box(float x, float y, float w, float h) {
             this.x = x; this.y = y; this.w = w; this.h = h;
         }
-        float cx() { return x + w * 0.5f; }
-        float cy() { return y + h * 0.5f; }
+        public float cx() { return x + w * 0.5f; }
+        public float cy() { return y + h * 0.5f; }
     }
 
-    float value;
-    float velocity;
-    float target;
+    public float value;
+    public float velocity;
+    public float target;
 
-    void aim(boolean cover) { target = cover ? 1f : 0f; }
+    public void aim(boolean cover) { target = cover ? 1f : 0f; }
 
-    void step(float dt, float response) {
+    public void step(float dt, float response) {
         if (dt <= 0f) return;
         double frequency = 2.0 * Math.PI / Math.max(0.18f, response);
         double damping = 0.80;
@@ -35,7 +35,7 @@ final class CoverMorphMotion {
         if (atRest()) { value = target; velocity = 0f; }
     }
 
-    boolean atRest() {
+    public boolean atRest() {
         return Math.abs(value - target) < 0.001f && Math.abs(velocity) < 0.012f;
     }
 

@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import com.os4.musiccover.app.CoverActivity
-import com.os4.musiccover.MiniPlayerConfig
+import com.os4.musiccover.island.MiniPlayerConfig
 import com.os4.musiccover.app.ModuleBridge
 import com.os4.musiccover.R
 import com.os4.musiccover.app.ShadeActivity

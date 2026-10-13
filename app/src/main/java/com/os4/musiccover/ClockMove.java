@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.island.MiniPlayerRuntime;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewTreeObserver;

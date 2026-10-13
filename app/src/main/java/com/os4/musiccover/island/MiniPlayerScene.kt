@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 btm_m
-package com.os4.musiccover
+package com.os4.musiccover.island
 
+import com.os4.musiccover.Main
+import com.os4.musiccover.Xp
 /**
  * The editor reuses the keyguard window, and the control centre is drawn over it. Their explicit
  * SystemUI states decide whether the lock screen the mini player belongs to is actually what is

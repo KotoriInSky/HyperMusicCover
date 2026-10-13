@@ -1,5 +1,7 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
+import com.os4.musiccover.Main
+import com.os4.musiccover.PageSpring
+import com.os4.musiccover.Xp
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator

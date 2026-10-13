@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
 import kotlin.math.abs
 
 /** Downward browsing has its own direction, so reversing a pull never opens the cards. */

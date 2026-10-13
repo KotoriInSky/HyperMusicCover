@@ -25,7 +25,7 @@ import java.util.Map;
  * every line (#47). What holds still through a song under every one of those shapes is the
  * package, the duration, the album and the singer - once 汽水's "歌名 — 歌手" is read as its singer.
  */
-final class TrackName {
+public final class TrackName {
 
     /** 汽水's separator: "歌名 — 歌手", spaces on both sides of an em dash. */
     static final String EM = " " + (char) 0x2014 + " ";
@@ -298,7 +298,7 @@ final class TrackName {
      * Empty when the player publishes no duration, since without one the rest cannot tell two
      * songs of one album apart.
      */
-    static String songKey(String pkg, MediaMetadata md) {
+    public static String songKey(String pkg, MediaMetadata md) {
         if (pkg == null || md == null) {
             return "";
         }
@@ -316,7 +316,7 @@ final class TrackName {
                 + "|" + album + "|" + dur;
     }
 
-    static String songKey(MediaController c) {
+    public static String songKey(MediaController c) {
         if (c == null) {
             return "";
         }
@@ -392,7 +392,7 @@ final class TrackName {
     }
 
     /** Whether this song's title has moved more than once - a player singing into TITLE. */
-    static boolean singsIntoTitle(String songKey) {
+    public static boolean singsIntoTitle(String songKey) {
         if (songKey == null || songKey.isEmpty()) {
             return false;
         }

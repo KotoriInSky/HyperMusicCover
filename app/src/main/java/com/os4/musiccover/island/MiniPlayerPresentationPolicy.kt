@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 btm_m
-package com.os4.musiccover
-
+package com.os4.musiccover.island
 import java.util.WeakHashMap
 
 internal data class MiniPlayerPresentationInput(

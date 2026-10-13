@@ -1,5 +1,6 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
+import com.os4.musiccover.Main
+import com.os4.musiccover.Xp
 import com.os4.musiccover.immersive.CountdownScene
 import com.os4.musiccover.immersive.ImmersiveHost
 import com.os4.musiccover.immersive.ImmersiveScene

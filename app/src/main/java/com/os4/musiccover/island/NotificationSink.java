@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.island;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
@@ -9,18 +8,18 @@ import java.util.Iterator;
 import java.util.List;
 
 /** Adds the module's policy to the OEM combine's inputs, so it emits through its own coroutine. */
-final class NotificationSink {
+public final class NotificationSink {
     private final List<WeakReference<Object>> policies = new ArrayList<>();
     private int requestedMode;
     private long emissions;
     private final List<String> history = new ArrayList<>();
     private String hookStatus = "not installed";
 
-    synchronized void hookStatus(String status) {
+    public synchronized void hookStatus(String status) {
         hookStatus = status;
     }
 
-    synchronized void record(Object[] original, Object[] effective, String bound) {
+    public synchronized void record(Object[] original, Object[] effective, String bound) {
         emissions++;
         if (original.length < 7) return;
         String state = "inputs=" + original.length + " policy="
@@ -33,14 +32,14 @@ final class NotificationSink {
         }
     }
 
-    synchronized String describe() {
+    public synchronized String describe() {
         int live = 0;
         for (WeakReference<Object> policy : policies) if (policy.get() != null) live++;
         return "hook=v4 " + hookStatus + "\npolicyFlows=" + live + " requestedMode=" + requestedMode + " emissions=" + emissions
                 + "\n" + String.join("\n", history);
     }
 
-    synchronized boolean attach(Object combinedFlow, int mode) throws ReflectiveOperationException {
+    public synchronized boolean attach(Object combinedFlow, int mode) throws ReflectiveOperationException {
         ClassLoader loader = combinedFlow.getClass().getClassLoader();
         for (Field field : combinedFlow.getClass().getDeclaredFields()) {
             if (!field.getType().isArray()) continue;
@@ -65,7 +64,7 @@ final class NotificationSink {
         return false;
     }
 
-    synchronized Object[] attachToCombine(Object factory, Object[] sources, int mode)
+    public synchronized Object[] attachToCombine(Object factory, Object[] sources, int mode)
             throws ReflectiveOperationException {
         if (sources.length != 7) return sources;
         if (!attach(factory, mode)) return sources;
@@ -78,7 +77,7 @@ final class NotificationSink {
         throw new IllegalStateException("policy attached without matching combine array");
     }
 
-    static Object[] withAvoidance(Object[] values, int fallbackMode) {
+    public static Object[] withAvoidance(Object[] values, int fallbackMode) {
         Object[] result = values.clone();
         // The first seven inputs remain exactly the OEM's. Input eight wakes the combine
         // and carries the effective policy used for THIS emission, not a later global value.
@@ -90,7 +89,7 @@ final class NotificationSink {
         return result;
     }
 
-    synchronized boolean refresh(int mode) throws ReflectiveOperationException {
+    public synchronized boolean refresh(int mode) throws ReflectiveOperationException {
         requestedMode = mode;
         boolean updated = false;
         Iterator<WeakReference<Object>> it = policies.iterator();

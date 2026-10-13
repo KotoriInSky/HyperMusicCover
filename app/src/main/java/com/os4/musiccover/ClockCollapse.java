@@ -40,7 +40,7 @@ public final class ClockCollapse {
 
     private static final String TAG = Main.TAG;
 
-    enum Phase { OFF, ENTER, ON, EXIT, AOD }
+    public enum Phase { OFF, ENTER, ON, EXIT, AOD }
 
     private static volatile Phase sPhase = Phase.OFF;
     /** This EXIT is the fall into the AOD, and lands in AOD rather than OFF. */

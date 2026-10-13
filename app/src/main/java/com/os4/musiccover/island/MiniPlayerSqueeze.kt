@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
+import com.os4.musiccover.CoverMorphMotion
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline

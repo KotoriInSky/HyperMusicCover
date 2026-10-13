@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
 /** Resolve a whole animation's notification keys in one pass, including grouped children. */
 internal object MiniPlayerRowIndex {
     fun <T : Any> build(rows: List<T>, keyOf: (T) -> String?, childrenOf: (T) -> List<T>,

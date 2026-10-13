@@ -1,6 +1,6 @@
 package com.os4.musiccover.immersive;
 import com.os4.musiccover.CoverCompose;
-import com.os4.musiccover.LockIslands;
+import com.os4.musiccover.island.LockIslands;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.PageSpring;
 import com.os4.musiccover.Xp;

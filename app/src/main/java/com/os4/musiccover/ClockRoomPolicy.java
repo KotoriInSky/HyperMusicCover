@@ -1,10 +1,10 @@
 package com.os4.musiccover;
 
 /** Unknown stack geometry is NaN; a measured stack with no visible rows is unbounded. */
-final class ClockRoomPolicy {
+public final class ClockRoomPolicy {
     private ClockRoomPolicy() {}
 
-    static float contentTop(float stackY, float visibleTop) {
+    public static float contentTop(float stackY, float visibleTop) {
         return Float.isInfinite(visibleTop) ? Float.MAX_VALUE : stackY + visibleTop;
     }
 

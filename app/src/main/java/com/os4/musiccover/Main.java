@@ -1,5 +1,12 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.island.DateStatus;
+import com.os4.musiccover.island.LockIslands;
+import com.os4.musiccover.island.MiniPlayerCollapseGesture;
+import com.os4.musiccover.island.MiniPlayerConfig;
+import com.os4.musiccover.island.MiniPlayerRuntime;
+import com.os4.musiccover.island.NotificationSink;
+import com.os4.musiccover.island.NumStateProbe;
 import com.os4.musiccover.immersive.ImmersiveHost;
 import com.os4.musiccover.shade.ShadeLayer;
 import com.os4.musiccover.transit.AmapFocus;
@@ -5572,7 +5579,7 @@ public class Main extends XposedModule {
      * The media card's own thumbnail, read on the main thread - the composing now runs on a
      * worker, and the view tree belongs to the UI thread.
      */
-    static Bitmap cardThumbnail() {
+    public static Bitmap cardThumbnail() {
         final View v = sContainer;
         if (v == null) return null;
         final Bitmap[] out = new Bitmap[1];
@@ -5798,7 +5805,7 @@ public class Main extends XposedModule {
      * Re-evaluate room through the clock's animation channel, with the source Y left intact.
      * A small nudge passes its equal-value early-out; roomForRows supplies the current boundary.
      */
-    static void reassertClockRoom() {
+    public static void reassertClockRoom() {
         if (sHoldY != null) return;
         if (systemClockUnobstructed()) {
             resetClockRoom(sLastSystemY);
@@ -6856,16 +6863,16 @@ public class Main extends XposedModule {
      * clock as a cover scene took the music out of its island and put its media card up over
      * the focus row the page was opened from (reported 2026-09-29).
      */
-    static boolean coverSceneActive() {
+    public static boolean coverSceneActive() {
         return sCoverMode || LockHold.exitingFor(LockHold.Owner.COVER);
     }
 
-    static MediaController miniPlayerSession() {
+    public static MediaController miniPlayerSession() {
         return sWatched;
     }
 
     /** The OEM header owns the media card's background and foreground rim. */
-    static View miniPlayerMediaHeader() {
+    public static View miniPlayerMediaHeader() {
         View art = sCardArt;
         View current = art != null && art.isAttachedToWindow() ? art : null;
         while (current != null) {
@@ -6880,29 +6887,29 @@ public class Main extends XposedModule {
     }
 
     /** The card's artwork box, title and artist: where the mini player's own pieces land. */
-    static View miniPairArt() { return sCardArt; }
-    static View miniPairTitle() { return sCardTitle; }
-    static View miniPairArtist() { return sCardArtist; }
+    public static View miniPairArt() { return sCardArt; }
+    public static View miniPairTitle() { return sCardTitle; }
+    public static View miniPairArtist() { return sCardArtist; }
 
     /** The card's background view, where its material is set. */
-    static View miniPlayerMediaBg(View header) {
+    public static View miniPlayerMediaBg(View header) {
         return header == null ? null : findByName(header, "media_bg");
     }
 
     /** The corner the card itself draws: media_bg's outline, 24dp on this device. */
-    static float miniPlayerCardRadius(View header) {
+    public static float miniPlayerCardRadius(View header) {
         View bg = header == null ? null : findByName(header, "media_bg");
         float r = bg == null ? 0f : outlineRadius(bg);
         return r > 0f ? r : 24f * density();
     }
 
     /** The same gate as the cover morph: a lock screen that is up, awake and not covered. */
-    static boolean miniPlayerMorphAllowed() {
+    public static boolean miniPlayerMorphAllowed() {
         return Looper.myLooper() == Looper.getMainLooper() && coverMorphEligible();
     }
 
     /** Each part of miniPlayerMorphAllowed, for a morph it refused. */
-    static String miniPlayerMorphWhy() {
+    public static String miniPlayerMorphWhy() {
         View c = sContainer;
         return "main=" + (Looper.myLooper() == Looper.getMainLooper())
                 + " clock=" + (c == null ? "null" : c.isAttachedToWindow() + "/" + c.isShown())
@@ -6914,7 +6921,7 @@ public class Main extends XposedModule {
      * The lock screen's own media presentation holds: the card is up, no cover scene, the
      * keyguard up. Awake or dozing, pad or no pad - those only stop the pill taking touches.
      */
-    static boolean miniPlayerPresentable() {
+    public static boolean miniPlayerPresentable() {
         return sCardShowing && !coverSceneActive() && keyguardShowing();
     }
 
@@ -6923,19 +6930,19 @@ public class Main extends XposedModule {
      * card: dismissed, the music still read as usable, the row waited on a card that would
      * never come and took the notifications' islands down with it.
      */
-    static boolean miniPlayerMediaCardPresent() { return sCardPresent; }
+    public static boolean miniPlayerMediaCardPresent() { return sCardPresent; }
 
     /**
      * The same for a row with no music in it, only notifications: there is no media card to be
      * up, only the lock screen, and no cover scene over it.
      */
-    static boolean miniPlayerIslandsPresentable() {
+    public static boolean miniPlayerIslandsPresentable() {
         // In the cover too: the cover is the music's card, and the other islands stay in the row.
         return keyguardShowing();
     }
 
     /** A notification row's corner, for a morph onto it: its own outline, else the card's. */
-    static float notificationRowRadius(View row) {
+    public static float notificationRowRadius(View row) {
         float r = row == null ? 0f : outlineRadius(row);
         return r > 0f ? r : 24f * density();
     }
@@ -6943,7 +6950,7 @@ public class Main extends XposedModule {
     private static long sMiniBouncerCheckedAt;
     private static boolean sMiniBouncerUp;
 
-    static boolean miniPlayerCanShow() {
+    public static boolean miniPlayerCanShow() {
         return miniPlayerDisplayEligible() && !miniControlCenterUp();
     }
 
@@ -6951,11 +6958,11 @@ public class Main extends XposedModule {
      * The same for a row of notification islands with no music in it: no media card to be up.
      * Asked through miniPlayerCanShow, a row with no card never took a touch at all.
      */
-    static boolean miniPlayerIslandsCanShow() {
+    public static boolean miniPlayerIslandsCanShow() {
         return islandsDisplayEligible(true) && !miniControlCenterUp();
     }
 
-    static boolean miniPlayerControlCenterUp() { return miniControlCenterUp(); }
+    public static boolean miniPlayerControlCenterUp() { return miniControlCenterUp(); }
 
     private static java.lang.ref.WeakReference<View> sCentreView;
     private static long sCentreLookedAt;
@@ -7021,7 +7028,7 @@ public class Main extends XposedModule {
     }
 
     /** Enter through the same route as the OEM artwork, with MiniPlayerRuntime owning the bridge. */
-    static void miniPlayerEnterCover() {
+    public static void miniPlayerEnterCover() {
         if (!miniPlayerCanShow()) return;
         // No cover to open: the island opens into the plain card, as a pull up on it does.
         if (!sCoverFeatureOn) {
@@ -7045,7 +7052,7 @@ public class Main extends XposedModule {
     }
 
     /** An island opened from the cover: the cover goes, its card coming down into the row. */
-    static void miniPlayerLeaveCover() {
+    public static void miniPlayerLeaveCover() {
         if (!sCoverMode) return;
         // Left the way a swipe down leaves it, and remembered the same way: the exit below holds
         // the cover off (sTapSuppressed) so a track change does not put it back over the page,
@@ -7061,7 +7068,7 @@ public class Main extends XposedModule {
      * exit is still running, or out of them while the entry is. Not gated on the scene being
      * off, as a tap on the pill is - it is still settling, and that is the point.
      */
-    static void miniPlayerTurnScene(boolean enter) {
+    public static void miniPlayerTurnScene(boolean enter) {
         if (!keyguardShowing() || bouncerUp()) return;
         if (enter) {
             if (sCoverMode || !sCoverFeatureOn) return;
@@ -7146,7 +7153,7 @@ public class Main extends XposedModule {
      * NaN when it is not up. coverCardMediaTop() answers a stand-in in the AOD instead - for the
      * callers that must not follow the card through the doze's own transition.
      */
-    static float liveMediaTop() {
+    public static float liveMediaTop() {
         View card = sCardGuarded != null ? sCardGuarded : LockLyrics.card();
         if (card != null && card.isShown() && card.getHeight() > 0) {
             int[] xy = new int[2];
@@ -7181,7 +7188,7 @@ public class Main extends XposedModule {
     }
 
     /** Reads the clipping that actually rounds the OEM artwork instead of assuming one radius. */
-    static float coverMorphThumbnailRadius() {
+    public static float coverMorphThumbnailRadius() {
         View art = sCardArt;
         if (art == null || art.getWidth() <= 0 || art.getHeight() <= 0) {
             return 14f * density();
@@ -7210,14 +7217,14 @@ public class Main extends XposedModule {
      * the clock down, and every morph of a switch was cancelled in the same frame, 50ms in, the
      * stopwatch's card left half way up (2026-09-26).
      */
-    static boolean islandMorphStillEligible(View v) {
+    public static boolean islandMorphStillEligible(View v) {
         if (v == null || !v.isAttachedToWindow() || !sScreenOn || !keyguardShowing()) return false;
         android.view.ViewParent p = v.getParent();
         return p instanceof View && ((View) p).isShown();
     }
 
     /** For `op mini`: each part of both guards, when a morph was cut short by one. */
-    static String morphGateWhy(View v) {
+    public static String morphGateWhy(View v) {
         View c = sContainer;
         android.view.ViewParent p = v == null ? null : v.getParent();
         return "clock[" + (c == null ? "null" : "att=" + c.isAttachedToWindow() + " shown=" + c.isShown()
@@ -8834,7 +8841,7 @@ public class Main extends XposedModule {
      * The keyguard is actually in front. The clock container is the test - only the keyguard
      * shows it - and it is what keeps the shade's copy of this same card view out of all this.
      */
-    static boolean onKeyguardNow() {
+    public static boolean onKeyguardNow() {
         View c = sContainer;
         return c != null && c.isShown();
     }
@@ -8865,7 +8872,7 @@ public class Main extends XposedModule {
      * through the whole tree each time, and looked up again only once the keyguard is rebuilt -
      * and on a build without it, at most once a second, since the miss walks the whole tree.
      */
-    static boolean bouncerShown() {
+    public static boolean bouncerShown() {
         View b = sBouncerView;
         if (b == null || !b.isAttachedToWindow()) {
             long now = android.os.SystemClock.uptimeMillis();

@@ -1,9 +1,9 @@
 package com.os4.musiccover.immersive;
 import com.os4.musiccover.ClockCollapse;
 import com.os4.musiccover.EdgeBlurView;
-import com.os4.musiccover.LockIslands;
+import com.os4.musiccover.island.LockIslands;
 import com.os4.musiccover.Main;
-import com.os4.musiccover.MiniPlayerRuntime;
+import com.os4.musiccover.island.MiniPlayerRuntime;
 import com.os4.musiccover.Xp;
 import com.os4.musiccover.transit.AmapNavScene;
 import com.os4.musiccover.transit.AmapTransitScene;

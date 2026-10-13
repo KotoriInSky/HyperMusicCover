@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt

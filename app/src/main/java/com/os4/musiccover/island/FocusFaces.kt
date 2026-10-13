@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.Paint

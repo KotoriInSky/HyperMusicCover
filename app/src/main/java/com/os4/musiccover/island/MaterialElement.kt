@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package com.os4.musiccover
-
+package com.os4.musiccover.island
 import android.content.Context
 import android.view.ViewOutlineProvider
 import android.widget.ImageView

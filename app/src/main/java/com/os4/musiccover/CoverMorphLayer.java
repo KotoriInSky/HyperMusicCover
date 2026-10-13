@@ -1,5 +1,7 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.island.MiniPlayerViewKt;
+import com.os4.musiccover.island.MiniPlayerRuntime;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;

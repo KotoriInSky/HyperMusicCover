@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
 /**
  * Values to compare one card dressing against the next by. Arrays are copied into lists: the
  * OEM hands the same array to the next dressing, changed, and the previous recipe held by

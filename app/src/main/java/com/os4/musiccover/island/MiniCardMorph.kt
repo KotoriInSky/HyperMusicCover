@@ -1,5 +1,7 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.island
+import com.os4.musiccover.CoverMorphMotion
+import com.os4.musiccover.Main
+import com.os4.musiccover.Xp
 import android.graphics.Matrix
 import android.graphics.Outline
 import android.os.SystemClock

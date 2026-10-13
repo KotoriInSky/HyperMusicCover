@@ -38,7 +38,7 @@ public final class Xp {
         if (!sLevelAsked) readLevel(api);
     }
 
-    static XposedInterface api() {
+    public static XposedInterface api() {
         XposedInterface api = sApi;
         if (api == null) throw new IllegalStateException("Xposed framework not attached yet");
         return api;
@@ -281,7 +281,7 @@ public final class Xp {
         }
     }
 
-    static void setBooleanField(Object obj, String name, boolean value) {
+    public static void setBooleanField(Object obj, String name, boolean value) {
         try {
             field(obj, name).setBoolean(obj, value);
         } catch (IllegalAccessException e) {
@@ -296,7 +296,7 @@ public final class Xp {
      * differ only in a numeric parameter type would be ambiguous here, but nothing this module
      * calls is: the OEM setters it drives take one argument of one type.
      */
-    static Object callMethod(Object obj, String name, Object... args) {
+    public static Object callMethod(Object obj, String name, Object... args) {
         Method m = findMethod(obj.getClass(), name, args);
         try {
             return m.invoke(obj, args);
