@@ -66,14 +66,70 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     private var lastAppearance: String? = null
     private var lastMaterial: String? = null
     private var lastArtwork: Bitmap? = null
-    private var marqueeEnabled = true
+    /**
+     * Whether the title may scroll. Off for a player singing into TITLE (Salt, 汽水, QQ): a new
+     * line every few seconds would start a scroll it never finished, so it is cut instead.
+     */
+    var titleScrolls = true
 
-    private fun setMarqueeEnabled(enabled: Boolean) {
-        if (marqueeEnabled == enabled) return
-        marqueeEnabled = enabled
-        for (line in arrayOf(title, artist)) {
-            line.isSelected = enabled
-            line.ellipsize = if (enabled) TextUtils.TruncateAt.MARQUEE else TextUtils.TruncateAt.END
+    /**
+     * A line too long for the pill scrolls once - when its words change, and when the screen
+     * comes on - and then rests cut with an ellipsis. It was a switch (2026-10-14): always
+     * scrolling kept the lock screen drawing every frame, always cut never showed a long title
+     * at all; neither was what anyone wanted. Never in the doze.
+     */
+    private fun scrollOnce(line: TextView) {
+        rest(line)
+        if (line === title && !titleScrolls) return
+        if (display?.state != android.view.Display.STATE_ON) return
+        // After the layout, which the new words or a new width have yet to make.
+        val start = Runnable {
+            val layout = line.layout ?: return@Runnable
+            val room = line.width - line.totalPaddingLeft - line.totalPaddingRight
+            val words = layout.getLineWidth(0)
+            if (room <= 0 || words <= room) return@Runnable
+            line.ellipsize = TextUtils.TruncateAt.MARQUEE
+            line.marqueeRepeatLimit = 1
+            line.isSelected = true
+            // TextView's own marquee: 1.2s before it moves, 30dp a second, one pass is the words
+            // and the gap of a third of the width. Its end has no callback, so it is timed.
+            val pass = ((words + room / 3f) / (30f * density) * 1000f).toLong()
+            line.postDelayed(restOf(line), 1200L + pass + 300L)
+        }
+        if (line === title) titleStart = start else artistStart = start
+        line.post(start)
+    }
+
+    // Each line's pending start and its rest. Fields, not view tags: this view lives in SystemUI,
+    // where the module's own ids are not resources.
+    private var titleStart: Runnable? = null
+    private var artistStart: Runnable? = null
+    private val titleRest = Runnable { cut(title) }
+    private val artistRest = Runnable { cut(artist) }
+
+    private fun restOf(line: TextView) = if (line === title) titleRest else artistRest
+
+    private fun cut(line: TextView) {
+        line.isSelected = false
+        line.ellipsize = TextUtils.TruncateAt.END
+    }
+
+    private fun rest(line: TextView) {
+        (if (line === title) titleStart else artistStart)?.let(line::removeCallbacks)
+        line.removeCallbacks(restOf(line))
+        if (line.isSelected || line.ellipsize != TextUtils.TruncateAt.END) cut(line)
+    }
+
+    private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
+        private var on = true
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId != display?.displayId) return
+            val now = display?.state == android.view.Display.STATE_ON
+            if (now == on) return
+            on = now
+            if (now) { scrollOnce(title); scrollOnce(artist) } else { rest(title); rest(artist) }
         }
     }
 
@@ -136,8 +192,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
             setTextColor(Color.WHITE)
             textSize = 12.8f
             maxLines = 1
-            ellipsize = TextUtils.TruncateAt.MARQUEE
-            isSelected = true
+            ellipsize = TextUtils.TruncateAt.END
             isSingleLine = true
             includeFontPadding = false
             setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -147,8 +202,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
             alpha = 0.8f
             textSize = 12f
             maxLines = 1
-            ellipsize = TextUtils.TruncateAt.MARQUEE
-            isSelected = true
+            ellipsize = TextUtils.TruncateAt.END
             isSingleLine = true
             includeFontPadding = false
             setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -200,7 +254,6 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         showNative: () -> Unit,
         openCover: () -> Unit,
     ) { android.os.Trace.beginSection("MC v.bind"); try {
-        setMarqueeEnabled(config.optBoolean(MiniPlayerConfig.MARQUEE, true))
         val appearance = "$config|$material"
         if (lastAppearance != appearance) {
             lastAppearance = appearance
@@ -231,8 +284,9 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
             updateGeometry(config.getDouble(MiniPlayerConfig.HEIGHT_RADIUS).toFloat())
         }
         // Equal by their words, so a line the row rewrote as a span is not set again every frame.
-        if (!TextUtils.equals(title.text, trackTitle)) title.text = trackTitle
-        if (!TextUtils.equals(artist.text, trackArtist)) artist.text = trackArtist
+        if (!TextUtils.equals(title.text, trackTitle)) { title.text = trackTitle; scrollOnce(title) }
+        else if (!titleScrolls) rest(title)
+        if (!TextUtils.equals(artist.text, trackArtist)) { artist.text = trackArtist; scrollOnce(artist) }
         // A line with no words in it takes no room, and the column centres what is left: an island
         // whose template gives it only a timer (the recorder's, its param_v2 an animTextInfo and
         // nothing else) drew that one line on the upper one and read off centre (the user,
@@ -602,8 +656,18 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         tracking = false
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        context.getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.registerDisplayListener(displayListener, handler)
+    }
+
     override fun onDetachedFromWindow() {
         finish()
+        context.getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.unregisterDisplayListener(displayListener)
+        rest(title)
+        rest(artist)
         super.onDetachedFromWindow()
     }
 

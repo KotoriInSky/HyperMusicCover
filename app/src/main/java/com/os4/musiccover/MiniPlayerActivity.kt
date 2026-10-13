@@ -168,11 +168,8 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
                         onCheckedChange = { push(MiniPlayerConfig.ADAPTIVE_WIDTH, it) })
                     // A switch was here and is gone: the shortcuts always go with the full-screen
                     // doze now. See MiniPlayerConfig.HIDE_AOD_SHORTCUTS.
-                    SwitchPreference(title = stringResource(R.string.mini_marquee),
-                        summary = stringResource(R.string.mini_marquee_summary),
-                        checked = config.optBoolean(MiniPlayerConfig.MARQUEE, true),
-                        enabled = ready && config.optBoolean(MiniPlayerConfig.ENABLED),
-                        onCheckedChange = { push(MiniPlayerConfig.MARQUEE, it) })
+                    // A switch was here and is gone: a long line scrolls once and rests cut. See
+                    // MiniPlayerView.scrollOnce.
                     SwitchPreference(title = stringResource(R.string.mini_nav_keep_on),
                         summary = stringResource(R.string.mini_nav_keep_on_summary),
                         checked = config.optBoolean(MiniPlayerConfig.NAV_KEEP_ON),

@@ -234,8 +234,6 @@
     <string name="mini_media_collapsed_summary">Show the island when playback starts. Tap it to expand the music artwork</string>
     <string name="mini_height">Island height</string>
     <string name="mini_height_summary">Also resize the lock screen quick function icons on either side</string>
-    <string name="mini_marquee">Scroll long island text</string>
-    <string name="mini_marquee_summary">When off, shorten them with an ellipsis</string>
     <string name="mini_widen">Widen when lock screen quick functions are off</string>
     <string name="mini_widen_summary">The island fills the space left by disabled lock screen quick functions</string>
     <string name="mini_normals_in_stack">Keep ordinary notifications off islands</string>

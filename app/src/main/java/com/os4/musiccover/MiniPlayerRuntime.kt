@@ -9743,6 +9743,8 @@ private class MiniPlayerController(
         val metadata = metadataOf(current)
         val shown = traced("MC b.thumb") { thumbnailFor(musicCover(metadata), view) }
         view.setToggleShown(true)
+        // A title that is the line being sung is cut, never scrolled (MiniPlayerView.titleScrolls).
+        view.titleScrolls = !TrackName.singsIntoTitle(TrackName.songKey(current))
         view.bind(
             metadata?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().ifBlank { "正在播放" },
             metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
@@ -9778,6 +9780,7 @@ private class MiniPlayerController(
         // square, bigger, on a grey plate.
         view.setArtworkBare(true)
         view.skippable = false
+        view.titleScrolls = true
         // Its buttons as its row has them: the last - its main one - in the play button's place,
         // the one before it beside it while the pill is the big island (setSecondShown).
         val buttons = if (template) note.buttons else emptyList()

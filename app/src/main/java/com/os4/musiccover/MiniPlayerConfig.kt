@@ -22,7 +22,6 @@ object MiniPlayerConfig {
      * always go with the doze.
      */
     const val HIDE_AOD_SHORTCUTS = "hideAodShortcuts"
-    const val MARQUEE = "marquee"
     /** Always on and no longer a setting; see normalizedJson. */
     const val NOTIFICATION_MATERIAL = "notificationMaterial"
     const val MEDIA_COLLAPSED_DEFAULT = "mediaCollapsedDefault"
@@ -61,7 +60,6 @@ object MiniPlayerConfig {
         ART_RADIUS to 12f,
         ADAPTIVE_WIDTH to false,
         HIDE_AOD_SHORTCUTS to true,
-        MARQUEE to true,
         NOTIFICATION_MATERIAL to true,
         MEDIA_COLLAPSED_DEFAULT to false,
         GROUP_NOTIFICATIONS_BY_APP to false,
@@ -106,7 +104,6 @@ object MiniPlayerConfig {
                 runCatching { input.getInt(key) }.getOrDefault(STYLE_ROW)
                     .takeIf { it == STYLE_ROW || it == STYLE_STACK } ?: STYLE_ROW
             } else if (key == ENABLED || key == ADAPTIVE_WIDTH ||
-                key == MARQUEE ||
                 key == MEDIA_COLLAPSED_DEFAULT ||
                 key == GROUP_NOTIFICATIONS_BY_APP || key in switches) {
                 runCatching { input.getBoolean(key) }.getOrDefault(fallback)
