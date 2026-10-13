@@ -9860,6 +9860,7 @@ public class Main extends XposedModule {
         sCtCheckMs = 0L;
         sCtTries = 0;
         Xp.log(TAG + "card track: " + key);
+        MiniPlayerRuntime.cardTrackChanged();
         // Started here rather than once the cover has settled, so the fetch overlaps the
         // transition instead of following it.
         LockLyrics.onTrack(key, sWatched);

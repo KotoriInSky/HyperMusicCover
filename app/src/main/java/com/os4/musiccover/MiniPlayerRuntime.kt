@@ -1853,6 +1853,9 @@ object MiniPlayerRuntime {
         controllers.values.any { it.controller.hardSuppressionActive() }
     }
 
+    /** Main saw the media card move to another track (its "card track" log). */
+    @JvmStatic fun cardTrackChanged() = live().forEach { it.cardTrackChanged() }
+
     internal fun observeSession(token: Any, packageName: String): Boolean {
         val changed = synchronized(selectionLock) { sessionSelection.observe(token) }
         if (changed) {
@@ -2049,6 +2052,8 @@ private class MiniPlayerController(
     private val sessionListener = MediaSessionManager.OnActiveSessionsChangedListener { scheduleRefresh() }
     private val mediaListener = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) {
+            metadataCalls++
+            lastMetadataAt = android.os.SystemClock.uptimeMillis()
             liveMetadata = metadata
             scheduleRefresh()
         }
@@ -2083,12 +2088,63 @@ private class MiniPlayerController(
     private var liveFor: android.media.session.MediaSession.Token? = null
     private var liveState: PlaybackState? = null
     private var liveMetadata: MediaMetadata? = null
+    /** For `op mini`: the metadata callbacks the registered session has delivered. */
+    private var metadataCalls = 0
+    private var lastMetadataAt = 0L
+
+    /** For `op mini`: the session the pill follows, what it holds, and what is really there. */
+    private fun describeSession(): String {
+        fun id(c: MediaController?) = c?.let { it.packageName + "@" + Integer.toHexString(it.sessionToken.hashCode()) }
+        fun title(m: MediaMetadata?) = m?.getString(MediaMetadata.METADATA_KEY_TITLE)
+        val c = controller
+        val w = Main.miniPlayerSession()
+        return "session=${id(c)} live=${c != null && c.sessionToken == liveFor} calls=$metadataCalls rearms=$rearms " +
+            "liveTitle=${title(liveMetadata)} binderTitle=${runCatching { title(c?.metadata) }.getOrNull()} " +
+            "state=${stateOf(c ?: return "session=null watched=${id(w)} ")?.state} seenAt=$usableSeenAt " +
+            "watched=${id(w)} watchedTitle=${runCatching { title(w?.metadata) }.getOrNull()} " +
+            "card=${Main.miniPlayerMediaCardPresent()} sameObj=${c === w} " +
+            "cbReg=${runCatching { Xp.getObjectField(c, "mCbRegistered") }.getOrNull()} " +
+            "cbs=${runCatching { (Xp.getObjectField(c, "mCallbacks") as List<*>).size }.getOrNull()} " +
+            "wCbs=${runCatching { (Xp.getObjectField(w, "mCallbacks") as List<*>).size }.getOrNull()} " +
+            "lastCallAgo=${android.os.SystemClock.uptimeMillis() - lastMetadataAt} track=$lastTrack "
+    }
 
     private fun stateOf(c: MediaController): PlaybackState? =
         if (liveFor != null && c.sessionToken == liveFor) liveState else c.playbackState
 
     private fun metadataOf(c: MediaController): MediaMetadata? =
         if (liveFor != null && c.sessionToken == liveFor) liveMetadata else c.metadata
+
+    /**
+     * The media card has moved to another track: the callback is put on a controller of the
+     * pill's own and the session read again. The system server drops a controller callback for
+     * good the first time a call to it fails (MediaSessionRecord.performOnCallbackHolders), and
+     * says nothing to the controller, which goes on believing it is registered. Apple's metadata
+     * with its lyric attached runs to 50k characters, to every controller in SystemUI at once:
+     * skipping through tracks filled SystemUI's binder buffer, the pill's callback was dropped,
+     * and the pill showed one song while another played, until SystemUI restarted (2026-10-14).
+     * Its own controller because the one it was handed is often Main's: with Main's callback
+     * still on it, taking ours off and putting it back never registers anything again.
+     */
+    fun cardTrackChanged() {
+        handler.post {
+            val c = controller ?: return@post
+            if (destroyed) return@post
+            val own = runCatching { MediaController(context, c.sessionToken) }.getOrNull() ?: return@post
+            runCatching { c.unregisterCallback(mediaListener) }
+            controller = own
+            runCatching { own.registerCallback(mediaListener, handler) }
+            // Not followLive: the gap a player between two tracks is given runs on (#26).
+            liveFor = null
+            liveState = own.playbackState
+            liveMetadata = own.metadata
+            liveFor = own.sessionToken
+            rearms++
+            refresh()
+        }
+    }
+    /** For `op mini`: how often the callback has been put back on a track change. */
+    private var rearms = 0
 
     /** The callbacks are [c]'s from here: what it has now, and what they bring after. */
     private fun followLive(c: MediaController?) {
@@ -9041,7 +9097,7 @@ private class MiniPlayerController(
         val sink = " nativeY=$nativeY nativeTy=${native?.translationY} nativeTarget=${native?.let(::stackTargetY)} " +
             "pin=${pinned?.get() != null} frozen=$pinnedAt pinY=${pinY.value} pinDy=$pinnedDy " +
             "stackTy=${notificationStack()?.translationY} "
-        val islands = describeSpread() + " rowAnim=$rowAnimating swap=${swap != null} noteMorph=${noteMorphKey != null} " +
+        val islands = describeSession() + describeSpread() + " rowAnim=$rowAnimating swap=${swap != null} noteMorph=${noteMorphKey != null} " +
             "flight=${flight != null} drag=${noteDrag != null} ${player?.touchState()} " +
             "out=${expandedKey()?.takeLast(12)} xchg=${exchange?.let { x -> "out=${x.expanded?.takeLast(6)} pend=${x.pending?.takeLast(6)} " +
                 "seats=${x.seats?.big?.takeLast(6)}/${x.seats?.small?.takeLast(6)} " +
