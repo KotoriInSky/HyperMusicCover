@@ -7706,6 +7706,22 @@ public class Main extends XposedModule {
         return hit != null ? hit : findSysuiView(id);
     }
 
+    /**
+     * Whether [v] is a row of the notification stack - where the lock screen's media card lives -
+     * and not part of a media island copy. The height test alone lost the card itself: the
+     * notifications an island row gives back to the stack while the cover or lyrics are up push
+     * the card above a third of the screen, and the lyrics then stood on the last card rectangle
+     * on record, drawn over the card and the rows under it (#78/#82, 2026-10-13).
+     */
+    static boolean inNotificationStack(View v) {
+        for (android.view.ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {
+            String name = p.getClass().getName();
+            if (name.contains("PlayerIsland")) return false;
+            if (name.endsWith("NotificationStackScrollLayout")) return true;
+        }
+        return false;
+    }
+
     /** The first view carrying this id that is really up on the lock screen, in tree order. */
     private static View findOnScreenById(View v, int id) {
         // Pruned on the way down: isShown() is false for everything under a hidden parent, so
@@ -7714,7 +7730,7 @@ public class Main extends XposedModule {
         if (v.getId() == id && v.isShown() && v.isAttachedToWindow() && v.getHeight() > 0) {
             int[] loc = new int[2];
             v.getLocationOnScreen(loc);
-            if (loc[1] >= sScreenH / 3) return v;
+            if (loc[1] >= sScreenH / 3 || inNotificationStack(v)) return v;
         }
         if (!(v instanceof ViewGroup)) return null;
         ViewGroup g = (ViewGroup) v;

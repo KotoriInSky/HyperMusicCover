@@ -685,8 +685,9 @@ final class LockLyrics {
             c.getLocationOnScreen(loc);
             y = loc[1];
             // Below the clock, like the card. Anything higher is the shade's copy or an island,
-            // and neither is what the band is measured against.
-            if (loc[1] >= Main.screenHeight() / 3) {
+            // and neither is what the band is measured against - unless it is the stack's own
+            // card, pushed up by the notifications under it (Main.inNotificationStack).
+            if (loc[1] >= Main.screenHeight() / 3 || Main.inNotificationStack(c)) {
                 if (sBandSrc != BAND_LIVE && sBandSrc != -1) noteBandMiss("back live y=" + y);
                 setBandSource(BAND_LIVE);
                 return loc[1];
