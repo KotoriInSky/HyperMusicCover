@@ -110,6 +110,15 @@ final class WallpaperVideo {
         return sOn;
     }
 
+    /** The band moved (the position slider): composed there from the next frame. */
+    static void setBias(float bias) {
+        if (sBias == bias) return;
+        sBias = bias;
+        sFrameWaiting = sCurrent;
+        Xp.log(TAG + "bias " + bias);
+        if (sOn) WallpaperProbe.videoFrame();
+    }
+
     static void start(Context ctx, String path, float bias) {
         stop("restart");
         sPath = path;

@@ -51,6 +51,7 @@ final class MotionCover {
     private static volatile int sGen;
     private static String sWantKey = "";
     private static boolean sWantCard;
+    private static float sSentBias = Float.NaN;
     private static String sPlayingFile;
     private static boolean sPlayingCard;
     private static String sLast = "nothing yet";
@@ -129,7 +130,18 @@ final class MotionCover {
         final String key = cacheKey(title, artist, album);
         // Asked already, for this cover: playing, being looked up, or known to have none. The
         // metadata fires on every state change, and for some players on every sung line.
-        if (key.equals(sWantKey) && sWantCard == card) return;
+        if (key.equals(sWantKey) && sWantCard == card) {
+            if (!card && sPlayingFile != null && Main.sBias != sSentBias) {
+                sSentBias = Main.sBias;
+                Intent i = new Intent("com.os4.musiccover.WPROBE");
+                i.setPackage("com.miui.miwallpaper");
+                i.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                i.putExtra("op", "vidbias");
+                i.putExtra("bias", Main.sBias);
+                ProbeGuard.send(ctx, i);
+            }
+            return;
+        }
         // Same album, same video: a track change inside an album keeps it playing.
         boolean sameVideo = sPlayingFile != null && sPlayingCard == card
                 && sPlayingFile.equals(cachedFile(ctx, key));
@@ -178,6 +190,11 @@ final class MotionCover {
                 i.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
                 i.putExtra("op", "vidtex");
                 i.putExtra("path", shared);
+                // The still's band position, sent rather than read back over there: a cover
+                // composed here (the JPEG route - the island's expand takes it) leaves no source
+                // file, and the video fell back to 0.25 and sat higher than the still.
+                i.putExtra("bias", Main.sBias);
+                sSentBias = Main.sBias;
                 ProbeGuard.send(ctx, i);
             });
         });

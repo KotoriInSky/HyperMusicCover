@@ -2028,6 +2028,8 @@ public class WallpaperProbe {
                         Xp.log(TAG + "gpu fade " + (sGpuFadeOn ? "on" : "off")
                                 + " (draw hooked=" + sDrawHooked + ", usable now="
                                 + gpuFadeUsable() + ")");
+                    } else if ("vidbias".equals(op)) {
+                        WallpaperVideo.setBias(i.getFloatExtra("bias", 0.25f));
                     } else if ("vidtex".equals(op)) {
                         // The motion-cover experiment, see WallpaperVideo. `--ez on false`
                         // stops it; `--ez stats true` only reports (and restarts the counters).
