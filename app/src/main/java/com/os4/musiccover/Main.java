@@ -2552,6 +2552,22 @@ public class Main extends XposedModule {
                         // ImmersiveHost, whose page closing onto the cover waits for this.
                         CoverCardLayer.releaseHeld();
                         ImmersiveHost.coverShown();
+                    } else if ("cardvideo".equals(op)) {
+                        // The square card's motion cover, fixed file for now; see CardVideo.
+                        if (i.getBooleanExtra("stats", false)) {
+                            setResultData(CardVideo.statsAndReset());
+                        } else if (!i.getBooleanExtra("on", true)) {
+                            CardVideo.unload("probe");
+                            setResultData("off");
+                        } else {
+                            String path = i.getStringExtra("path");
+                            if (path == null) {
+                                path = new java.io.File(c.getFilesDir(), "mc_card_video.mp4")
+                                        .getPath();
+                            }
+                            CardVideo.load(c, path);
+                            setResultData("loaded=" + CardVideo.loaded() + " " + path);
+                        }
                     } else if ("cardstate".equals(op)) {
                         // The square card's playback scale, next to what the session says - for
                         // "the card stayed small", where the log is not there to read.

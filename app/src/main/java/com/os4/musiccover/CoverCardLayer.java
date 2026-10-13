@@ -438,6 +438,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     private void hideImmediately() {
         stop();
         opacity = 0f;
+        videoAlpha = 0f;
+        CardVideo.want(false);
         exitWithCard = false;
         if (getVisibility() != GONE) setVisibility(GONE);
         wash.hideNow();
@@ -838,13 +840,14 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
             previous.recycle();
             previous = null;
         }
+        boolean videoMoving = followVideo(visible, phase, inAod, dt);
         boolean backdrop = Main.coverCardBackdropInAod() && current != null
                 && current.aodBackdrop != null;
         wash.show(backdrop);
         int visibility = opacity > 0f || target > 0f ? VISIBLE : GONE;
         if (getVisibility() != visibility) setVisibility(visibility);
         if (visibility == VISIBLE) invalidate();
-        boolean settling = blurring || Math.abs(target - opacity) > 0.001f
+        boolean settling = blurring || videoMoving || Math.abs(target - opacity) > 0.001f
                 || (phase != ClockCollapse.Phase.AOD && !scale.atRest(scaleTarget))
                 || previous != null || placing || (rise < 1f && opacity > 0f)
                 || (aodSince != 0L && nowNs - aodSince < AOD_SETTLE_NS)
@@ -884,6 +887,8 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         canvas.clipPath(clipPath);
         drawArt(canvas, previous, 1f);
         drawArt(canvas, current, fadeFraction());
+        Bitmap frame = CardVideo.frame();
+        if (videoAlpha > 0f && frame != null) drawBitmap(canvas, frame, videoAlpha);
         canvas.restoreToCount(save);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(density);
@@ -1119,17 +1124,60 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
 
     private void drawArt(Canvas canvas, Prepared p, float fraction) {
         if (p == null || fraction <= 0f) return;
+        drawBitmap(canvas, p.art, fraction);
+    }
+
+    private void drawBitmap(Canvas canvas, Bitmap art, float fraction) {
         paint.setShader(null);
         paint.setColor(0xFFFFFFFF);
         paint.setAlpha(Math.round(255f * opacity * fraction));
         // Centre-cropped to the card's shape, which is only ever off this art's own through a
         // crossfade between two shapes - drawn into it as it is, one of the two would stretch.
-        int w = p.art.getWidth(), h = p.art.getHeight();
+        int w = art.getWidth(), h = art.getHeight();
         float box = square.width() / Math.max(1f, square.height());
         int cw = Math.min(w, Math.round(h * box));
         int ch = Math.min(h, Math.round(w / box));
         artSrc.set((w - cw) / 2, (h - ch) / 2, (w + cw) / 2, (h + ch) / 2);
-        canvas.drawBitmap(p.art, artSrc, square, paint);
+        canvas.drawBitmap(art, artSrc, square, paint);
+    }
+
+    // ---------------------------------------------------------------- the motion cover
+
+    /** 0..1, how far the video is drawn over the still. See CardVideo. */
+    private float videoAlpha;
+    private static final float VIDEO_FADE_S = 0.25f;
+
+    /**
+     * The video only plays on the settled, lit square: the morph, the big clock's fall and wake,
+     * the doze and a track's crossfade all show the still, which every one of them was tuned
+     * around. It fades in over the still once it has a frame and fades out the same way; the
+     * morph is the exception and cuts it, because the morph flies the still and the square has
+     * to be the still the moment the morph hands it over.
+     *
+     * @return whether the fade is still moving
+     */
+    private boolean followVideo(boolean visible, ClockCollapse.Phase phase, boolean inAod,
+                                float dt) {
+        boolean suppressed = CoverMorphLayer.cardSuppressed();
+        boolean settled = CardVideo.loaded() && visible && phase == ClockCollapse.Phase.ON
+                && !afterBigClock && !inAod && !suppressed && opacity > 0f && current != null;
+        CardVideo.want(settled);
+        if (suppressed) videoAlpha = 0f;
+        float want = settled && previous == null && CardVideo.frame() != null ? 1f : 0f;
+        if (videoAlpha == want) return false;
+        float step = dt <= 0f ? 1f / 60f / VIDEO_FADE_S : dt / VIDEO_FADE_S;
+        videoAlpha = want > videoAlpha ? Math.min(want, videoAlpha + step)
+                : Math.max(want, videoAlpha - step);
+        return videoAlpha != want;
+    }
+
+    /** Main thread: CardVideo has a new frame. */
+    static void videoFrame() {
+        CoverCardLayer v = sView;
+        if (v == null || v.getVisibility() != VISIBLE) return;
+        v.invalidate();
+        // The first frame is what lets the fade start; nothing else would ask for its frames.
+        if (v.videoAlpha < 1f) v.start();
     }
 
 }
