@@ -383,6 +383,13 @@ final class WallpaperVideo {
         }
         sFullW = sFullH = 0;
         sHasFrame = false;
+        // A new context is a new, empty SurfaceTexture: nothing to show until the player sends
+        // a frame into it. Carried over, "has a frame, fully in" drew that empty texture - the
+        // black flash on every wake from the screen off, when the engine's context is rebuilt
+        // and the player is still paused (2026-10-13). The still shows, and the video fades in.
+        sFrameWaiting = false;
+        sCurrent = false;
+        sAlpha = 0f;
         Xp.log(TAG + "GL objects made in context #" + sContexts + " ("
                 + GLES20.glGetString(GLES20.GL_VERSION) + ")");
     }
@@ -401,7 +408,8 @@ final class WallpaperVideo {
             sSmallFbo[i] = fbo(sSmallTex[i]);
         }
         sHasFrame = false;
-        sFrameWaiting = true;   // compose the frame already in the SurfaceTexture, if any
+        // Same context, new size: the frame already in the SurfaceTexture is composed again.
+        if (sCurrent) sFrameWaiting = true;
         Xp.log(TAG + "target " + w + "x" + h + ", backdrop " + sSmallW + "x" + sSmallH);
     }
 

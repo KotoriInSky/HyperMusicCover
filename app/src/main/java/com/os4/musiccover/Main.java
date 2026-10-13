@@ -9808,6 +9808,10 @@ public class Main extends XposedModule {
     /** A tap or pull can enter the cover even when new media defaults to a collapsed island. */
     private static void onMediaUpdate(boolean explicitEntry) {
         MiniPlayerRuntime.refresh();
+        // The cover is pushed off the media card's key, and the session's metadata can still be
+        // the last song's at that moment - so the motion cover follows the metadata itself. It
+        // keys on the song, so a player singing into TITLE does not look it up per line.
+        if (sCoverMode) MotionCover.onCover(sCoverCardStyle.mode == CoverCardStyle.CARD);
         if (!sAuto || !sCardShowing) return;
         // The user tapped the cover away and the card is still up. The one case where "there is
         // a card" must not mean "put the cover back".

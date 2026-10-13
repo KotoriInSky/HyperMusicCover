@@ -44,15 +44,26 @@ final class MotionCover {
     /** Where the full-screen cover's video goes for the wallpaper process to read. */
     private static final String SHARED_NAME = "mc_motion.mp4";
 
-    private static HandlerThread sThread;
-    private static Handler sWork;
+    private static HandlerThread sThread, sIoThread;
+    private static Handler sWork, sIo;
 
     /** Main-thread state: the lookup being answered, and what is playing. */
-    private static int sGen;
+    private static volatile int sGen;
     private static String sWantKey = "";
+    private static boolean sWantCard;
     private static String sPlayingFile;
     private static boolean sPlayingCard;
     private static String sLast = "nothing yet";
+
+    /** Copies to the shared directory; never queued behind a lookup on the network. */
+    private static synchronized Handler io() {
+        if (sIo == null) {
+            sIoThread = new HandlerThread("MCMotionIO");
+            sIoThread.start();
+            sIo = new Handler(sIoThread.getLooper());
+        }
+        return sIo;
+    }
 
     private static synchronized Handler work() {
         if (sWork == null) {
@@ -116,15 +127,27 @@ final class MotionCover {
             return;
         }
         final String key = cacheKey(title, artist, album);
-        if (key.equals(sWantKey) && sPlayingFile != null && sPlayingCard == card) return;
+        // Asked already, for this cover: playing, being looked up, or known to have none. The
+        // metadata fires on every state change, and for some players on every sung line.
+        if (key.equals(sWantKey) && sWantCard == card) return;
         // Same album, same video: a track change inside an album keeps it playing.
         boolean sameVideo = sPlayingFile != null && sPlayingCard == card
                 && sPlayingFile.equals(cachedFile(ctx, key));
         sWantKey = key;
+        sWantCard = card;
         if (sameVideo) return;
         stopVideo("track");
         final int gen = ++sGen;
+        // A video already on disk plays now, not after whatever lookups are still queued.
+        String cached = cachedFile(ctx, key);
+        if (cached != null) {
+            sLast = "cached " + new File(cached).getName() + " for " + key;
+            if (Main.sCoverMode) startVideo(ctx, new File(cached), card);
+            return;
+        }
         work().post(() -> {
+            // Skipped past before its turn came: the lookup is for a song no longer playing.
+            if (gen != sGen) return;
             File f = resolve(ctx, key, title, artist, album, dur);
             Main.main().post(() -> {
                 if (gen != sGen || f == null || !Main.sCoverMode) return;
@@ -145,7 +168,7 @@ final class MotionCover {
         }
         // The wallpaper process has another uid; it reads from the directory the composed
         // covers already go through, written beside the target and renamed over it.
-        work().post(() -> {
+        io().post(() -> {
             String shared = share(f);
             if (shared == null) return;
             Main.main().post(() -> {
