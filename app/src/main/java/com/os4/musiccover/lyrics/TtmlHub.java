@@ -3,8 +3,9 @@
  * online/source/lunabeat/LunaBeatTtmlRepository.kt), Copyright 2026 juren233, Apache-2.0 - see
  * NOTICE. Rewritten in Java.
  */
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Http;
+import com.os4.musiccover.Xp;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.security.MessageDigest;

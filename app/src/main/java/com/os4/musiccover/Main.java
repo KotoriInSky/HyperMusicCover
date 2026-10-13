@@ -1,5 +1,14 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.lyrics.AppleLyrics;
+import com.os4.musiccover.lyrics.LocalLyrics;
+import com.os4.musiccover.lyrics.LockLyrics;
+import com.os4.musiccover.lyrics.LyricSource;
+import com.os4.musiccover.lyrics.LyriconSource;
+import com.os4.musiccover.lyrics.NcmLyrics;
+import com.os4.musiccover.lyrics.OnlineLyrics;
+import com.os4.musiccover.lyrics.TrackName;
+import com.os4.musiccover.lyrics.WebLyrics;
 import com.os4.musiccover.island.DateStatus;
 import com.os4.musiccover.island.LockIslands;
 import com.os4.musiccover.island.MiniPlayerCollapseGesture;
@@ -151,7 +160,7 @@ public class Main extends XposedModule {
      * one. See showVideoCover(). Re-read before every push, because the user can change the
      * wallpaper between two songs.
      */
-    static volatile boolean sVideoWallpaper;
+    public static volatile boolean sVideoWallpaper;
     /** The live wallpaper's cut-out subject, hidden alongside deducted_image_view. */
     static volatile View sVideoFg;
     /** The live wallpaper itself, in the background layer, under our cover. */
@@ -2018,7 +2027,7 @@ public class Main extends XposedModule {
         }
     }
 
-    static void saveState() {
+    public static void saveState() {
         if (sAppCtx == null) return;
         // Never while loadState is still walking the file. Some of the setters it applies values
         // through save as part of their own contract - setClockHeightDp does - and a save taken
@@ -4440,7 +4449,7 @@ public class Main extends XposedModule {
         for (int i = 0; i < g.getChildCount(); i++) describeClockTree(g.getChildAt(i), sb, depth + 1);
     }
 
-    static String idOf(View v) {
+    public static String idOf(View v) {
         try {
             return v.getResources().getResourceEntryName(v.getId());
         } catch (Throwable t) {
@@ -6974,7 +6983,7 @@ public class Main extends XposedModule {
      * lyrics back that much late (#52). The lookup itself is the whole-tree search, so a miss is
      * not repeated for 500ms.
      */
-    static boolean controlCenterShown() {
+    public static boolean controlCenterShown() {
         View v = sCentreView == null ? null : sCentreView.get();
         if (v == null || !v.isAttachedToWindow()) {
             long now = android.os.SystemClock.uptimeMillis();
@@ -7094,7 +7103,7 @@ public class Main extends XposedModule {
     }
 
     /** The card's progress into the cover look, as last written. */
-    static float cardProgress() {
+    public static float cardProgress() {
         return sCardP;
     }
 
@@ -7782,7 +7791,7 @@ public class Main extends XposedModule {
     }
 
     /** The screen height the card readings are checked against. */
-    static int screenHeight() {
+    public static int screenHeight() {
         return sScreenH;
     }
 
@@ -7801,7 +7810,7 @@ public class Main extends XposedModule {
      * island. Falls back to findSysuiView(), so a card that is simply not laid out yet behaves
      * exactly as it did.
      */
-    static View findLockScreenView(String id) {
+    public static View findLockScreenView(String id) {
         View v = sContainer;
         if (v == null) return null;
         View root = v.getRootView();
@@ -7817,7 +7826,7 @@ public class Main extends XposedModule {
      * the card above a third of the screen, and the lyrics then stood on the last card rectangle
      * on record, drawn over the card and the rows under it (#78/#82, 2026-10-13).
      */
-    static boolean inNotificationStack(View v) {
+    public static boolean inNotificationStack(View v) {
         for (android.view.ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {
             String name = p.getClass().getName();
             if (name.contains("PlayerIsland")) return false;
@@ -7860,7 +7869,7 @@ public class Main extends XposedModule {
      * excluded on the way in. The test is repeated here because sScreenH is the default 2608 until
      * the container attaches, which is after loadState() has run.
      */
-    static float sampledCardTop() {
+    public static float sampledCardTop() {
         if (sCardT <= sScreenH / 3 || sCardH <= 0) return Float.NaN;
         return sCardT;
     }
@@ -10619,7 +10628,7 @@ public class Main extends XposedModule {
     }
 
     /** The cover's colour, or 0 when there is nothing to take one from. */
-    static int coverTint() {
+    public static int coverTint() {
         // The screen check is the AOD one. Cover mode outlives the display going off, and the
         // glyphs are the same TimeViews in the always-on view: the cover's colour describes a
         // picture the AOD is not drawn on, and repainting those glyphs in it is the one way this

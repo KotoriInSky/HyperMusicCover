@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
 /**
  * User-adjustable values for the module's own lyric view. No OEM classes are involved.
  *
@@ -9,7 +8,7 @@ package com.os4.musiccover;
  * edge by twice itself, so "moving" the lyrics also cut lines off - and both were clamped away
  * silently once the room ran out. The gap is a fixed GAP_DP now.
  */
-final class LyricStyle {
+public final class LyricStyle {
     /** Least room kept to the clock and the media card. */
     static final float GAP_DP = 16f;
     static final float MIN_FILL = 0.4f;
@@ -24,12 +23,12 @@ final class LyricStyle {
     static final LyricStyle DEFAULT = new LyricStyle(1f, 0.5f, 30f, 25f, 500);
 
     /** The band's height as a share of the room, MIN_FILL..1; never under MIN_ROWS rows. */
-    final float fill;
+    public final float fill;
     /** Where the band sits in the height it leaves over: 0 top, 0.5 centre, 1 bottom. */
-    final float pos;
-    final float sideDp;
-    final float sizeSp;
-    final int weight;
+    public final float pos;
+    public final float sideDp;
+    public final float sizeSp;
+    public final int weight;
 
     /** Rows of the main size the band may not shrink under. LyricView holds the same number. */
     private static final float MIN_ROWS = 2.4f;

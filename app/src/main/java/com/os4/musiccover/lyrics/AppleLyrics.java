@@ -1,5 +1,5 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Xp;
 import android.media.MediaMetadata;
 import android.os.Bundle;
 
@@ -41,7 +41,7 @@ import io.github.libxposed.api.XposedInterface;
  * metadata carries a reference to the lyric instead (LyricSource.KEY_LYRIC_REF), and the lock
  * screen asks for the lyric itself with a session command, which only it receives.
  */
-final class AppleLyrics {
+public final class AppleLyrics {
 
     private AppleLyrics() {
     }
@@ -58,9 +58,9 @@ final class AppleLyrics {
     private static final String BUILD = "ref-1";
 
     /** The player's package, and the only process this class ever runs in. */
-    static final String PKG = "com.apple.android.music";
+    public static final String PKG = "com.apple.android.music";
 
-    static void handle(ClassLoader cl) {
+    public static void handle(ClassLoader cl) {
         if (cl == null) {
             return;
         }

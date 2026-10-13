@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.lyrics.TrackName;
 import android.content.Context;
 import android.content.Intent;
 import android.media.MediaMetadata;

@@ -1,5 +1,6 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Http;
+import com.os4.musiccover.Xp;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
 
@@ -29,7 +30,7 @@ import java.util.Map;
  * mistimed, and there is nothing on screen to say they belong to another song. So the rule
  * here is that a candidate has to be proven, not merely ranked: see pick().
  */
-final class NcmLyrics {
+public final class NcmLyrics {
 
     private NcmLyrics() {
     }
@@ -46,7 +47,7 @@ final class NcmLyrics {
     private static final String ALBUM = "https://music.163.com/api/album/%s";
 
     /** What the session says about the song, reduced to the four things a match can use. */
-    static final class Query {
+    public static final class Query {
         final String title;
         final String artist;
         final String album;
@@ -86,7 +87,7 @@ final class NcmLyrics {
     }
 
     /** The session's metadata, read out and handed to build() to be made searchable. */
-    static Query queryOf(MediaController c) {
+    public static Query queryOf(MediaController c) {
         if (c == null) {
             return null;
         }
@@ -143,7 +144,7 @@ final class NcmLyrics {
      * where every player-specific quirk lives, so it is the part a "no lyrics for this song"
      * report needs to be able to re-run.
      */
-    static Query build(String title, String artist, String album, long dur) {
+    public static Query build(String title, String artist, String album, long dur) {
         title = title == null ? "" : title.trim();
         artist = artist == null ? "" : artist.trim();
         album = album == null ? "" : album.trim();
@@ -484,7 +485,7 @@ final class NcmLyrics {
      * talking to. The honesty is reported as last decided, never asked for here - a diagnostic
      * that sends a request of its own would be one more request against the thing it is
      * measuring. "unknown" means nothing has missed yet, which is the healthy case. */
-    static String describeSearches() {
+    public static String describeSearches() {
         synchronized (SEARCHES) {
             return "searches=" + SEARCHES.size() + " honest="
                     + (healthAt == 0L ? "unknown" : String.valueOf(healthy));
@@ -973,13 +974,13 @@ final class NcmLyrics {
      * can be reproduced without owning the song or the player - the fields are all the matcher
      * ever sees, and a metadump from the reporter carries them.
      */
-    static String describe(String title, String artist, String album, long durationMs) {
+    public static String describe(String title, String artist, String album, long durationMs) {
         Query q = build(title, artist, album, durationMs);
         return q == null ? "nothing to search for" : describe(q);
     }
 
     /** Diagnostics: what the match would do for the playing session, without touching the view. */
-    static String describe(MediaController c) {
+    public static String describe(MediaController c) {
         Query q = queryOf(c);
         if (q == null) {
             return "no session / no metadata";

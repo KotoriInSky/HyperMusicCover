@@ -1,5 +1,6 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.util.Log;

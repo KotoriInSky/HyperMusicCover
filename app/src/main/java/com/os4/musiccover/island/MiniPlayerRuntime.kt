@@ -5,7 +5,7 @@ import com.os4.musiccover.ClockCollapse
 import com.os4.musiccover.ClockRoomPolicy
 import com.os4.musiccover.CoverMorphMotion
 import com.os4.musiccover.Main
-import com.os4.musiccover.TrackName
+import com.os4.musiccover.lyrics.TrackName
 import com.os4.musiccover.Xp
 import com.os4.musiccover.immersive.ImmersiveHost
 import android.content.Context

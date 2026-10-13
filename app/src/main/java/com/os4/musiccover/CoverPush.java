@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.lyrics.LockLyrics;
 import com.os4.musiccover.immersive.ImmersiveHost;
 import com.os4.musiccover.shade.ShadeLayer;
 import android.annotation.SuppressLint;
@@ -22,7 +23,7 @@ import android.view.ViewTreeObserver;
  * process, and the video-wallpaper path that bypasses it - reads as one piece. Nothing here
  * decides WHETHER the cover should be on; Main does that and calls in.
  */
-final class CoverPush {
+public final class CoverPush {
 
     private CoverPush() {
     }
@@ -406,7 +407,7 @@ final class CoverPush {
     /**
      * Crossfades the video cover ImageView between sharp and frosted copy when lyrics toggle.
      */
-    static void updateVideoCoverBlur(final boolean blur) {
+    public static void updateVideoCoverBlur(final boolean blur) {
         if (!Main.sVideoWallpaper) return;
         Main.main().post(new Runnable() {
             @Override
@@ -1083,7 +1084,7 @@ final class CoverPush {
     }
 
     /** One switch to the wallpaper process, for callers outside this file. */
-    static void sendToWallpaper(String op, boolean on) {
+    public static void sendToWallpaper(String op, boolean on) {
         sendToWallpaper(op, on, 0L);
     }
 
@@ -1094,7 +1095,7 @@ final class CoverPush {
      * this is sent from the main thread, so the two can cross, and the one that arrives last is
      * not the one that was decided last. 0 = no time, for a switch that is not one of those.
      */
-    static void sendToWallpaper(String op, boolean on, long decidedAt) {
+    public static void sendToWallpaper(String op, boolean on, long decidedAt) {
         Context c = Main.sAppCtx;
         if (c == null) return;
         Intent out = wallpaperIntent(op);

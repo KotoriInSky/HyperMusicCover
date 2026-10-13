@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
 /**
  * One lyric line, as the renderer draws it. Times are milliseconds from the start of the track.
  *

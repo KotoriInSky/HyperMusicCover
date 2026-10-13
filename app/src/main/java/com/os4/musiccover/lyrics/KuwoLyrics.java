@@ -2,8 +2,9 @@
  * Ported from HyperLyrics Enhanced (juren233/HyperLyrics-Enhanced, online/source/kuwo/
  * KuwoSource.kt), Copyright 2026 juren233, Apache-2.0 - see NOTICE. Rewritten in Java.
  */
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Http;
+import com.os4.musiccover.Xp;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.Charset;

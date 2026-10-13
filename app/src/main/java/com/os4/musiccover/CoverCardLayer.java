@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.lyrics.LockLyrics;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BlurMaskFilter;
@@ -16,7 +17,7 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
 /** The module's own square artwork. The OEM clock and media card remain above this layer. */
-final class CoverCardLayer extends View implements Choreographer.FrameCallback {
+public final class CoverCardLayer extends View implements Choreographer.FrameCallback {
     private static CoverCardLayer sView;
     private static volatile Prepared sPending;
     private static volatile int sGeneration;
@@ -346,7 +347,7 @@ final class CoverCardLayer extends View implements Choreographer.FrameCallback {
         });
     }
 
-    static void refresh() {
+    public static void refresh() {
         CoverCardLayer v = sView;
         if (v != null) {
             v.start();

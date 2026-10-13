@@ -1,5 +1,6 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.Xp;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
 
@@ -37,7 +38,7 @@ import java.util.concurrent.TimeUnit;
  * lock screen without lyrics, which is what it had before this existed, and no request is given
  * long enough to be felt.
  */
-final class LyricSource {
+public final class LyricSource {
 
     /** Nothing was found, by any route. */
     static final int SRC_NONE = 0;
@@ -82,7 +83,7 @@ final class LyricSource {
      * Before that, the field is either absent or an explicit empty shell: MeiLoX publishes
      * {"lyric":"","noLyric":true} while it is still looking.
      */
-    static boolean hasLyricInfo(MediaController c) {
+    public static boolean hasLyricInfo(MediaController c) {
         return usable(infoFor(c));
     }
 
@@ -314,7 +315,7 @@ final class LyricSource {
     // "lyricInfo" is not one of the framework's metadata keys and is not meant to be: it is the
     // players' and provider modules' own, and a Bundle lookup by any string is valid.
     @android.annotation.SuppressLint("WrongConstant")
-    static String lyricInfoOf(MediaController c) {
+    public static String lyricInfoOf(MediaController c) {
         if (c == null) {
             return null;
         }
@@ -577,7 +578,7 @@ final class LyricSource {
     }
 
     /** The same by package name, for a caller holding a queue rather than a session. */
-    static String dirForPackage(String pkg) {
+    public static String dirForPackage(String pkg) {
         if (pkg == null) {
             return null;
         }
@@ -730,7 +731,7 @@ final class LyricSource {
      * Blocking, and called on a thread of its own: the mirrors take seconds when they take
      * anything, and the artwork prefetch shares neither the thread nor the wait.
      */
-    static void warm(String id, String dir, String title, String artist) {
+    public static void warm(String id, String dir, String title, String artist) {
         final int gen = --sWarmGen;
         if (id != null && dir != null) {
             String key = dir + '/' + id;
@@ -759,7 +760,7 @@ final class LyricSource {
     }
 
     /** For op queue: what the database half of reading ahead is holding. */
-    static String describeWarm() {
+    public static String describeWarm() {
         synchronized (WARM) {
             int found = 0;
             for (Answer a : WARM.values()) {
@@ -1672,7 +1673,7 @@ final class LyricSource {
      */
     // Bundle.get is deprecated in favour of the typed getters, which is exactly what this cannot
     // use: the point is to print a key whose type nobody here knows yet.
-    @SuppressWarnings("deprecation")
+    public @SuppressWarnings("deprecation")
     static String dumpMetadata(MediaController c) {
         if (c == null) return "no session being watched";
         MediaMetadata md;

@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;

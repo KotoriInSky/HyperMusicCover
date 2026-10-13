@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.lyrics
+import com.os4.musiccover.Xp
 import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeAlignment
 import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeLine
 import com.mocharealm.accompanist.lyrics.core.model.synced.SyncedLine

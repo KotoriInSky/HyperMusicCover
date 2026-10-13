@@ -1,5 +1,10 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.ClockCollapse;
+import com.os4.musiccover.CoverCardLayer;
+import com.os4.musiccover.CoverMorphRoute;
+import com.os4.musiccover.CoverPush;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.Xp;
 import android.content.Intent;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
@@ -24,13 +29,13 @@ import java.util.Map;
  * same song - two taps on the cover - keeps them, where the first version dropped them on exit
  * and never looked the same song up again.
  */
-final class LockLyrics {
+public final class LockLyrics {
     private LockLyrics() {
     }
 
     private static final String TAG = "[MCLyric] ";
 
-    static volatile boolean verbose;
+    public static volatile boolean verbose;
 
     /**
      * Whether the lyrics are the lock screen's to show.
@@ -42,7 +47,7 @@ final class LockLyrics {
      * the setting was removed for, and `op lyrics` still turns it off for the rest of the
      * session.
      */
-    static volatile boolean sEnabled = true;
+    public static volatile boolean sEnabled = true;
 
     /**
      * Whether the lock screen's two-finger tap has taken the lyrics away.
@@ -57,7 +62,7 @@ final class LockLyrics {
      * had hidden them would otherwise leave the switch saying on over a lock screen showing the
      * cover. Written by setEnabled, toggleByTap and the state file, and nowhere else.
      */
-    static volatile boolean sTapHidden;
+    public static volatile boolean sTapHidden;
 
     private static String sKey = "";
     private static List<LyricLine> sLines = Collections.emptyList();
@@ -72,7 +77,7 @@ final class LockLyrics {
     private static long sStateReadAt;
 
     /** The user's second switch: keep the screen lit while lyrics are playing on the lock screen. */
-    static volatile boolean sKeepOn;
+    public static volatile boolean sKeepOn;
     private static boolean sHolding;
 
     /**
@@ -87,7 +92,7 @@ final class LockLyrics {
      * costs them the lock screen's z-order (see attach). Off by default until that has been
      * lived with.
      */
-    static volatile boolean sHdr = false;
+    public static volatile boolean sHdr = false;
     /**
      * The fourth switch: whether a line's translation is drawn under it.
      *
@@ -96,13 +101,13 @@ final class LockLyrics {
      * what is fetched - the layout drops the translation's rows, so the lines close up rather
      * than leaving a gap where it was.
      */
-    static volatile boolean sTrans = true;
+    public static volatile boolean sTrans = true;
     /**
      * The fifth: whether a line's romanisation is drawn under it, over the translation. Off by
      * default and apart from the translation's switch - either can be shown alone (#64). Like
      * the translation it is laid out, not fetched: switching it redraws what is already there.
      */
-    static volatile boolean sRoma = false;
+    public static volatile boolean sRoma = false;
     /** The two switches together, as LyricLine.under() and the layout read them. */
     static final int BELOW_TRANS = 1, BELOW_ROMA = 2;
 
@@ -119,15 +124,15 @@ final class LockLyrics {
      * layout in use was built with (see its builtAlign). Left is what the lyrics did before the
      * setting existed, and what a state file written before it loads as.
      */
-    static volatile int sAlign = ALIGN_LEFT;
+    public static volatile int sAlign = ALIGN_LEFT;
     /** Immutable snapshot: the UI, renderer and state loader all use the same validated values. */
-    static volatile LyricStyle sStyle = LyricStyle.DEFAULT;
+    public static volatile LyricStyle sStyle = LyricStyle.DEFAULT;
 
     /**
      * Applies one alignment pref, validated here rather than at the callers: a state file and an
      * adb broadcast are both untrusted, and no screen could have set a fourth value.
      */
-    static boolean setAlign(int mode) {
+    public static boolean setAlign(int mode) {
         int next = mode <= ALIGN_LEFT ? ALIGN_LEFT : Math.min(mode, ALIGN_RIGHT);
         if (next == sAlign) return false;
         sAlign = next;
@@ -136,7 +141,7 @@ final class LockLyrics {
         return true;
     }
 
-    static boolean setStyle(String key, float value) {
+    public static boolean setStyle(String key, float value) {
         LyricStyle next = sStyle.with(key, value);
         if (next == sStyle) return false;
         sStyle = next;
@@ -194,7 +199,7 @@ final class LockLyrics {
         Main.main().postDelayed(BLUR_KICK, Math.max(16L, delayMs));
     }
 
-    static void onVideoReload() {
+    public static void onVideoReload() {
         sBlurVideoReloaded = true;
         LyricView v = sView;
         if (v != null) v.kick();
@@ -204,7 +209,7 @@ final class LockLyrics {
      * The wallpaper process has started the still cover's frosting that the blur turning on
      * asked for (WallpaperProbe.tellBlurShown); [seq] is the decision it answers.
      */
-    static void onBlurShown(long seq) {
+    public static void onBlurShown(long seq) {
         if (seq < sBlurOnSeq) return;
         sBlurShown = true;
         LyricView v = sView;
@@ -250,12 +255,12 @@ final class LockLyrics {
      * are already up: answered by wantsShown() alone, the thumbnail went out and the title
      * slid to the middle on every entry, then both came back when the band did.
      */
-    static boolean heldForBlur() {
+    public static boolean heldForBlur() {
         return wantsAttached() && !blurSettled();
     }
 
     /** Whether the cover should be frosted right now, for a push to carry over. */
-    static boolean blurWanted() {
+    public static boolean blurWanted() {
         return (sBlurSent & 1L) != 0L;
     }
 
@@ -269,7 +274,7 @@ final class LockLyrics {
      * arrive: the cover comes in sharp under its lyrics and stays that way for the song, because
      * both sides believe they agree. See WallpaperProbe.takeBlurDecision.
      */
-    static void putBlurOn(Intent out) {
+    public static void putBlurOn(Intent out) {
         long state = sBlurSent;      // one read: the answer and its time travel together
         out.putExtra("lyricblur", (state & 1L) != 0L);
         out.putExtra("blurseq", state >>> 1);
@@ -296,7 +301,7 @@ final class LockLyrics {
      * all while still being present in the package list. Only having read a real lyric off a
      * session proves the whole chain.
      */
-    static boolean sSawSessionLyric;
+    public static boolean sSawSessionLyric;
 
     /** Lines plus the route they came by - a cache hit has to answer both. */
     private static final class Cached {
@@ -348,7 +353,7 @@ final class LockLyrics {
      * The cache counts as well as the lines on screen: a two-finger tap that hides the lyrics
      * drops the lines, and the song still has them to bring back.
      */
-    static boolean hasLyrics() {
+    public static boolean hasLyrics() {
         return sDemo || !sLines.isEmpty() || CACHE.containsKey(sKey)
                 || (sLoading && sHadLyrics);
     }
@@ -357,7 +362,7 @@ final class LockLyrics {
     private static boolean sHadLyrics;
 
     /** Whether the view belongs in the keyguard right now. */
-    static boolean wantsAttached() {
+    public static boolean wantsAttached() {
         return wanted() && Main.coverModeOn() && hasLyrics();
     }
 
@@ -414,7 +419,7 @@ final class LockLyrics {
      * cut rather than faded here (LyricView.step's `gone`): there is no lock screen left to fade
      * against, only the desktop behind it.
      */
-    static void lockScreenLeaving(String by) {
+    public static void lockScreenLeaving(String by) {
         sLeavingBy = by;
         sLeavingAt = SystemClock.uptimeMillis();
         sLastLeave = by + "@" + sLeavingAt;
@@ -470,7 +475,7 @@ final class LockLyrics {
     }
 
     /** The screen went off or on: the lock screen may be back, so the heartbeat is too. */
-    static void resumeWatch() {
+    public static void resumeWatch() {
         if (sView != null) watch();
     }
 
@@ -479,7 +484,7 @@ final class LockLyrics {
      * `!tag` did not. Which one fires on an unlock is a question only the phone answers, and the
      * answer is the difference between a working signal and a hook that quietly is not there.
      */
-    static void armed(String tag) {
+    public static void armed(String tag) {
         sHooks = sHooks.isEmpty() ? tag : sHooks + " " + tag;
     }
 
@@ -514,7 +519,7 @@ final class LockLyrics {
     private static final long POP_ORIGIN_MS = 1500L;
 
     /** An entry from the mini player: centre is the island's on screen, or null if not up. */
-    static void notePopOrigin(float[] centre) {
+    public static void notePopOrigin(float[] centre) {
         if (centre == null) {
             sPopAt = 0L;
             return;
@@ -539,7 +544,7 @@ final class LockLyrics {
     private static volatile long sPopToAt;
 
     /** An exit into the mini player: centre is the island's home on screen, or null. */
-    static void notePopTarget(float[] centre) {
+    public static void notePopTarget(float[] centre) {
         if (centre == null) {
             sPopToAt = 0L;
             return;
@@ -559,11 +564,11 @@ final class LockLyrics {
     }
 
     /** The lyric page a tap into cover mode will land on. */
-    static boolean willAttachOnEntry() {
+    public static boolean willAttachOnEntry() {
         return hasLyrics() && CoverMorphRoute.lyricsAfterEntry(sEnabled, sTapHidden, sDemo);
     }
 
-    static boolean willAttachAfterTapToggle() {
+    public static boolean willAttachAfterTapToggle() {
         return hasLyrics() && CoverMorphRoute.lyricsAfterToggle(sEnabled, sTapHidden, sDemo);
     }
 
@@ -576,7 +581,7 @@ final class LockLyrics {
      * that was the band being stale, and it is measured from the clock's live ink every frame
      * now, so through the flight they follow it down instead.
      */
-    static boolean wantsShown() {
+    public static boolean wantsShown() {
         if (!wantsWindow()) return false;
         // Hold the band back until the cover's blur transition has settled, so it does not
         // land over an artwork that is still sharpening. blurSettled() answers true when there
@@ -619,7 +624,7 @@ final class LockLyrics {
      * declared by the media card and by both media island layouts, and the first match in the
      * tree is only the card while no island copy is up.
      */
-    static View card() {
+    public static View card() {
         View c = sCard;
         if (c != null && c.isShown() && c.isAttachedToWindow()) return c;
         long now = SystemClock.uptimeMillis();
@@ -795,7 +800,7 @@ final class LockLyrics {
     // ------------------------------------------------------------------ from Main
 
     /** The card is showing a track. Same key as last time is a no-op. */
-    static void onTrack(String key, MediaController c) {
+    public static void onTrack(String key, MediaController c) {
         key = lyricKey(key, c);
         sController = c;
         readState(true);
@@ -1163,7 +1168,7 @@ final class LockLyrics {
         }
     }
 
-    static void onPlaybackState(PlaybackState s) {
+    public static void onPlaybackState(PlaybackState s) {
         sState = s;
         sStateReadAt = SystemClock.uptimeMillis();
         LyricView v = sView;
@@ -1181,7 +1186,7 @@ final class LockLyrics {
      * switch that asks for it pays for it; with it off the view lives where it always did.
      * Flipping the switch moves the view: `lyrichdr` refreshes, and the refresh lands here.
      */
-    static void attach() {
+    public static void attach() {
         updateBlur();
         // wantsAttached(), not wantsWindow(): the view's life is the cover's, and whether the
         // lines are drawn is also the lock screen's. See wantsWindow().
@@ -1263,7 +1268,7 @@ final class LockLyrics {
         Main.main().removeCallbacks(WATCH);
     }
 
-    static void refresh() {
+    public static void refresh() {
         updateBlur();
         updateHdr();
         if (wantsAttached()) attach();
@@ -1275,7 +1280,7 @@ final class LockLyrics {
     }
 
     /** The app's switch. The setting: it is written to the state file and the app reads it back. */
-    static void setEnabled(boolean on, String key, MediaController c) {
+    public static void setEnabled(boolean on, String key, MediaController c) {
         sEnabled = on;
         // The switch is the master, so it takes the tap's answer with it. Switching the lyrics
         // off and on again brings them back; without this, turning them on while a previous tap
@@ -1293,7 +1298,7 @@ final class LockLyrics {
      * With the switch off the tap does nothing at all rather than turning the lyrics on: that
      * would be the lock screen writing the app's setting, which is what it no longer does.
      */
-    static void toggleByTap(String key, MediaController c) {
+    public static void toggleByTap(String key, MediaController c) {
         if (!sEnabled) return;
         sTapHidden = !sTapHidden;
         Xp.log(TAG + "two-finger tap: lyrics " + (sTapHidden ? "hidden" : "shown"));
@@ -1323,7 +1328,7 @@ final class LockLyrics {
      * Plays a lyric file by database id on its own clock, whatever is playing - so the look can
      * be judged without a player that publishes an id, or a song the database has.
      */
-    static void demo(String id, boolean apple) {
+    public static void demo(String id, boolean apple) {
         sDemo = true;
         unpark();
         final int gen = ++sGen;
@@ -1346,7 +1351,7 @@ final class LockLyrics {
         refresh();
     }
 
-    static void endDemo(String key, MediaController c) {
+    public static void endDemo(String key, MediaController c) {
         if (!sDemo) return;
         sDemo = false;
         sKey = "";
@@ -1362,7 +1367,7 @@ final class LockLyrics {
      * another process, and it does one thing with it: puts it in a row that says where the words
      * on the lock screen came from.
      */
-    static String sourceName() {
+    public static String sourceName() {
         return sLines.isEmpty() ? "none" : srcName(sSource);
     }
 
@@ -1394,7 +1399,7 @@ final class LockLyrics {
         }
     }
 
-    static String describe() {
+    public static String describe() {
         LyricView v = sView;
         View c = Main.sContainer;
         View card = card();
@@ -1441,7 +1446,7 @@ final class LockLyrics {
      * than the last one it gave - the other side drops those - so the clock it is timed on runs
      * on from here like any other decision.
      */
-    static void resendBlur() {
+    public static void resendBlur() {
         updateBlur(true);
     }
 
@@ -1594,7 +1599,7 @@ final class LockLyrics {
      * lyrics hold still exactly as they did before it existed. Comparing the battery current with
      * and without it is what prices the per-line redraw.
      */
-    static volatile boolean sStillOff;
+    public static volatile boolean sStillOff;
 
     /**
      * The redraw is driven by the display, not by a clock: take the lock, wait until the display
@@ -2000,7 +2005,7 @@ final class LockLyrics {
     /** Every string in the session's metadata, and lyricInfo written to a file whole. */
     // "lyricInfo" is the players' own key, not a framework one - see LyricSource.lyricInfoOf.
     @android.annotation.SuppressLint("WrongConstant")
-    static String dumpMetadata(android.content.Context ctx, MediaController c) {
+    public static String dumpMetadata(android.content.Context ctx, MediaController c) {
         if (c == null) return "no session";
         StringBuilder sb = new StringBuilder(c.getPackageName());
         try {

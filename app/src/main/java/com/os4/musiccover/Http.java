@@ -30,13 +30,13 @@ public final class Http {
      * never arrived - LrcLib answers 404 for a song it does not have, and a song that is
      * genuinely absent is worth remembering as absent where a network's bad minute is not.
      */
-    static final class Reply {
+    public static final class Reply {
         /** The body, or null when there is none to read - including for a 404. */
-        final String body;
+        public final String body;
         /** The HTTP status, or 0 when the request did not arrive at all. */
         public final int code;
 
-        Reply(String body, int code) {
+        public Reply(String body, int code) {
             this.body = body;
             this.code = code;
         }
@@ -50,7 +50,7 @@ public final class Http {
     private static final int READ_TIMEOUT_MS = 6000;
 
     /** `tag` is the caller's log prefix, so one account of a failed request says whose it was. */
-    static Reply get(String url, String tag) {
+    public static Reply get(String url, String tag) {
         long started = android.os.SystemClock.uptimeMillis();
         HttpURLConnection conn = null;
         try {

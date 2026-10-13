@@ -4,8 +4,7 @@
  * this project's AGPL-3.0 (GPLv3 section 13). Rewritten in Java; the weights, the thresholds and
  * the album suffix list are theirs.
  */
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;

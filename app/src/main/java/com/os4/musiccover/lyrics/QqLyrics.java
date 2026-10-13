@@ -4,8 +4,9 @@
  * section 13). The QRC reading is our own: theirs pairs each word with the timestamp after the
  * next one.
  */
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Http;
+import com.os4.musiccover.Xp;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

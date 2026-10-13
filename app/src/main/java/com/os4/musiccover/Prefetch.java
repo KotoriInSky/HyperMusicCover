@@ -1,5 +1,7 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.lyrics.LyricSource;
+import com.os4.musiccover.lyrics.NcmLyrics;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;

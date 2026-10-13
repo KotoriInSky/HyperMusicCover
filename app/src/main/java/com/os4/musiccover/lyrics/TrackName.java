@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
 
@@ -167,7 +166,7 @@ public final class TrackName {
      * started mid-song (the cover entered halfway through) is the one that needs this: at the
      * track change TITLE is usually still the song.
      */
-    static String[] searchName(String pkg, MediaMetadata md) {
+    public static String[] searchName(String pkg, MediaMetadata md) {
         if (md == null) {
             return null;
         }
@@ -230,14 +229,14 @@ public final class TrackName {
      * written in something else. "(Live)", "(粤语版)" after a Chinese title and the like are
      * which recording it is and stay.
      */
-    static String untranslated(String title) {
+    public static String untranslated(String title) {
         String[] a = aliased(title);
         if (a == null || !allHan(a[1]) || allHan(a[0])) return title;
         return a[0];
     }
 
     /** A singer's bracketed alias taken off, for a search: the name QQ 音乐 itself lists them by. */
-    static String unaliased(String artist) {
+    public static String unaliased(String artist) {
         String[] a = aliased(artist);
         return a == null ? artist : a[0];
     }
@@ -349,7 +348,7 @@ public final class TrackName {
                 }
             };
 
-    static void note(String pkg, MediaMetadata md) {
+    public static void note(String pkg, MediaMetadata md) {
         if (pkg == null || md == null) {
             return;
         }
@@ -402,7 +401,7 @@ public final class TrackName {
         }
     }
 
-    static void note(MediaController c) {
+    public static void note(MediaController c) {
         if (c == null) {
             return;
         }
@@ -413,7 +412,7 @@ public final class TrackName {
     }
 
     /** Whether two titles from one player were last seen on the same song. */
-    static boolean sameSong(String pkg, String titleA, String titleB) {
+    public static boolean sameSong(String pkg, String titleA, String titleB) {
         synchronized (sSongOf) {
             String a = sSongOf.get(pkg + "|" + titleA);
             return a != null && a.equals(sSongOf.get(pkg + "|" + titleB));

@@ -1,5 +1,5 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.database.Cursor;
 import android.media.MediaMetadata;
@@ -28,7 +28,7 @@ import java.io.RandomAccessFile;
  * SystemUI can read all of it without asking: MANAGE_EXTERNAL_STORAGE and READ_EXTERNAL_STORAGE
  * are both granted and SYSTEM_FIXED, so this is an ordinary file read from an ordinary path.
  */
-final class LocalLyrics {
+public final class LocalLyrics {
 
     private LocalLyrics() {
     }
@@ -82,7 +82,7 @@ final class LocalLyrics {
      * what it was given as well as what it made of it, because most of the ways this can go
      * wrong are a field arriving empty rather than a decision going the wrong way.
      */
-    static String describe(Context ctx, MediaController c) {
+    public static String describe(Context ctx, MediaController c) {
         StringBuilder sb = new StringBuilder();
         sb.append("ctx=").append(ctx == null ? "null" : "ok");
         sb.append(" session=").append(c == null ? "null" : c.getPackageName());

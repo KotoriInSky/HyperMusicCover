@@ -1,5 +1,5 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Xp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * time: this is the path for a song the first two could not place, and it should not spend
  * five requests on every one that could.
  */
-final class OnlineLyrics {
+public final class OnlineLyrics {
 
     private OnlineLyrics() {
     }
@@ -187,7 +187,7 @@ final class OnlineLyrics {
     }
 
     /** For op ncm: the order, and what QQ Music and Kuwo make of the song. */
-    static String probe(String pkg, NcmLyrics.Query q) {
+    public static String probe(String pkg, NcmLyrics.Query q) {
         StringBuilder sb = new StringBuilder("\n  order: ").append(describe(pkg));
         if (q == null) return sb.toString();
         for (Src s : new Src[]{Src.QQ, Src.KUWO}) {

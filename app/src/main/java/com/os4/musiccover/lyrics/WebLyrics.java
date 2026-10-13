@@ -1,5 +1,6 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Http;
+import com.os4.musiccover.Xp;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.URLEncoder;
@@ -41,7 +42,7 @@ import java.util.zip.InflaterInputStream;
  * deliberate: the rules there were each paid for by a song that got the wrong lyrics, and a
  * second matcher would have to be taught the same lessons one at a time.
  */
-final class WebLyrics {
+public final class WebLyrics {
 
     private WebLyrics() {
     }
@@ -572,7 +573,7 @@ final class WebLyrics {
      * question they answer together is one question - "this song got no lyrics, why" - and the
      * answer is which of the three catalogues was asked and what each one said.
      */
-    static String describe(NcmLyrics.Query q) {
+    public static String describe(NcmLyrics.Query q) {
         if (q == null) {
             return "nothing to search for";
         }

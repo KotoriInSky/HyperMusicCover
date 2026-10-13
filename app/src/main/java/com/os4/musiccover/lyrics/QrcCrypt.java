@@ -3,8 +3,7 @@
  * online/utils/TripleDesCustom.kt and QmCryptoUtils in CryptoUtils.kt), GPL-3.0, and is used here
  * under this project's AGPL-3.0 (GPLv3 section 13). Rewritten in Java; the tables are theirs.
  */
-package com.os4.musiccover;
-
+package com.os4.musiccover.lyrics;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.Inflater;

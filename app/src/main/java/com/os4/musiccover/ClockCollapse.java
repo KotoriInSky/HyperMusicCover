@@ -224,7 +224,7 @@ public final class ClockCollapse {
      * is on the lock screen. What used to keep the lyrics out of the AOD - "the AOD's full clock
      * is the OEM's, and nothing may sit under it" - is exactly what the setting turns off.
      */
-    static float inkBottomOnScreen() {
+    public static float inkBottomOnScreen() {
         Phase p = sPhase;
         if (p == Phase.AOD) return sAodHeld ? sInkBottom : Float.NaN;
         return p == Phase.OFF ? Float.NaN : sInkBottom;
@@ -239,7 +239,7 @@ public final class ClockCollapse {
      *
      * NaN wherever the ink bottom is: nothing measured, nothing to sit under.
      */
-    static float contentBottomOnScreen() {
+    public static float contentBottomOnScreen() {
         float ink = inkBottomOnScreen();
         if (Float.isNaN(ink)) return Float.NaN;
         float bottom = ink;
@@ -307,7 +307,7 @@ public final class ClockCollapse {
      * clock's ANCESTORS, which are the OEM's and already this frame's, rather than read off the
      * clock's own transform, which this frame's pre-draw may not have written yet.
      */
-    static float contentBottomFor(View v) {
+    public static float contentBottomFor(View v) {
         float pose = contentBottomOnScreen();
         if (Float.isNaN(pose)) return Float.NaN;
         View g = firstTarget();
@@ -351,7 +351,7 @@ public final class ClockCollapse {
     }
 
     /** Whether this doze is keeping the cover's clock - for Main.holdAodColour(). */
-    static boolean aodHeld() {
+    public static boolean aodHeld() {
         return sAodHeld;
     }
 
