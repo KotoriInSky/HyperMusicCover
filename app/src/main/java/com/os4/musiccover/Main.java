@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.shade.ShadeLayer;
 import com.os4.musiccover.transit.AmapFocus;
 import com.os4.musiccover.transit.AmapImmerse;
 import com.os4.musiccover.transit.AmapNavScene;
@@ -10087,11 +10088,11 @@ public class Main extends XposedModule {
      * in the foreground. The shade is an unlocked-only feature, so it must gate on the
      * KeyguardManager answer, not on the container.
      */
-    static boolean keyguardLocked() {
+    public static boolean keyguardLocked() {
         return keyguardShowing();
     }
 
-    static boolean coverModeOn() {
+    public static boolean coverModeOn() {
         return sCoverMode;
     }
 

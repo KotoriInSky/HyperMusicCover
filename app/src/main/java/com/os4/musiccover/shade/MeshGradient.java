@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.shade;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 

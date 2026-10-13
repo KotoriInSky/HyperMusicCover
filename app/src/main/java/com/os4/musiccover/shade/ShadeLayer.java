@@ -1,5 +1,6 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.shade;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.Xp;
 import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,7 +17,7 @@ import android.view.View;
  * The shade itself is left entirely to SystemUI - its blur, its zoom, its cards and its layout.
  * The background sits in a window below the shade, so the official glass samples it on its own.
  */
-final class ShadeLayer {
+public final class ShadeLayer {
 
     private ShadeLayer() {
     }
@@ -52,7 +53,7 @@ final class ShadeLayer {
      * Both hooks, each failing on its own: a build that renames one loses the background and
      * nothing else in the module.
      */
-    static void install(ClassLoader cl) {
+    public static void install(ClassLoader cl) {
         try {
             final Class<?> root = Xp.findClass(CLS_WINDOW_ROOT, cl);
             Xp.hookAllConstructors(root, chain -> {
@@ -176,16 +177,16 @@ final class ShadeLayer {
     // ------------------------------------------------------------------ cover
 
     /** The cover, from Main's worker. Built into the background and not kept. */
-    static void setArt(Bitmap b) {
+    public static void setArt(Bitmap b) {
         ShadeBackdrop.setArt(b);
     }
 
-    static boolean hasArt() {
+    public static boolean hasArt() {
         return ShadeBackdrop.hasArt();
     }
 
     /** Whether the cover should outlive cover mode. Read by Main when cover mode ends. */
-    static boolean keepsArt() {
+    public static boolean keepsArt() {
         return sEnabled && sMode == 1;
     }
 
@@ -210,7 +211,7 @@ final class ShadeLayer {
      */
     private static volatile int sMode = 0;
 
-    static int mode() {
+    public static int mode() {
         return sMode;
     }
 
@@ -224,7 +225,7 @@ final class ShadeLayer {
     /**
      * One setting by name. Values are clamped here and not in the UI, because adb is a caller too.
      */
-    static void configure(String key, int v) {
+    public static void configure(String key, int v) {
         if (key == null || RETIRED.contains(key)) return;
         if ("enabled".equals(key)) {
             final boolean on = v != 0;
@@ -251,17 +252,17 @@ final class ShadeLayer {
     }
 
     /** Every setting, in the order the settings page shows them. */
-    static final String[] CFG_KEYS = {"enabled", "mode"};
+    public static final String[] CFG_KEYS = {"enabled", "mode"};
 
     /** A setting's current value, in the units configure() reads. */
-    static int cfgInt(String key) {
+    public static int cfgInt(String key) {
         if ("enabled".equals(key)) return sEnabled ? 1 : 0;
         if ("mode".equals(key)) return sMode;
         return 0;
     }
 
     /** The settings, one line each, for the state file. */
-    static String dumpCfg() {
+    public static String dumpCfg() {
         final StringBuilder sb = new StringBuilder();
         for (String key : CFG_KEYS) {
             sb.append("\nshade_").append(key).append('=').append(cfgInt(key));
