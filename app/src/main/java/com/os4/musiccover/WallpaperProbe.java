@@ -931,7 +931,9 @@ public class WallpaperProbe {
                         && chain.getThisObject() == sKeyguardRenderer) {
                     applyDarken(chain.getThisObject());
                 }
-                Object r = chain.proceed();
+                Object r = chain.getThisObject() == sKeyguardRenderer
+                        && (WallpaperVideo.on() || sVideoGlLive)
+                        ? drawWithVideo(chain) : chain.proceed();
                 if (chain.getThisObject() != sKeyguardRenderer) return r;
                 GpuFade f = sGpuFade;
                 if (f == null && sGlTex == 0) return r;
@@ -2020,6 +2022,35 @@ public class WallpaperProbe {
                         Xp.log(TAG + "gpu fade " + (sGpuFadeOn ? "on" : "off")
                                 + " (draw hooked=" + sDrawHooked + ", usable now="
                                 + gpuFadeUsable() + ")");
+                    } else if ("vidtex".equals(op)) {
+                        // The motion-cover experiment, see WallpaperVideo. `--ez on false`
+                        // stops it; `--ez stats true` only reports (and restarts the counters).
+                        if (i.getBooleanExtra("stats", false)) {
+                            String s = WallpaperVideo.statsAndReset();
+                            Xp.log(TAG + "video: " + s);
+                            setResultData(s);
+                        } else if (!i.getBooleanExtra("on", true)) {
+                            WallpaperVideo.stop("probe");
+                            setResultData("off");
+                        } else {
+                            String path = i.getStringExtra("path");
+                            if (path == null) {
+                                path = new File(c.getFilesDir(), "mc_video.mp4").getPath();
+                            }
+                            float bias = i.getFloatExtra("bias", -1f);
+                            if (bias < 0f) {
+                                bias = 0.25f;
+                                try {
+                                    CoverCompose.Source s = CoverCompose.readSource(
+                                            new File(c.getFilesDir(), SRC_FILE));
+                                    if (s != null) bias = s.bias;
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                            WallpaperVideo.start(c, path, bias);
+                            setResultData("on " + path + " bias=" + bias
+                                    + " (filesDir " + c.getFilesDir() + ")");
+                        }
                     } else if ("nofrost".equals(op)) {
                         sSkipFrost = i.getBooleanExtra("on", !sSkipFrost);
                         Xp.log(TAG + "frosting during a fade is "
@@ -2686,6 +2717,54 @@ public class WallpaperProbe {
             return;
         }
         reportNoFrameRequest(eng);
+    }
+
+    /** WallpaperVideo still holds GL objects; one more frame on the keyguard lets them go. */
+    private static volatile boolean sVideoGlLive;
+
+    /**
+     * The keyguard's frame with the motion cover in it: the OEM's own draw, with the texture it
+     * binds swapped for the one WallpaperVideo composed this frame. See WallpaperVideo.
+     */
+    private static Object drawWithVideo(XposedInterface.Chain chain) throws Throwable {
+        Object renderer = chain.getThisObject();
+        int tex = WallpaperVideo.beforeDraw(renderer, sGpuFade != null, sReportedW, sReportedH);
+        sVideoGlLive = WallpaperVideo.on();
+        Object wp = null;
+        int oemTex = 0;
+        if (tex != 0) {
+            try {
+                Object prog = Xp.getObjectField(Xp.getObjectField(renderer, "mAnimator"),
+                        "mProgram");
+                wp = Xp.getObjectField(prog, "mAnimImageGLWallpaper");
+                oemTex = ((Integer) Xp.getObjectField(wp, "mTextureId")).intValue();
+                Xp.setObjectField(wp, "mTextureId", tex);
+            } catch (Throwable t) {
+                Xp.w(TAG + "video: cannot swap the texture: " + t);
+                wp = null;
+            }
+        }
+        try {
+            return chain.proceed();
+        } finally {
+            // Only if it is still ours: a reload inside the frame sets a new one of the OEM's.
+            if (wp != null && ((Integer) Xp.getObjectField(wp, "mTextureId")).intValue() == tex) {
+                Xp.setObjectField(wp, "mTextureId", oemTex);
+            }
+        }
+    }
+
+    static Class<?> plainProgram() {
+        return sPlainProgram;
+    }
+
+    /** Any thread: a frame for the video, asked for on the main thread like the fade's. */
+    static void videoFrame() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            requestFrame(true);
+        } else {
+            new Handler(Looper.getMainLooper()).post(() -> requestFrame(true));
+        }
     }
 
     /** A redraw of what is uploaded, with no reload - the GPU fade's per-frame request. */
