@@ -407,9 +407,31 @@ internal object PickupIsland {
                 collapse(c)
             }
             clear(card)
+        } else if (cancel) {
+            // A card this process never posted: one a SystemUI restart left up, with [cards] empty
+            // and nothing read since to post over it. 「我已取餐」 on it did nothing but log
+            // (2026-10-13, after a restart). It is found among the posted ones by the task it carries.
+            orphan(c, task)?.let { sbn ->
+                runCatching { c.getSystemService(NotificationManager::class.java)?.cancel(sbn.tag, sbn.id) }
+                collapse(c)
+                Xp.log(TAG + "$why: took down a card left by an earlier run (${sbn.tag}/${sbn.id})")
+            }
         }
         if (task >= 0) PickupObserver.end(task, why)
         Xp.log(TAG + "$why ($task)")
+    }
+
+    /**
+     * The posted card for [task] that this process has no record of. Cards carry their task (see
+     * [post]); one posted before they did is taken when it is the only card of ours up.
+     */
+    private fun orphan(c: Context, task: Int): android.service.notification.StatusBarNotification? {
+        val ours = runCatching {
+            c.getSystemService(NotificationManager::class.java)?.activeNotifications
+                ?.filter { it.notification.channelId == CHANNEL }
+        }.getOrNull().orEmpty()
+        return ours.firstOrNull { it.notification.extras.getInt(EXTRA_TASK, -1) == task }
+            ?: ours.singleOrNull()?.takeIf { !it.notification.extras.containsKey(EXTRA_TASK) }
     }
 
     /**
@@ -650,6 +672,8 @@ internal object PickupIsland {
             ?.let { PickupArt.bitmap(it, 200) }
         if (aod != null) param.put("aodPic", PIC_AOD)
         val extras = Bundle()
+        // Its task, for a tap that comes after a SystemUI restart to find it by (see [orphan]).
+        extras.putInt(EXTRA_TASK, task)
         extras.putString("miui.focus.param", JSONObject().put("param_v2", param).toString())
         // And under `custom`, which is the key the island reads once the notification carries a
         // card - and here the object has to go in **unwrapped**. The plugin picks the key by
