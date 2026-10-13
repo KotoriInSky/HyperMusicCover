@@ -1,5 +1,7 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.pickup
+import com.os4.musiccover.BuildConfig
+import com.os4.musiccover.R
+import com.os4.musiccover.Xp
 import android.app.PendingIntent
 import android.content.Context
 import android.graphics.Bitmap

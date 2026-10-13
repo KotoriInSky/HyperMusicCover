@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.pickup;
 import android.content.Context;
 import android.os.Bundle;
 import android.util.Xml;

@@ -1,5 +1,4 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.pickup
 /**
  * The pickup code on a mini program's order page, out of the page's text (PickupCodeIsland reads
  * the text).

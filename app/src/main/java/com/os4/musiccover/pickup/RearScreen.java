@@ -1,5 +1,7 @@
-package com.os4.musiccover;
+package com.os4.musiccover.pickup;
 
+import com.os4.musiccover.R;
+import com.os4.musiccover.Xp;
 /**
  * The back screen's allow-list, and the pickup card's way onto it.
  *
@@ -26,7 +28,7 @@ package com.os4.musiccover;
  * release of that app. A lookup that misses costs the card on the back screen and nothing else,
  * which is why each hook is allowed to fail on its own.
  */
-final class RearScreen {
+public final class RearScreen {
     private static final String TAG = "MCRear: ";
 
     /** Our notification's package. The list has no entry for it; this is the whole problem. */
@@ -35,7 +37,7 @@ final class RearScreen {
     private RearScreen() {
     }
 
-    static void handle(ClassLoader cl) {
+    public static void handle(ClassLoader cl) {
         // First, and before the lookup below that can return: the card this module posted and then
         // cancelled is still written down in the app's own widget file, and the app's restore brings
         // it back at every start as a card with nothing to draw. See prune().

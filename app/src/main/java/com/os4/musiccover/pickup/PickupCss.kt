@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.pickup
+import com.os4.musiccover.Xp
 import org.json.JSONArray
 import org.json.JSONObject
 

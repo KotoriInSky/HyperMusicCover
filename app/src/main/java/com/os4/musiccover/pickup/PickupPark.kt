@@ -1,5 +1,6 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.pickup
+import com.os4.musiccover.Main
+import com.os4.musiccover.Xp
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay

@@ -1,8 +1,7 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.pickup;
 import android.net.Uri;
 
-final class PickupConst {
+public final class PickupConst {
     static final String MODULE_PACKAGE = "io.github.mio.autopickupisland";
     static final String PROVIDER_AUTHORITY = MODULE_PACKAGE + ".bridge";
     static final Uri PROVIDER_URI = Uri.parse("content://" + PROVIDER_AUTHORITY);
@@ -10,7 +9,7 @@ final class PickupConst {
     static final String PKG_WECHAT = "com.tencent.mm";
     static final String PKG_ALIPAY = "com.eg.android.AlipayGphone";
     static final String PKG_AICR = "com.xiaomi.aicr";
-    static final String PKG_VOICE_ASSIST = "com.miui.voiceassist";
+    public static final String PKG_VOICE_ASSIST = "com.miui.voiceassist";
     static final String PKG_PRIVILEGED_ASSIST = "com.xiaomi.aiasst.service";
     static final String PKG_SYSTEM_UI = "com.android.systemui";
     static final String PKG_TEST_FIXTURE = "io.github.mio.autopickupfixture";

@@ -1,5 +1,7 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.pickup
+import com.os4.musiccover.Main
+import com.os4.musiccover.R
+import com.os4.musiccover.Xp
 import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel

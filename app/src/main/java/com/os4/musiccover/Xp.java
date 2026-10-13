@@ -25,7 +25,7 @@ import io.github.libxposed.api.XposedInterface;
  * carry on past: the call sites already sit inside try/catch blocks that log and give up, and a
  * silent null would turn a rename into a much stranger bug much later.
  */
-final class Xp {
+public final class Xp {
 
     private Xp() {
     }
@@ -87,7 +87,7 @@ final class Xp {
      * The framework's log, which is where LSPosed collects module output. Tagged per line the
      * way the old XposedBridge.log was, so `logcat | grep MCProbe` still works.
      */
-    static void log(String msg) {
+    public static void log(String msg) {
         write(Log.INFO, msg);
     }
 
@@ -96,13 +96,13 @@ final class Xp {
      * (persist.logd.limit), so a DEBUG line would be asked for and then dropped. The level is
      * decided here, not by logd.
      */
-    static void d(String msg) {
+    public static void d(String msg) {
         if (sLevel < LogLevel.VERBOSE) return;
         write(Log.INFO, msg);
     }
 
     /** Something that did not work: a hook, a lookup, a request. Always written. */
-    static void w(String msg) {
+    public static void w(String msg) {
         write(Log.WARN, msg);
     }
 
@@ -151,7 +151,7 @@ final class Xp {
 
     // ---------------------------------------------------------------- lookup
 
-    static Class<?> findClass(String name, ClassLoader loader) {
+    public static Class<?> findClass(String name, ClassLoader loader) {
         try {
             return Class.forName(name, false, loader);
         } catch (ClassNotFoundException e) {
@@ -178,7 +178,7 @@ final class Xp {
      * module hooks are obfuscated and their signatures move between OS versions, so hooking by
      * name and taking whatever is there has proven far more durable than naming the parameters.
      */
-    static List<XposedInterface.HookHandle> hookAll(Class<?> cls, String name,
+    public static List<XposedInterface.HookHandle> hookAll(Class<?> cls, String name,
                                                     XposedInterface.Hooker hooker) {
         // Declared methods only, no walk up the hierarchy - the same rule the classic
         // hookAllMethods followed, and here it is load-bearing: onAttachedToWindow and onDraw
@@ -222,7 +222,7 @@ final class Xp {
         return handles;
     }
 
-    static XposedInterface.HookHandle hook(Executable target, XposedInterface.Hooker hooker) {
+    public static XposedInterface.HookHandle hook(Executable target, XposedInterface.Hooker hooker) {
         return api().hook(target).intercept(hooker);
     }
 
@@ -265,7 +265,7 @@ final class Xp {
         throw new IllegalArgumentException("no field " + obj.getClass().getName() + "." + name);
     }
 
-    static Object getObjectField(Object obj, String name) {
+    public static Object getObjectField(Object obj, String name) {
         try {
             return field(obj, name).get(obj);
         } catch (IllegalAccessException e) {

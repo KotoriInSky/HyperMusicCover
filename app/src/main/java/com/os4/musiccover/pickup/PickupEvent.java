@@ -1,5 +1,4 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.pickup;
 import android.app.PendingIntent;
 import android.os.Bundle;
 

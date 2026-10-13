@@ -1,5 +1,5 @@
-package com.os4.musiccover
-
+package com.os4.musiccover.pickup
+import com.os4.musiccover.BuildConfig
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory

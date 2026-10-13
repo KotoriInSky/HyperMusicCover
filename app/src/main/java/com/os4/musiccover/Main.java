@@ -1,5 +1,11 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.pickup.PickupCloud;
+import com.os4.musiccover.pickup.PickupCodeIsland;
+import com.os4.musiccover.pickup.PickupConst;
+import com.os4.musiccover.pickup.PickupPark;
+import com.os4.musiccover.pickup.RearScreen;
+import com.os4.musiccover.pickup.XiaoaiMemory;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
@@ -353,7 +359,7 @@ public class Main extends XposedModule {
     static Context sAppCtx;
 
     /** SystemUI's own context, for the helpers that live outside this file. */
-    static Context appContext() {
+    public static Context appContext() {
         return sAppCtx;
     }
     private static final String STATE_FILE = "mc_cover_state";
@@ -6658,7 +6664,7 @@ public class Main extends XposedModule {
         return sWork;
     }
 
-    static Handler main() {
+    public static Handler main() {
         if (sMain == null) sMain = new Handler(Looper.getMainLooper());
         return sMain;
     }
