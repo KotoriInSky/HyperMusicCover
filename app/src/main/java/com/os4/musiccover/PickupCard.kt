@@ -75,7 +75,7 @@ internal object PickupCard {
      * [alpha] is the picture's opacity, and it is a parameter because it is the only way this card
      * can be animated: a RemoteViews carries no animation of any kind, so a fade has to be posted
      * as a series of notifications that each draw the pictures a little more opaque (see
-     * [PickupCodeIsland.fade]). 1f is the resting state.
+     * [PickupIsland]'s fade). 1f is the resting state.
      */
     fun build(
         c: Context,
