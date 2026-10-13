@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 btm_m
 package com.os4.musiccover.island
+import com.os4.musiccover.CardTouch
 import com.os4.musiccover.MediaCard
 import com.os4.musiccover.ClockCollapse
 import com.os4.musiccover.ClockRoomPolicy
@@ -8542,7 +8543,7 @@ private class MiniPlayerController(
 
     /**
      * The stack folded into its "N notifications" count (KeyguardNotificationState.NUMBER),
-     * read as Main.readFoldState reads it but from the stack itself: the media card it starts
+     * read as CardTouch.readFoldState reads it but from the stack itself: the media card it starts
      * from is not there with a row of islands showing. Null when it cannot be read.
      */
     private fun stackFolded(): Boolean? = runCatching {

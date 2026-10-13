@@ -257,7 +257,7 @@ public final class MediaCard {
         }
         centreCardText(card, (TextView) sCardTitle, centreP);
         centreCardText(card, (TextView) sCardArtist, centreP);
-        Main.applyTitleTap((TextView) sCardTitle, Main.sMcTitleTap && Main.sCoverMode && onKeyguard);
+        CardTouch.applyTitleTap((TextView) sCardTitle, Main.sMcTitleTap && Main.sCoverMode && onKeyguard);
         // On the card's progress, so it comes and goes with the restyle - including the exit,
         // where cover mode is already off but the card is still fading back. Not in a capture
         // for the preview, and not in the AOD: that is a smaller stand-in card with no taps.
@@ -482,7 +482,7 @@ public final class MediaCard {
         // The guard is what gives the title back, so it has to happen here: with the guard gone
         // nothing would ever run the assert that would have done it, and the shade would keep a
         // title that pauses the music.
-        Main.applyTitleTap(null, false);
+        CardTouch.applyTitleTap(null, false);
         // The same for the page button: drawn on the card's overlay, which is the shade's too.
         CardPageButton.release();
         if (d == null || g == null) return;
