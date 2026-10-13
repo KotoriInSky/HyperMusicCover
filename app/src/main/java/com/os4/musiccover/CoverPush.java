@@ -1490,7 +1490,7 @@ final class CoverPush {
         // does the same damage. See wallpaperKind(): a live wallpaper on either slot cannot
         // survive being replaced with a still, and this is the only place that could do it.
         String lockKind = wallpaperKind(ctx, "lock");
-        boolean live = lockKind != null && !Main.KIND_IMAGE.equals(lockKind);
+        boolean live = Main.liveKind(lockKind);
         Main.sVideoWallpaper = live;
         if (live) {
             // Nothing to repair, and nothing that may be written: setBitmap(FLAG_LOCK) would
@@ -1499,6 +1499,24 @@ final class CoverPush {
             Xp.log(Main.TAG + "the lock screen has a " + lockKind + " wallpaper of its own; leaving "
                     + "the wallpaper alone and drawing the cover in the keyguard layer");
             return false;
+        }
+        if (lockKind != null && !Main.KIND_IMAGE.equals(lockKind)) {
+            // A still the image engine draws, but one some other app manages (锁屏画报's
+            // `gallery`, ...): the cover goes on its texture as on any picture, but nothing here
+            // writes to the slot - not the copy below, not the re-fit - forced or not.
+            try {
+                android.os.ParcelFileDescriptor lock =
+                        wm.getWallpaperFile(android.app.WallpaperManager.FLAG_LOCK);
+                if (lock == null) return false;
+                try {
+                    lock.close();
+                } catch (Throwable ignored) {
+                }
+                return true;
+            } catch (Throwable t) {
+                Xp.log(Main.TAG + "cannot read the lock wallpaper slot: " + t);
+                return false;
+            }
         }
         if (lockKind == null) {
             // Nothing of its own on the lock slot, so it is showing the home wallpaper - and
@@ -2070,7 +2088,7 @@ final class CoverPush {
     static boolean hasLockWallpaper(Context ctx) {
         try {
             String kind = wallpaperKind(ctx, "lock");
-            if (kind != null && !Main.KIND_IMAGE.equals(kind)) return false;
+            if (Main.liveKind(kind)) return false;
             android.app.WallpaperManager wm = (android.app.WallpaperManager)
                     ctx.getSystemService(Context.WALLPAPER_SERVICE);
             android.os.ParcelFileDescriptor f =

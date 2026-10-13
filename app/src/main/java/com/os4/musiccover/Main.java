@@ -3209,7 +3209,7 @@ public class Main extends XposedModule {
             @Override
             public void run() {
                 String k = CoverPush.wallpaperKind(appCtx, "lock");
-                sVideoWallpaper = k != null && !KIND_IMAGE.equals(k);
+                sVideoWallpaper = liveKind(k);
                 if (sVideoWallpaper && sDepthHidden) main().post(new Runnable() {
                     @Override
                     public void run() { setDepthHidden(true); }
@@ -6633,6 +6633,24 @@ public class Main extends XposedModule {
 
     /** The one kind of wallpaper this module can work with: a still picture. */
     static final String KIND_IMAGE = "image";
+
+    /**
+     * The kinds MiWallpaper draws with an engine other than its image one - the list its own
+     * WallpaperTypeUtils.getEngineService sends elsewhere. Every other kind it hands to
+     * KeyguardImageEngineImpl, the texture this module swaps: `gallery` (锁屏画报 and the like),
+     * `default`, `dark` are still pictures there. Read as live, they put the cover in the keyguard
+     * layer over a wallpaper window still showing the picture: the clock's glass refracted the
+     * old wallpaper under the cover, and leaving cover mode waited out the live wallpaper's
+     * reload before the picture came back (#84, a carousel wallpaper).
+     */
+    private static final java.util.Set<String> LIVE_KINDS = new java.util.HashSet<>(
+            java.util.Arrays.asList("video", "sensor", "super_wallpaper", "video_gallery",
+                    "linkage_video", "loop_video", "maml"));
+
+    /** Whether a slot of [kind] is drawn by something other than the image engine. */
+    static boolean liveKind(String kind) {
+        return kind != null && LIVE_KINDS.contains(kind);
+    }
 
     /**
      * One switch for the whole look. The clock collapse is not a separate thing the user turns
