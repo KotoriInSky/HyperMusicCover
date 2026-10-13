@@ -2909,7 +2909,7 @@ public class Main extends XposedModule {
                             else setResultData(PickupPark.INSTANCE.experiment(task,
                                     i.getIntExtra("min", 5), 0));
                         } else if ("vdoff".equals(doIt)) {
-                            PickupPark.INSTANCE.releaseFrom("the probe said so");
+                            PickupPark.INSTANCE.releaseAllFrom("the probe said so");
                             setResultData(PickupPark.INSTANCE.describe());
                         } else {
                             setResultData(PickupCodeIsland.INSTANCE.describe()

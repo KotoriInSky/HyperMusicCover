@@ -29,7 +29,11 @@ import android.os.SystemClock
  * And one is not done the same way: ColorOS borrows the task onto its display for each round and puts
  * it back at the *bottom* of the phone's display after (`moveTaskToDisplay(task, 0, false)`). The
  * platform has no bottom-of-the-display move - moveRootTaskToDisplay always lands on top - so the task
- * stays on the hidden display between rounds, and goes back once, when the task ends.
+ * stays on the hidden display between rounds, and goes back when the task ends, or for as long as its
+ * app is in front ([standAside]).
+ *
+ * Up to three orders at once, as ColorOS's `max_task_count`, each on its own rounds; they share the
+ * one hidden display, and so a reload of one is a reload of all.
  *
  * All on [PickupCodeIsland.bg].
  */
@@ -47,119 +51,170 @@ internal object PickupObserver {
     private const val REFRESH_WAIT = 6_000L
     /** Rounds in a row without the order on the page before the task ends (ColorOS's `resultEmptyCount`). */
     private const val EMPTY_MAX = 5
+    /** Orders waited on at once: ColorOS's `max_task_count` (observe-config.json). */
+    private const val MAX_TASKS = 3
+    /** Tries at putting a task back on the hidden display before it is given up. */
+    private const val PARK_TRIES = 3
 
-    private val ROUND = Any()
     private val bg get() = PickupCodeIsland.bg
 
-    private var task = -1
-    private var page: PickupIsland.Page? = null
-    private var code = ""
-    /** The furthest state the order has reached; ColorOS's `lastOrderStatus`, which only moves forward. */
-    private var status: String? = null
-    private var startedAt = 0L
-    /** Rounds finished, ColorOS's `completedObserveCount`: the first one is followed by the first-after gap. */
-    private var rounds = 0
-    private var empty = 0
-    private var gen = 0
-    private var last = ""
+    /** One order being waited on - ColorOS's task, and the executor's fields for it. */
+    private class Obs(val task: Int, var page: PickupIsland.Page, var code: String, var status: String?) {
+        val startedAt = SystemClock.uptimeMillis()
+        /** Rounds finished, ColorOS's `completedObserveCount`: the first is followed by the first-after gap. */
+        var rounds = 0
+        var empty = 0
+        var parkTries = 0
+        var last = ""
+        /** What this order's rounds are queued under, so that ending it takes back its own and no others. */
+        val token = Any()
+    }
 
-    fun observing(t: Int) = t >= 0 && t == task
+    /** The orders waited on, by task, in the order they came. */
+    private val tasks = LinkedHashMap<Int, Obs>()
+
+    fun observing(t: Int) = t >= 0 && tasks.containsKey(t)
 
     /**
      * The order [code] on [p]'s task waited on, its state as of now [now]. The task is moved onto the
      * hidden display and the first round runs once it is there - ColorOS schedules its first at 0.
+     * An order already waited on is only put back on the display; a fourth is not taken.
      */
     fun start(p: PickupIsland.Page, code: String, now: String?) {
-        if (task >= 0) return
-        task = p.task
-        page = p
-        this.code = code
-        status = now
-        startedAt = SystemClock.uptimeMillis()
-        rounds = 0
-        empty = 0
-        val g = ++gen
-        Xp.log(TAG + "observing task $task for $code ($now)")
-        PickupPark.parkFrom(task)
-        bg.postDelayed({ round(g) }, ROUND, NAVI_WAIT)
+        tasks[p.task]?.let { o ->
+            o.page = p
+            if (!PickupPark.isParked(o.task)) PickupPark.parkFrom(o.task)
+            return
+        }
+        if (tasks.size >= MAX_TASKS) {
+            Xp.log(TAG + "not observing task ${p.task}: $MAX_TASKS orders are waited on already")
+            return
+        }
+        val o = Obs(p.task, p, code, now)
+        tasks[p.task] = o
+        Xp.log(TAG + "observing task ${p.task} for ${code.ifEmpty { "a code to come" }} ($now), ${tasks.size} in all")
+        PickupPark.parkFrom(p.task)
+        bg.postDelayed({ round(o) }, o.token, NAVI_WAIT)
     }
 
     /**
-     * The task over, for [why]: the page goes back to the phone's display - over what the user is in
-     * only when [front] (the island was tapped) - and [then] runs after. Ending nothing still
-     * releases whatever is parked, so this is the one way anything here asks for a release.
+     * The order on [task] no longer waited on, for [why]: its page goes back to the phone's display -
+     * over what the user is in only when [front] (its island was tapped) - and [then] runs after.
+     * Ending one that is not waited on still releases it if it is parked.
      */
-    fun end(why: String, front: Boolean = false, then: (() -> Unit)? = null) {
-        val t = task
-        if (t >= 0) {
-            Xp.log(TAG + "task $t ended: $why ($rounds rounds, ${(SystemClock.uptimeMillis() - startedAt) / 1000}s)")
-            task = -1
-            gen++
-            bg.removeCallbacksAndMessages(ROUND)
+    fun end(task: Int, why: String, front: Boolean = false, then: (() -> Unit)? = null) {
+        val o = tasks.remove(task)
+        if (o != null) {
+            Xp.log(TAG + "task $task ended: $why (${o.rounds} rounds, ${(SystemClock.uptimeMillis() - o.startedAt) / 1000}s)")
+            bg.removeCallbacksAndMessages(o.token)
         }
-        PickupPark.releaseFrom(why, front, then)
-        if (t >= 0) PickupCodeIsland.observeEnded(t)
+        PickupPark.releaseFrom(task, why, front, then)
+        if (o != null) PickupCodeIsland.observeEnded(task)
     }
 
-    fun describe(): String = if (task < 0) "obs: -" else
-        "obs: task=$task code=$code status=$status rounds=$rounds empty=$empty " +
-            "at=${(SystemClock.uptimeMillis() - startedAt) / 1000}s last=$last"
+    /** Every order let go: the switch going off. */
+    fun endAll(why: String) {
+        tasks.keys.toList().forEach { end(it, why) }
+        PickupPark.releaseAllFrom(why)
+    }
 
-    private fun round(g: Int) {
-        if (g != gen) return
-        val ctx = Main.appContext() ?: return next(g)
-        // Released by something that did not go through [end] - the probe, SystemUI's own display
-        // going away: there is no page left to read.
-        if (PickupPark.parked() != task) return end("the page is no longer parked")
-        if (SystemClock.uptimeMillis() - startedAt >= DURATION) return end("${DURATION / 60_000} min")
+    /**
+     * [host] is in front: its orders come off the hidden display - a mini program opened from its list
+     * would come up there, out of sight - and are waited on still. Each goes back on at its next round
+     * once the user is out of the app again (see [round]); ending here would drop every other order
+     * the moment one was looked at in 微信.
+     */
+    fun standAside(host: String, why: String) {
+        tasks.values.filter { it.page.host == host && PickupPark.isParked(it.task) }
+            .forEach { PickupPark.releaseFrom(it.task, why) }
+    }
+
+    fun describe(): String = if (tasks.isEmpty()) "obs: -" else "obs: " + tasks.values.joinToString("; ") { o ->
+        "task=${o.task} code=${o.code} status=${o.status} rounds=${o.rounds} empty=${o.empty} " +
+            "at=${(SystemClock.uptimeMillis() - o.startedAt) / 1000}s parked=${PickupPark.isParked(o.task)} last=${o.last}"
+    }
+
+    private fun live(o: Obs) = tasks[o.task] === o
+
+    private fun round(o: Obs) {
+        if (!live(o)) return
+        val ctx = Main.appContext() ?: return next(o)
+        if (SystemClock.uptimeMillis() - o.startedAt >= DURATION) return end(o.task, "${DURATION / 60_000} min")
         val temp = temperature(ctx)
-        if (temp >= MAX_TEMP) return end("too hot: $temp°C")
+        if (temp >= MAX_TEMP) return end(o.task, "too hot: $temp°C")
+        // Off the display - its app came to the front, or a park did not take: back on once the user
+        // is out of it, the way ColorOS moves its task over for every round.
+        if (!PickupPark.isParked(o.task)) {
+            when (PickupCodeIsland.whereIs(o.task, o.page.host)) {
+                PickupCodeIsland.Where.GONE -> return end(o.task, "its task is gone")
+                PickupCodeIsland.Where.WITH_USER -> {
+                    o.last = "with the user"
+                    return next(o)
+                }
+                PickupCodeIsland.Where.AWAY -> {
+                    if (++o.parkTries > PARK_TRIES) return end(o.task, "not put back on the hidden display")
+                    PickupPark.parkFrom(o.task)
+                    bg.postDelayed({ round(o) }, o.token, NAVI_WAIT)
+                    return
+                }
+            }
+        }
+        o.parkTries = 0
         skip(ctx)?.let { why ->
-            last = "skipped: $why"
-            return next(g)
+            o.last = "skipped: $why"
+            return next(o)
         }
         PickupPark.cycleFrom {
-            bg.postDelayed({ extract(g) }, ROUND, REFRESH_WAIT)
+            bg.postDelayed({ extract(o) }, o.token, REFRESH_WAIT)
         }
     }
 
-    private fun extract(g: Int) {
-        if (g != gen) return
-        PickupCodeIsland.readOnce(task, frontOnly = true) { r, texts ->
-            if (g == gen) dispatch(g, r, texts)
+    private fun extract(o: Obs) {
+        if (!live(o)) return
+        PickupCodeIsland.readOnce(o.task, frontOnly = true, rule = o.page.rule) { r, texts ->
+            if (live(o)) dispatch(o, r, texts)
         }
     }
 
-    private fun dispatch(g: Int, r: PickupParse.Result?, texts: Int) {
-        rounds++
-        if (r == null || r.code != code) {
-            empty++
-            last = if (r == null) "no code in $texts texts" else "another code: ${r.code}"
-            if (empty >= EMPTY_MAX) return end("the order was not on the page $EMPTY_MAX times")
-            return next(g)
+    private fun dispatch(o: Obs, r: PickupParse.Result?, texts: Int) {
+        o.rounds++
+        if (o.code.isEmpty() && r != null && r.code.isNotEmpty()) o.code = r.code
+        if (r == null || r.code != o.code) {
+            o.empty++
+            o.last = if (r == null) "no code in $texts texts" else "another code: ${r.code}"
+            if (o.empty >= EMPTY_MAX) {
+                // ColorOS lets 瑞幸's order page come back empty for longer (`wx21c7506e98a2fe75`).
+                if (o.page.rule?.tagAppName == "luckin") o.empty = 0
+                else return end(o.task, "the order was not on the page $EMPTY_MAX times")
+            }
+            return next(o)
         }
-        empty = 0
+        o.empty = 0
         // Forward only: a page that shows a step bar can read a step behind, and a state the order
         // has passed is not one to show again.
-        val shown = if (rank(r.status) >= rank(status)) r.status else status
-        status = shown
-        last = "$code ${shown ?: "-"}"
-        page?.let { PickupIsland.show(PickupCodeIsland.enrich(r.copy(status = shown)), it) }
-        if (shown != null && shown in PickupParse.DONE) return end("the order reads $shown")
-        next(g)
+        val shown = if (rank(r.status) >= rank(o.status)) r.status else o.status
+        o.status = shown
+        o.last = "${o.code} ${shown ?: "-"}"
+        PickupIsland.show(PickupCodeIsland.enrich(r.copy(status = shown)), o.page)
+        if (shown != null && shown in PickupParse.DONE) {
+            // Over while the user is away: ColorOS keeps a finished card for 0s once its page is left.
+            PickupIsland.takeDown(o.task, "the order reads $shown")
+            return end(o.task, "the order reads $shown")
+        }
+        next(o)
     }
 
-    private fun next(g: Int) {
-        if (g != gen) return
-        bg.postDelayed({ round(g) }, ROUND, interval())
+    private fun next(o: Obs) {
+        if (!live(o)) return
+        bg.postDelayed({ round(o) }, o.token, interval(o))
     }
 
     /** ColorOS's `c.f(completedObserveCount, orderStatus, isLowBattery, resolved)`. */
-    private fun interval(): Long {
+    private fun interval(o: Obs): Long {
         val cfg = PickupObserve.intervals
-        if (PickupParse.isReady(status)) return cfg.ready
-        if (rounds <= 1) return cfg.firstAfter
-        val gap = if (PickupParse.isMaking(status)) cfg.making else cfg.ordered
+        if (PickupParse.isReady(o.status)) return cfg.ready
+        if (o.rounds <= 1) return cfg.firstAfter
+        val gap = if (PickupParse.isMaking(o.status)) cfg.making else cfg.ordered
         val ctx = Main.appContext() ?: return gap
         return if (lowBattery(ctx, cfg.lowBatteryPercent)) maxOf(gap, cfg.lowBattery) else gap
     }
@@ -184,8 +239,16 @@ internal object PickupObserver {
         if (ctx.getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true) return "locked"
         if (PickupCamera.inUse(ctx)) return "camera in use"
         if (lowBattery(ctx, PickupObserve.intervals.skipPercent)) return "battery"
+        // Game Turbo has a game in front, and the super power saver: MIUI's own settings for them.
+        if (setting(ctx, secure = true, "gb_boosting") == 1) return "game"
+        if (setting(ctx, secure = false, "power_supersave_mode_open") == 1) return "super saver"
         return null
     }
+
+    private fun setting(ctx: Context, secure: Boolean, key: String): Int = runCatching {
+        if (secure) android.provider.Settings.Secure.getInt(ctx.contentResolver, key, 0)
+        else android.provider.Settings.System.getInt(ctx.contentResolver, key, 0)
+    }.getOrDefault(0)
 
     /**
      * ColorOS's `StatusUtils.i(context, minBatteryLevel)`: under [percent], not charging, *and* the

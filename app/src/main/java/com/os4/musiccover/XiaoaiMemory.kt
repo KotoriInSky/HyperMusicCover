@@ -45,7 +45,17 @@ internal object XiaoaiMemory {
 
     @Volatile private var askedUntil = 0L
     @Volatile private var askedCode = ""
-    private val stopped = java.util.Collections.synchronizedSet(HashSet<String>())
+    /**
+     * The keys stopped, and when (wall clock). Kept on disk as well: 小爱's card lives 12 hours in the
+     * system, and a SystemUI restart in that time would hand it to SystemUI again with the rest of
+     * the active notifications - not through onNotificationPosted, but out of
+     * getActiveNotifications() when the listener connects, which is filtered here too.
+     */
+    private val stopped = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile private var loaded = false
+    /** 小爱's card's own timeout (its param's `timeout: 720` minutes): a stopped key is kept no longer. */
+    private const val KEEP = 12 * 60 * 60_000L
+    private const val FILE = "mc_xiaoai_stopped"
 
     fun install(cl: ClassLoader) {
         runCatching {
@@ -57,6 +67,50 @@ internal object XiaoaiMemory {
             }
             Xp.log(TAG + "watching 小爱's notifications")
         }.onFailure { Xp.log(TAG + "小爱's notifications not watched: $it") }
+        // The list SystemUI takes once, when its listener connects - a restart's way in.
+        runCatching {
+            Xp.hookAll(android.service.notification.NotificationListenerService::class.java,
+                "getActiveNotifications") { chain ->
+                val out = chain.proceed()
+                if (chain.thisObject?.javaClass?.name != LISTENER || out !is Array<*>) return@hookAll out
+                runCatching {
+                    load()
+                    if (stopped.isEmpty()) out
+                    else {
+                        val kept = out.filterIsInstance<StatusBarNotification>().filter { !stopped.containsKey(it.key) }
+                        if (kept.size == out.size) out else kept.toTypedArray()
+                    }
+                }.getOrDefault(out)
+            }
+        }.onFailure { Xp.log(TAG + "active notifications not filtered: $it") }
+    }
+
+    /** The stopped keys from disk, once, minus the ones past [KEEP]. */
+    private fun load() {
+        if (loaded) return
+        val f = file() ?: return
+        loaded = true
+        val now = System.currentTimeMillis()
+        runCatching {
+            if (f.isFile) f.readLines().forEach { line ->
+                val tab = line.lastIndexOf('\t')
+                val at = if (tab > 0) line.substring(tab + 1).toLongOrNull() else null
+                if (at != null && now - at < KEEP) stopped[line.substring(0, tab)] = at
+            }
+        }.onFailure { Xp.log(TAG + "stopped keys not read: $it") }
+    }
+
+    private fun save() {
+        val f = file() ?: return
+        val now = System.currentTimeMillis()
+        stopped.entries.removeIf { now - it.value >= KEEP }
+        runCatching { f.writeText(stopped.entries.joinToString("") { it.key + "\t" + it.value + "\n" }) }
+            .onFailure { Xp.log(TAG + "stopped keys not saved: $it") }
+    }
+
+    /** In SystemUI's device-protected storage, which is there before the phone is first unlocked. */
+    private fun file(): java.io.File? = Main.appContext()?.let {
+        java.io.File(it.createDeviceProtectedStorageContext().filesDir, FILE)
     }
 
     /**
@@ -79,12 +133,14 @@ internal object XiaoaiMemory {
     /** Whether [sbn] is one of ours to read and keep out of SystemUI. */
     private fun take(sbn: StatusBarNotification): Boolean {
         if (sbn.packageName != VA) return false
-        if (sbn.key in stopped) return true
+        load()
+        if (stopped.containsKey(sbn.key)) return true
         if (SystemClock.elapsedRealtime() > askedUntil) return false
         val n = sbn.notification
         val running = n.flags and Notification.FLAG_FOREGROUND_SERVICE != 0
         if (n.channelId != CHANNEL && !running) return false
-        stopped += sbn.key
+        stopped[sbn.key] = System.currentTimeMillis()
+        save()
         if (n.channelId == CHANNEL) {
             val x = n.extras
             val code = x.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()

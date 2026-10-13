@@ -135,6 +135,8 @@ internal object PickupCodeIsland {
     private var inFlight = false
     /** When [lastTop] last changed, so that a park waits for the front to settle (see [maybePark]). */
     private var lastTopAt = 0L
+    /** The user the tracked task runs as: 0 for 微信 itself, another for its clone. */
+    private var taskUser = 0
     /** The [LEFT] timer that is running, so that leaving again starts it over rather than beside it. */
     private var leftTimer: Runnable? = null
     /** The code last read, and whether it was on the front page - what an observe task is made from. */
@@ -195,8 +197,8 @@ internal object PickupCodeIsland {
         bg.post {
             if (!on) {
                 stop()
-                PickupIsland.takeDown("switched off")
-                PickupObserver.end("switched off")
+                PickupIsland.takeDownAll("switched off")
+                PickupObserver.endAll("switched off")
             }
         }
     }
@@ -216,11 +218,16 @@ internal object PickupCodeIsland {
      * shows it - here, in front, since 小爱 reads a screenshot.
      */
     private fun askXiaoai(ctx: Context, r: PickupParse.Result) {
-        if (!sXiaoai || !inFront || !codeOnFront || PickupParse.isOver(r.status)) return
+        if (!sXiaoai || !inFront || !codeOnFront || r.code.isEmpty() || oemRule == null) return
+        if (!useRemoteAi(ctx) || finished(ctx, r) || PickupParse.isOver(r.status)) return
         if (r.code == asked || answers.containsKey(r.code)) return
         asked = r.code
         XiaoaiMemory.ask(ctx, r.code)
     }
+
+    /** The rules' `use_remote_ai_plugin`: whether ColorOS asks its cloud about an order at all. */
+    private fun useRemoteAi(ctx: Context): Boolean =
+        runCatching { PickupRules.get(ctx).recognitionPolicy().useRemoteAi }.getOrDefault(false)
 
     private fun answered(a: XiaoaiMemory.Answer) {
         answers[a.code] = a
@@ -231,6 +238,50 @@ internal object PickupCodeIsland {
         }
         PickupIsland.show(enrich(r), PickupIsland.Page(taskId, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
     }
+
+    /**
+     * Whether the order [r] is over, as ColorOS decides it: placed longer ago than the rules'
+     * `order_status_finish_time_gap` (240 minutes; it outranks the page's own words), or reading
+     * collected, cancelled or refunded. The page's 「订单已完成，祝您用餐愉快」 is not that - see
+     * [PickupParse]'s `boastsDone`.
+     */
+    fun finished(ctx: Context, r: PickupParse.Result): Boolean {
+        val s = r.status
+        // Collected, cancelled, refunded: words with one reading only.
+        if (s != null && s in PickupParse.DONE && s != "已完成") return true
+        if (r.idle) return true
+        // Otherwise the order's time, which ColorOS lets outrank the page (`initialState`): 「已完成」
+        // on a page whose order is minutes old is the drink being ready, not the order being over.
+        val time = r.orderTime
+        if (time != null) {
+            val gap = runCatching { PickupRules.get(ctx).recognitionPolicy().finishGapMinutes }.getOrDefault(240L)
+            if (gap > 0) return PickupPolicy.stateFromTime(time, gap, System.currentTimeMillis()) == 2
+        }
+        return s == "已完成"
+    }
+
+    /** Where an observed task is, for the observer to know whether to put it back on its display. */
+    enum class Where { GONE, WITH_USER, AWAY }
+
+    /**
+     * Where [task] - one of [host]'s - is: gone (closed, or its app killed), with the user (in front,
+     * its app in front, the front not settled yet, or just tapped), or away and free to be parked.
+     */
+    fun whereIs(task: Int, host: String): Where {
+        val ctx = Main.appContext() ?: return Where.WITH_USER
+        @Suppress("DEPRECATION")
+        val running = runCatching { ctx.getSystemService(ActivityManager::class.java).getRunningTasks(64) }
+            .getOrNull() ?: return Where.WITH_USER
+        if (running.none { it.taskId == task }) return Where.GONE
+        if ((task == taskId && inFront) || lastTop?.packageName == host) return Where.WITH_USER
+        val now = SystemClock.uptimeMillis()
+        if (now - lastTopAt < PARK_SETTLE || now < noParkUntil) return Where.WITH_USER
+        return Where.AWAY
+    }
+
+    /** The user a task runs as (`TaskInfo.userId`, hidden), 0 when it cannot be read. */
+    private fun userOf(info: ActivityManager.RunningTaskInfo): Int =
+        runCatching { android.app.TaskInfo::class.java.getField("userId").getInt(info) }.getOrDefault(0)
 
     /**
      * The observer let [task] go. Back in front, the tracker reads it on as before; otherwise the
@@ -256,7 +307,8 @@ internal object PickupCodeIsland {
      * request a tracked read makes, handed back parsed and counted rather than shown. [done] runs on
      * [bg]; the island's own state is not touched.
      */
-    fun readOnce(task: Int, frontOnly: Boolean = false, done: (PickupParse.Result?, Int) -> Unit) {
+    fun readOnce(task: Int, frontOnly: Boolean = false, rule: PickupRule? = oemRule,
+                 done: (PickupParse.Result?, Int) -> Unit) {
         // Answered once: the assist reply, or [TIMEOUT]. A request that is never answered would
         // otherwise park the caller's loop for good.
         val said = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -271,7 +323,7 @@ internal object PickupCodeIsland {
                 // Read for the experiment only: the tracked page's appId and brand stay as they are.
                 val nodes = if (st != null) runCatching { PickupAssist.nodes(st) }.getOrNull() else null
                 val read = if (frontOnly) nodes?.let { PickupParse.frontPage(it) } else nodes
-                once(read?.let { recognize(it, oemRule) }, read?.size ?: 0)
+                once(read?.let { recognize(it, rule) }, read?.size ?: 0)
             }
         }
         if (!asked) {
@@ -284,7 +336,7 @@ internal object PickupCodeIsland {
     // it into its own else branch, which is how the oem= segment went missing from this line while
     // the recognizer behind it was answering all along.
     fun describe(): String = buildString {
-        append("on=$sOn task=$taskId brand=$brand reads=$reads shown=${PickupIsland.showing}")
+        append("on=$sOn task=$taskId brand=$brand reads=$reads shown=${PickupIsland.showing(taskId)}")
         program?.let { append(" appId=${it.appId}") }
         program?.name?.takeIf { it.isNotEmpty() }?.let { append(" name=$it") }
         append(" up=${Main.appContext()?.let { PickupIsland.up(it) }}")
@@ -338,7 +390,9 @@ internal object PickupCodeIsland {
         if (ctx == null || top == null || pkg == null) {
             // A parked task must not stay on the hidden display once its own app is in front again:
             // the mini program tapped from its list would come back on a display nobody can see.
-            if (top != null && top.packageName == host) PickupObserver.end("its app is in front again")
+            if (top != null && (top.packageName == WECHAT || top.packageName == ALIPAY)) {
+                PickupObserver.standAside(top.packageName, "its app is in front again")
+            }
             left(top)
             return
         }
@@ -348,6 +402,9 @@ internal object PickupCodeIsland {
                 .firstOrNull { it.topActivity == top }
         }.getOrNull()
         val label = info?.taskDescription?.label.orEmpty()
+        // 微信's clone (双开) runs as another user; ColorOS reads its pages but does not observe them
+        // (`support_multi_app_open`: 「wechat open multi, skip observe」).
+        val user = info?.let { userOf(it) } ?: 0
         // Both platforms give a mini program a task of its own, and normally name it - but not
         // always: 支付宝 runs one inside the app's own task, which carries no description at all
         // (measured 2026-10-09, 蜜雪冰城's page sitting in task 44419), so on 支付宝 the task is
@@ -360,7 +417,7 @@ internal object PickupCodeIsland {
         // The list still scopes 微信, whose pages are a whole app's - a chat or a search result can
         // name a brand without being one. 支付宝's scope is the appId its page carries, which is
         // part of the page rather than of the task, and is checked where the page is read.
-        if (pkg == WECHAT && BRANDS.none { label.contains(it, ignoreCase = true) }) {
+        if (pkg == WECHAT && !inScope(ctx, label)) {
             Xp.d(TAG + "mini program not on the list: $label")
             stop()
             return
@@ -376,7 +433,7 @@ internal object PickupCodeIsland {
                 // the page they come back to is the one that changed: after paying, 益禾堂's order
                 // page sat there for twenty seconds before its code was read (2026-10-13). So the
                 // next read is brought forward, and the few after it are quick ones.
-                if (!inFlight && !PickupObserver.observing(taskId)) {
+                if (!inFlight && !PickupPark.isParked(taskId)) {
                     val t = taskId
                     val g = gen
                     reads = 0
@@ -388,6 +445,7 @@ internal object PickupCodeIsland {
         }
         stop()
         taskId = info.taskId
+        taskUser = user
         brand = label
         reads = 0
         inFront = true
@@ -415,6 +473,20 @@ internal object PickupCodeIsland {
         inFront = false
         Xp.log(TAG + "left the mini program: top=" + (top?.flattenToShortString() ?: "none") +
             ", reading task $taskId on")
+        // And read once more, now: ColorOS asks for the page again as its app is left
+        // (`eventSource = appexit`). The page is still there, and what it showed last is what the
+        // user walked away with - a code that came out a moment before the swipe goes up at once,
+        // and the park below is decided on it, instead of on the read in front up to [EVERY] ago.
+        if (!inFlight && !PickupPark.isParked(taskId)) {
+            val t = taskId
+            val g = gen
+            bg.removeCallbacksAndMessages(READ)
+            bg.postDelayed({ read(t, g) }, READ, 0L)
+        }
+        // Leaving an order that is over takes its card with it (see [finished]).
+        val ctx = Main.appContext()
+        val last = lastCode
+        if (ctx != null && last != null && finished(ctx, last)) PickupIsland.takeDown(taskId, "left an order that is over")
         maybePark("left")
         // A task that ends up observed is not stopped by this: the observer is what ends it. One timer
         // at a time - one left over from an earlier visit stopped the tracking two minutes after
@@ -434,7 +506,11 @@ internal object PickupCodeIsland {
      * (2026-10-13).
      */
     private fun maybePark(why: String) {
-        if (inFront || taskId < 0 || PickupObserver.observing(taskId)) return
+        if (inFront || taskId < 0) return
+        if (taskUser != android.os.Process.myUserHandle().hashCode()) {
+            Xp.log(TAG + "$why: not observed - a clone's task (user $taskUser)")
+            return
+        }
         // Whether the page is kept off-screen is the one thing about this path that the card cannot
         // show, and it decides whether the order is read at all from here on: unparked, the task is
         // let go after [LEFT] and the card freezes at whatever it last read - the state a drink that
@@ -492,7 +568,7 @@ internal object PickupCodeIsland {
      * the order is not over. A park is what the wait costs, so it is not made for nothing.
      */
     private fun waiting(): Boolean =
-        PickupIsland.showing && !PickupParse.isOver(PickupIsland.status)
+        PickupIsland.showing(taskId) && !PickupParse.isOver(PickupIsland.status(taskId))
 
     private fun stop() {
         gen++
@@ -501,15 +577,15 @@ internal object PickupCodeIsland {
         inFlight = false
         lastCode = null
         codeOnFront = false
-        PickupObserver.end("the tracked task was let go")
         bg.removeCallbacksAndMessages(READ)
         bg.removeCallbacksAndMessages(TRACK)
     }
 
     private fun read(task: Int, g: Int) {
         if (g != gen || task != taskId || inFlight) return
-        // An observed task is the observer's to read (PickupObserver), on its own rounds.
-        if (PickupObserver.observing(task)) return
+        // An observed task is the observer's to read (PickupObserver), on its own rounds - while the
+        // user is away from it. Back in front, it is the user's page again, and read as one.
+        if (PickupObserver.observing(task) && !inFront) return
         val ctx = Main.appContext() ?: return
         // Not while the screen is off or the phone is locked: these are the reads of a page the user
         // has open or has just left, and with the phone down nobody is reading it. (An order being
@@ -551,6 +627,12 @@ internal object PickupCodeIsland {
                 if (g != gen || seq != readSeq || !inFlight) return@post
                 inFlight = false
                 program = PickupAssist.programOf(ex)
+                if (host == WECHAT && switchedOff(program?.appId)) {
+                    Xp.d(TAG + "switched off in the cloud's list: ${program?.appId}")
+                    lastRead = "switched off"
+                    stop()
+                    return@post
+                }
                 // 支付宝's mini program pages carry their appId in their own launch intent; a page
                 // in the same container without one is not a mini program page - an H5 or a service
                 // page reached the same way, which is where reading every XRiverActivity would end
@@ -583,9 +665,16 @@ internal object PickupCodeIsland {
                 if (r != null) {
                     lastHead = ""
                     Xp.d(TAG + "$brand: ${r.code} ${r.label} ${r.status} ${r.store}")
-                    askXiaoai(ctx, r)
-                    PickupIsland.show(enrich(r), PickupIsland.Page(task, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
-                    if (!inFront) maybePark("code read while away")
+                    // An order that is over is shown while its page is open - an old order looked up
+                    // still shows its code - and taken down the moment the user is elsewhere, which is
+                    // ColorOS's `seeding_max_time_finish` of 0.
+                    if (finished(ctx, r) && !inFront) {
+                        PickupIsland.takeDown(task, "the order is over")
+                    } else {
+                        askXiaoai(ctx, r)
+                        PickupIsland.show(enrich(r), PickupIsland.Page(task, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
+                        if (!inFront) maybePark("code read while away")
+                    }
                 } else if (nodes != null) {
                     val front = nodes.maxOfOrNull { it.page } ?: -1
                     lastHead = "page $front: " + nodes.filter { it.page == front }.take(12)
@@ -603,7 +692,7 @@ internal object PickupCodeIsland {
     }
 
     private fun next(task: Int, g: Int) {
-        if (g != gen || task != taskId || PickupObserver.observing(task)) return
+        if (g != gen || task != taskId || (PickupObserver.observing(task) && !inFront)) return
         val gap = when {
             reads <= QUICK -> QUICK_GAP
             inFront -> EVERY
@@ -642,11 +731,56 @@ internal object PickupCodeIsland {
             (if (out.orderTime.isEmpty()) "" else " ${out.orderTime}") +
             (if (out.temperature.isEmpty()) "" else " ${out.temperature}")
         val r = PickupParse.choose(nodes,
-            PickupParse.Oem(out.code, out.orderPage, out.status, out.product, out.temperature))
+            PickupParse.Oem(out.code, out.orderPage, out.status, out.product, out.temperature, out.orderTime))
         if (out.code.isNotEmpty() && r?.code != out.code.trim().removePrefix("#")) {
             lastOem += " (not taken)"
         }
-        return r
+        // ColorOS's 「the code is coming」 card (`waitingForCode`): a brand whose rules ask for it
+        // (瑞幸's `need_waiting_status`), a page that shows the code's label with no code under it
+        // yet, and the recognizer saying so. Shown with no code, and replaced by the code when it
+        // comes.
+        if (r == null && rule?.needWaitingStatus == true && out.status == "waiting") {
+            return PickupParse.Result(code = "", label = "取餐码", status = null, store = null,
+                oemStatus = "waiting", orderTime = out.orderTime.ifEmpty { null })
+        }
+        return r?.let { it.copy(idle = idle(rule, texts)) }
+    }
+
+    /**
+     * ColorOS's `preparingState` = 8: a brand whose rules list what an order being made says
+     * (`order_prepare_status`, 喜茶's 门店已接单 / 制茶中 / 确认取茶), on a page that says none of it.
+     * Their rules key it by the order page's route, which is not read here, so the order page is the
+     * one the code is on.
+     */
+    private fun idle(rule: PickupRule?, texts: List<String>): Boolean {
+        val ctx = Main.appContext() ?: return false
+        if (rule == null) return false
+        val policy = runCatching { PickupRules.get(ctx).recognitionPolicy() }.getOrNull() ?: return false
+        val hostKind = if (host == ALIPAY) PickupPolicy.Host.ALIPAY else PickupPolicy.Host.WECHAT
+        val item = policy.preparing.firstOrNull { it.host() == hostKind && it.appName() == rule.appName }
+            ?: return false
+        val lines = texts.map { it.trim() }
+        return policy.preparingState(hostKind, rule.appName, item.detailPath(), 1, lines) == 8
+    }
+
+    /**
+     * ColorOS's label scope for a mini program's task (`hasPageScope`): a rule's or the cloud list's
+     * name in the label, the look-alikes in `black_labels` (「曹市益禾堂外卖点单」, 「奈雪生活」) kept
+     * out unless the label is a rule's own, and the cloud's switch-offs too. [BRANDS] adds the ones
+     * neither list has, under the same blacklist.
+     */
+    private fun inScope(ctx: Context, label: String): Boolean {
+        val rules = runCatching { PickupRules.get(ctx) }.getOrNull()
+        if (rules?.hasPageScope(WECHAT, label) == true) return true
+        val blacklisted = runCatching { rules?.recognitionPolicy()?.blacklistedLabel(label) }.getOrNull() == true
+        return !blacklisted && BRANDS.any { label.contains(it, ignoreCase = true) }
+    }
+
+    /** Whether the cloud's applet list switches [appId] off (`disabled`). */
+    private fun switchedOff(appId: String?): Boolean {
+        if (appId.isNullOrEmpty()) return false
+        val origin = PickupCloud.originOf(appId) ?: return false
+        return origin in PickupCloud.disabled()
     }
 
     /**

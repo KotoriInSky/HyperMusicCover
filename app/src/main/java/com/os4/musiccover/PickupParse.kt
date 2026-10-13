@@ -40,6 +40,16 @@ internal object PickupParse {
         val oemStatus: String? = null,
         /** The drink's own temperature, from the recognizer: it picks between a cold and hot cup. */
         val temperature: String? = null,
+        /** When the order was placed, from the recognizer (`2026-04-19T16:48`), or null. */
+        val orderTime: String? = null,
+        /** How long the order has left - 「约5分钟」, 「前面3单」, 「预计12:40」 - or null. */
+        val waitTime: String? = null,
+        /**
+         * Not being made by its page's own account - ColorOS's state 8 (`preparingState`): a brand
+         * whose rules list the states of an order being made, on a page that shows none of them.
+         * Set by [PickupCodeIsland]; such an order is not waited on and not sent to the cloud.
+         */
+        val idle: Boolean = false,
         /** Whether the code sat beside a label that is only ever the code (取餐码, not 订单号). */
         val strong: Boolean = false,
     )
@@ -52,6 +62,7 @@ internal object PickupParse {
         val status: String,
         val product: String,
         val temperature: String,
+        val orderTime: String = "",
     )
 
     /** 取餐码, 取餐号, 取单号, 取茶号, 取餐号码, 取件码 ... - 取, up to two more, then 码 or 号 (码). */
@@ -175,7 +186,9 @@ internal object PickupParse {
             product = product(t) ?: own?.product ?: oem.product.ifEmpty { null },
             oemStatus = oem.status.ifEmpty { null },
             temperature = oem.temperature.ifEmpty { null },
-            strong = same && own?.strong == true,
+            orderTime = oem.orderTime.ifEmpty { null },
+            waitTime = waitTime(t),
+            strong = same && own.strong,
         )
     }
 
@@ -185,7 +198,8 @@ internal object PickupParse {
             LABEL_AND_CODE.find(t[i])?.let { m ->
                 val code = m.groupValues[2].removePrefix("#")
                 if (plausible(t, i, code)) {
-                    return Result(code, m.groupValues[1], status(t, i), store(t, i), product(t), strong = true)
+                    return Result(code, m.groupValues[1], status(t, i), store(t, i), product(t),
+                        waitTime = waitTime(t), strong = true)
                 }
             }
         }
@@ -202,6 +216,7 @@ internal object PickupParse {
                     if (j in t.indices && isCode(t, j, i)) {
                         val code = t[j].removePrefix("#")
                         return Result(code, t[i].trimEnd(':', '：'), status(t, j), store(t, j), product(t),
+                            waitTime = waitTime(t),
                             strong = strong)
                     }
                 }
@@ -251,11 +266,43 @@ internal object PickupParse {
     private fun status(t: List<String>, at: Int): String? {
         val found = t.indices.mapNotNull { k ->
             val s = t[k]
-            if (s.length > 14) null else STATUSES.firstOrNull { s.contains(it) }?.let { k to it }
+            if (s.length > 14 || boastsDone(s)) null else STATUSES.firstOrNull { s.contains(it) }?.let { k to it }
         }
         val lone = found.filter { (k, _) -> found.none { (o, _) -> o != k && kotlin.math.abs(o - k) <= STEP_BAR } }
         lone.minByOrNull { (k, _) -> kotlin.math.abs(k - at) }?.let { return it.second }
         if (t.any { s -> FINISHED_HINTS.any { s.contains(it) } }) return "已完成"
+        return null
+    }
+
+    // ------------------------------------------------------------------ the wait
+
+    /**
+     * 「预计5分钟」 「约 5 分钟」 「还需5分钟」 「5分钟后可取」 - with a word that makes it a wait: 蜜雪冰城's
+     * order page also says 「支付完成1分钟后发放」 about its coupons.
+     */
+    private val WAIT_MINUTES =
+        Regex("(?:预计|约|大约|还需|还要)\\s*(\\d{1,3})\\s*分钟|(\\d{1,3})\\s*分钟(?:后可取|后取|内可取|左右)")
+    /** 「预计12:40取餐」 「预计 12:40 送达」. */
+    private val WAIT_CLOCK = Regex("预计\\s*(\\d{1,2}[:：]\\d{2})")
+    /** 「前面还有3单」, split or whole. */
+    private val QUEUE = Regex("前面(?:还有)?\\s*(\\d{1,3})\\s*(单|杯|人|位)")
+
+    /**
+     * How long the order has left, as its page says it - what ColorOS's observer reads with its
+     * `waitTimeQuery`. A queue ahead first, then a time, then minutes. Read off a page whose order is
+     * still being made; nothing for one that is over.
+     */
+    fun waitTime(t: List<String>): String? {
+        if (t.any { s -> s.length <= 14 && DONE.any { s.contains(it) } && !boastsDone(s) }) return null
+        val joined = t.joinToString("")
+        QUEUE.find(joined)?.let { return "前面" + it.groupValues[1] + it.groupValues[2] }
+        WAIT_CLOCK.find(joined)?.let { return "预计" + it.groupValues[1].replace('：', ':') }
+        for (s in t) {
+            if (s.length > 20) continue
+            WAIT_MINUTES.find(s)?.let { m ->
+                return "约" + m.groupValues[1].ifEmpty { m.groupValues[2] } + "分钟"
+            }
+        }
         return null
     }
 
@@ -323,6 +370,14 @@ internal object PickupParse {
 
     /** A shop named in brackets after its brand: 「蜜雪冰城（深圳工业园店）」, 「麦当劳(示例广场餐厅)」. */
     private val BRACKETED = Regex(".+?[（(](.+(?:店|餐厅))[）)]")
+
+    /**
+     * 「订单已完成」 inside a sentence - 「订单已完成，祝您用餐愉快」 - which 蜜雪冰城 shows as soon as the
+     * drink is made, long before it is collected. ColorOS counts the phrase only on a line of its own
+     * (five characters at most) or followed by a space (OrderInfoProcessor.getCompletedStatus).
+     */
+    private fun boastsDone(s: String): Boolean =
+        s.contains("订单已完成") && s.length > 5 && !s.contains("订单已完成 ")
 
     /** The shop: a short text ending in 店 or 餐厅, 「南门店-No.927639」 read as 「南门店」. */
     private fun store(t: List<String>, at: Int): String? {

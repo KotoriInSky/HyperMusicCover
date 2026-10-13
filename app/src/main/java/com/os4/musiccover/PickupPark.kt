@@ -49,15 +49,18 @@ internal object PickupPark {
 
     private val bg: Handler by lazy { Handler(HandlerThread("mc-pickup-park").apply { start() }.looper) }
 
-    // All below on [bg], but for [parked] and [since], which anyone may read.
+    // All below on [bg], but for [parked], which anyone may read: a copy is swapped in whole.
     private var vd: VirtualDisplay? = null
     private var reader: ImageReader? = null
-    @Volatile private var parked = -1
-    /** The hidden display's id while it is up, -1 otherwise; read by [tap] from the tracker's thread. */
+    /**
+     * The tasks on the hidden display, in the order they came. Several at once, as ColorOS's has -
+     * one display, up to three observe tasks on it (`max_task_count`).
+     */
+    @Volatile private var parked: Set<Int> = emptySet()
+    /** The hidden display's id while it is up, -1 otherwise. */
     @Volatile private var vdId = -1
-    /** When the current park began, for whoever decides it has lasted long enough. */
-    @Volatile private var since = 0L
     private var until = 0L
+    private var probeSince = 0L
     private var every = EVERY
     private var reads = 0
     private val seen = LinkedHashSet<String>()
@@ -109,8 +112,8 @@ internal object PickupPark {
     }
 
     /**
-     * Whatever is parked goes back to the phone's own display first, always, and only then is the
-     * display let go. Worth re-reading before changing.
+     * [task] goes back to the phone's own display, and the display is let go once nothing is left
+     * on it - never the other way round. Worth re-reading before changing.
      *
      * moveRootTaskToDisplay puts the task on *top* of display 0 - AOSP passes onTop = true and offers
      * no other way - and most releases are not the user asking for it: the order turning ready, 微信
@@ -119,25 +122,37 @@ internal object PickupPark {
      * next time 微信 was opened (2026-10-13, 「卡在前台划不出去」). So unless [front] - the island was
      * tapped - the task the user was looking at is put back over it.
      */
-    fun release(why: String, front: Boolean = false): String {
-        val t = parked
-        parked = -1
-        val keep = if (t >= 0 && !front) frontTask(except = t) else -1
-        val back = if (t >= 0) move(t, 0) else "nothing parked"
-        if (keep >= 0) restore(keep)
-        val out = runCatching {
+    fun release(task: Int, why: String, front: Boolean = false): String {
+        val back = if (task in parked) {
+            parked = parked - task
+            val keep = if (!front) frontTask(except = task) else -1
+            val moved = move(task, 0)
+            if (keep >= 0) restore(keep)
+            moved
+        } else "not parked"
+        val s = "released $task ($why): $back"
+        Xp.log(TAG + s)
+        if (parked.isEmpty()) letGo()
+        return s
+    }
+
+    /** Every parked task back, and the display let go: the probe's `vdoff`, the switch going off. */
+    fun releaseAll(why: String): String {
+        parked.toList().forEach { release(it, why) }
+        letGo()
+        return "released all ($why)"
+    }
+
+    /** The display itself, once nothing is on it. */
+    private fun letGo() {
+        runCatching {
             vd?.release()
             reader?.close()
-            val s = "released ($why): $back"
-            Xp.log(TAG + s)
-            s
-        }.getOrElse { "release failed: $it" }
+        }.onFailure { Xp.log(TAG + "display not released: $it") }
         vd = null
         vdId = -1
         reader = null
-        since = 0L
         until = 0L
-        return out
     }
 
     /**
@@ -167,16 +182,21 @@ internal object PickupPark {
      * [release] from any thread: the display's own thread does the work, [then] after it. [front] is
      * for a tap on the island, the one release that is meant to bring the order page up.
      */
-    @JvmOverloads
-    fun releaseFrom(why: String, front: Boolean = false, then: (() -> Unit)? = null) {
-        if (parked < 0 && vd == null) {
+    fun releaseFrom(task: Int, why: String, front: Boolean = false, then: (() -> Unit)? = null) {
+        if (task !in parked) {
             then?.invoke()
             return
         }
         bg.post {
-            release(why, front)
+            release(task, why, front)
             then?.invoke()
         }
+    }
+
+    /** [releaseAll] from any thread. */
+    fun releaseAllFrom(why: String) {
+        if (parked.isEmpty() && vd == null) return
+        bg.post { releaseAll(why) }
     }
 
     /**
@@ -192,7 +212,7 @@ internal object PickupPark {
     fun cycleFrom(then: () -> Unit) {
         bg.post {
             val d = vd
-            if (d == null || parked < 0) {
+            if (d == null || parked.isEmpty()) {
                 then()
                 return@post
             }
@@ -215,38 +235,38 @@ internal object PickupPark {
 
     /** [park] from any thread, once the order on screen is one worth waiting on. */
     fun parkFrom(task: Int) {
-        if (task < 0 || parked == task) return
+        if (task < 0 || task in parked) return
         bg.post { park(task) }
     }
 
     /**
-     * [task] onto the hidden display and left there: the reads are the island's own loop (it reads
-     * the page wherever the task is), and [release] - or the display going away with this process -
+     * [task] onto the hidden display and left there, beside whatever is already on it: the reads are
+     * the observer's (PickupObserver), and [release] - or the display going away with this process -
      * is what ends it. Returns what happened, for the probe's reply.
      */
     private fun park(task: Int): String {
-        if (parked >= 0) return "already parked: $parked"
+        if (task in parked) return "already parked: $task"
         val made = ensure()
         if (made.startsWith("no display")) return made
         val id = vd?.display?.displayId ?: return "no display"
         val moved = move(task, id)
-        if (moved.startsWith("move failed")) return "$made, $moved"
-        parked = task
-        since = SystemClock.uptimeMillis()
-        Xp.log(TAG + "parked task $task on $id")
+        if (moved.startsWith("move failed")) {
+            if (parked.isEmpty()) letGo()
+            return "$made, $moved"
+        }
+        parked = parked + task
+        Xp.log(TAG + "parked task $task on $id (${parked.size} there)")
         return "$made, $moved"
     }
 
-    fun parked(): Int = parked
+    fun isParked(task: Int): Boolean = task >= 0 && task in parked
 
-    /** When the current park began, 0 while nothing is parked. */
-    fun sinceMs(): Long = since
+    fun anyParked(): Boolean = parked.isNotEmpty()
 
-    fun state(): String = "parked=$parked vd=${vd?.display?.displayId ?: -1}" + if (parked >= 0) {
-        " reads=$reads at=${(SystemClock.uptimeMillis() - since) / 1000}s" +
+    fun state(): String = "parked=${parked.ifEmpty { null } ?: "-"} vd=${vd?.display?.displayId ?: -1}" +
+        if (until > 0) " probe: reads=$reads at=${(SystemClock.uptimeMillis() - probeSince) / 1000}s" +
             " left=${((until - SystemClock.uptimeMillis()).coerceAtLeast(0)) / 1000}s" +
-            if (seen.isEmpty()) "" else " seen=$seen"
-    } else ""
+            (if (seen.isEmpty()) "" else " seen=$seen") else ""
 
     // ------------------------------------------------------------------ the probe's experiment
 
@@ -254,19 +274,14 @@ internal object PickupPark {
      * `do vdtest`: ColorOS's second stage by hand, on the module's own account. [task] is parked on
      * the hidden display and its page read every [everyMs] for [minutes], each read logged with what
      * it found, and then the task is put back. The island's own state is not touched.
-     *
-     * What this settles, on the phone rather than in the abstract: whether SystemUI holds
-     * ADD_TRUSTED_DISPLAY and can have such a display at all; whether a mini program's page keeps its
-     * own order state current while it is parked and the user is somewhere else (if it does, nothing
-     * ever has to be sent into the display, and the module needs no INJECT_EVENTS); and whether the
-     * task survives the round trip, page and all, as the shell probe measured.
      */
     fun experiment(task: Int, minutes: Int, everyMs: Long = 0): String {
         val made = park(task)
         if (made.startsWith("no display") || made.startsWith("move failed") || made.startsWith("already")) {
             return made
         }
-        until = SystemClock.uptimeMillis() + minutes * 60_000L
+        probeSince = SystemClock.uptimeMillis()
+        until = probeSince + minutes * 60_000L
         every = if (everyMs > 0) everyMs else EVERY
         reads = 0
         seen.clear()
@@ -276,10 +291,11 @@ internal object PickupPark {
     }
 
     private fun read(task: Int) {
-        if (parked != task) return
+        if (task !in parked) return
         if (SystemClock.uptimeMillis() >= until) {
-            Xp.log(TAG + "parked $task for its ${(until - since) / 60_000} min: $reads reads, $seen")
-            release("the probe's time is up")
+            Xp.log(TAG + "parked $task for its ${(until - probeSince) / 60_000} min: $reads reads, $seen")
+            until = 0L
+            release(task, "the probe's time is up")
             return
         }
         val t0 = SystemClock.uptimeMillis()
@@ -287,11 +303,12 @@ internal object PickupPark {
             val ms = SystemClock.uptimeMillis() - t0
             reads++
             r?.status?.let { seen += it }
-            Xp.log(TAG + "parked ${(SystemClock.uptimeMillis() - since) / 1000}s: " +
+            Xp.log(TAG + "parked ${(SystemClock.uptimeMillis() - probeSince) / 1000}s: " +
                 (if (r == null) "no code in $texts texts" else "${r.code} ${r.label} / ${r.status} / ${r.store}") +
                 " (${ms}ms)")
             if (r != null && FINISHED.any { r.status?.contains(it) == true }) {
-                release("the order is over ($r.status)")
+                until = 0L
+                release(task, "the order is over (${r.status})")
                 return@readOnce
             }
             bg.postDelayed({ read(task) }, every)

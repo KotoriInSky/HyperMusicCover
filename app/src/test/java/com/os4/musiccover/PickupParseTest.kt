@@ -22,7 +22,9 @@ class PickupParseTest {
         val r = PickupParse.parse(page("mixue"))!!
         assertEquals("6706", r.code)
         assertEquals("取餐码", r.label)
-        assertEquals("已完成", r.status)
+        // 「订单已完成，祝您用餐愉快」 is what 蜜雪冰城 says once the drink is made, and ColorOS does
+        // not read it as collected; nothing else on the page names a state.
+        assertNull(r.status)
         assertEquals("示例南门店", r.store)
     }
 
@@ -171,6 +173,18 @@ class PickupParseTest {
             "蜜雪冰城（示例工业园店）", "直线距离1016.8km", "珍珠奶茶", "¥ ", "10", "大杯/芋圆/少冰/不额外加糖", "X1"))!!
         assertEquals("示例工业园店", r.store)
         assertEquals("珍珠奶茶", r.product)
+    }
+
+    // ---------------------------------------------------------------- waiting
+
+    @Test
+    fun theWaitIsRead() {
+        assertEquals("约5分钟", PickupParse.parse(n("取餐号", "A123", "制作中", "预计5分钟后可取"))!!.waitTime)
+        assertEquals("前面3单", PickupParse.parse(n("取餐号", "A123", "制作中", "前面还有", "3", "单"))!!.waitTime)
+        assertEquals("预计12:40", PickupParse.parse(n("取餐号", "A123", "预计 12:40 取餐"))!!.waitTime)
+        assertNull(PickupParse.parse(n("取餐号", "A123", "已完成"))!!.waitTime)
+        // 蜜雪冰城's coupon line is not a wait.
+        assertNull(PickupParse.parse(n("取餐码", "8746", "订单已完成，祝您用餐愉快", "支付完成1分钟后发放"))!!.waitTime)
     }
 
     // ---------------------------------------------------------------- the item

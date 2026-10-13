@@ -71,6 +71,11 @@ internal object PickupCard {
     private const val DAY_RULE = 0x1A000000
     private const val NIGHT_RULE = 0x1AFFFFFF
 
+    /** The pill while the order is being made: it opens the order's page. */
+    const val OPEN = "查看订单"
+    /** The pill once the order is ready, ColorOS's 「我已取餐」: it takes the card down. */
+    const val PICKED = "我已取餐"
+
     /**
      * [alpha] is the picture's opacity, and it is a parameter because it is the only way this card
      * can be animated: a RemoteViews carries no animation of any kind, so a fade has to be posted
@@ -89,6 +94,9 @@ internal object PickupCard {
         tap: PendingIntent,
         alpha: Float = 1f,
         night: Boolean = false,
+        /** What the pill says and does; the rest of the card opens the order whatever it says. */
+        action: String = OPEN,
+        actionTap: PendingIntent = tap,
     ): RemoteViews {
         val views = RemoteViews(BuildConfig.APPLICATION_ID, R.layout.mc_pickup_card)
 
@@ -159,11 +167,12 @@ internal object PickupCard {
         val button = colour(rule?.pickupButtonColor, DEFAULT_BUTTON)
         views.setImageViewIcon(R.id.mc_pickup_action_bg,
             Icon.createWithBitmap(pill(c, button ?: 0xFF3482FF.toInt())))
-        // What the pill says is ours, not the official card's 「确认取餐」: this button does not
-        // confirm the pickup, it opens the order's own page.
-        views.setTextViewText(R.id.mc_pickup_action, "查看订单")
+        // What the pill says follows the order: 「查看订单」 while it is being made, which opens the
+        // order's page, and 「我已取餐」 (ColorOS's own word for it) once it is ready, which takes
+        // the card down - see [PickupIsland]'s post.
+        views.setTextViewText(R.id.mc_pickup_action, action)
         views.setTextColor(R.id.mc_pickup_action, 0xFFFFFFFF.toInt())
-        views.setOnClickPendingIntent(R.id.mc_pickup_action_container, tap)
+        views.setOnClickPendingIntent(R.id.mc_pickup_action_container, actionTap)
         views.setOnClickPendingIntent(R.id.mc_pickup_root, tap)
         return views
     }
@@ -191,6 +200,8 @@ internal object PickupCard {
         store: String?,
         brand: String,
         tap: PendingIntent,
+        action: String = OPEN,
+        actionTap: PendingIntent = tap,
     ): RemoteViews {
         val views = RemoteViews(BuildConfig.APPLICATION_ID, R.layout.mc_pickup_rear)
         // The panel's own screen, not this process's: this card is built in SystemUI, and the back
@@ -239,9 +250,9 @@ internal object PickupCard {
         views.setImageViewIcon(R.id.mc_pickup_rear_action_bg,
             Icon.createWithBitmap(capsule(width, (42 * density).toInt(), CAPSULE,
                 REAR_BUTTON_RADIUS_DP * density)))
-        views.setTextViewText(R.id.mc_pickup_rear_action, "查看订单")
+        views.setTextViewText(R.id.mc_pickup_rear_action, action)
         views.setTextColor(R.id.mc_pickup_rear_action, WHITE)
-        views.setOnClickPendingIntent(R.id.mc_pickup_rear_action_container, tap)
+        views.setOnClickPendingIntent(R.id.mc_pickup_rear_action_container, actionTap)
         views.setOnClickPendingIntent(R.id.mc_pickup_rear_root, tap)
         return views
     }

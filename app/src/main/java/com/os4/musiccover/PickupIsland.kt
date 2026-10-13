@@ -75,13 +75,17 @@ internal object PickupIsland {
     /** The island's own "back down" broadcast, which the plugin listens for and collapses on. */
     private const val ACTION_COLLAPSE_ISLAND = "com.miui.action.ACTION_COLLAPSE_ISLAND"
     private const val ACTION_GONE = "com.os4.musiccover.PICKUP_GONE"
+    /** How long a card of an order still being made stays up: ColorOS's `seeding_max_time`. */
+    private const val WAITED = 2 * 60 * 60_000L
+    /** The ready card's 「我已取餐」. */
+    private const val ACTION_PICKED = "com.os4.musiccover.PICKUP_PICKED"
 
     /**
      * What the tap needs, carried in the tap itself.
      *
      * The card outlives the process that posted it - a SystemUI restart, which is how a new build is
      * picked up, leaves the card on the back screen and this process with none of the state the tap
-     * reads ([shownPage]: its task, app and launch url). Tapping it then opened nothing at
+     * reads (the card's page: its task, app and launch url). Tapping it then opened nothing at
      * all, or the app's own home instead of the order page (2026-10-10). So the post writes what the
      * tap would otherwise have to remember.
      */
@@ -104,31 +108,39 @@ internal object PickupIsland {
     private val bg get() = PickupCodeIsland.bg
 
     // All below on [bg].
-    /** The picture opacity the card is drawn at; 1f except while [fade] is stepping it up. */
-    private var cardAlpha = 1f
-    private var shownKey: String? = null
-    /** The state [shownKey] was posted with, to tell 制作中 → 待取餐 from a re-read of the same. */
-    private var shownStatus: String? = null
-    /** The notification tag [shownKey] was posted under, null for the untagged one. */
-    private var shownTag: String? = null
-    /** The notification id [shownKey] was posted under, which the back screen's widget is keyed on. */
-    private var shownId = ID
+
+    /**
+     * The card up for one task: what it was posted with, under which notification, and its fade.
+     * One per task, as ColorOS keeps one per observe task - several orders are several cards.
+     */
+    private class Card(var page: Page) {
+        var key: String? = null
+        /** The state [key] was posted with, to tell 制作中 → 待取餐 from a re-read of the same. */
+        var status: String? = null
+        /** The notification tag and id [key] was posted under; the back screen's widget is keyed on the id. */
+        var tag: String? = null
+        var id = ID
+        /** The picture opacity the card is drawn at; 1f except while [fade] is stepping it up. */
+        var alpha = 1f
+        /** Bumped by every fresh post's [fade] and by [clear], so only the latest fade steps run. */
+        var fadeGen = 0
+    }
+
+    private val cards = LinkedHashMap<Int, Card>()
+    /** The codes (`brand|code`) the user is done with, and until when each is not shown again. */
+    private val muted = HashMap<String, Long>()
     /** Fresh codes posted by this process, counted into the id's range ([ID]). */
     private var ids = 0
-    /** What [shownKey]'s card was posted for: the task, app and launch url a tap goes back to. */
-    private var shownPage: Page? = null
-    /** Bumped by every fresh card's [fade] and by [clear], so only the latest fade steps run. */
-    private var fadeGen = 0
-    private var muted: String? = null
-    private var mutedUntil = 0L
+    /** Whether the cards an earlier run of this process left posted have been taken down yet. */
+    private var swept = false
     private var receivers = false
     private var iconSaid = false
 
-    /** Whether a card of ours is up, as far as this process knows (see [up] for the system's word). */
-    val showing: Boolean get() = shownKey != null
+    /** Whether a card of ours is up for [task], as far as this process knows (see [up]). */
+    fun showing(task: Int): Boolean = cards[task]?.key != null
 
-    /** The order state the card that is up was posted with. */
-    val status: String? get() = shownStatus
+    /** The order state [task]'s card was posted with. */
+    fun status(task: Int): String? = cards[task]?.status
 
     fun install() {
         // The card's picture is an animated WebP - ColorOS's drink, 53 frames of a cup filling -
@@ -211,29 +223,29 @@ internal object PickupIsland {
         val brand = page.brand
         val key = "$brand|${r.code}|${r.status}|${r.store}"
         val now = SystemClock.elapsedRealtime()
-        if (muted == "$brand|${r.code}" && now < mutedUntil) return
+        if ((muted["$brand|${r.code}"] ?: 0L) > now) return
         val ctx = Main.appContext() ?: return
-        // The notification goes by itself [LIFE] after it was posted, and the island with it; nothing
-        // on that path tells us (a timeout is not a dismissal, so no delete intent, and [takeDown] is
-        // only for the switch). So ask the system: with the island gone, shownKey is not evidence of
-        // anything, and what comes next is a fresh code as far as the island is concerned.
-        if (shownKey != null && up(ctx) == false) clear()
-        if (key == shownKey) return
+        val card = cards.getOrPut(page.task) { Card(page) }
+        card.page = page
+        // The notification goes by itself once its timeout is up, and the island with it; nothing on
+        // that path tells us (a timeout is not a dismissal, so no delete intent). So ask the system:
+        // with the card gone, its key is not evidence of anything, and what comes next is fresh.
+        if (card.key != null && up(ctx, card) == false) clear(card)
+        if (key == card.key) return
         // A new code floats the island open; so does the order turning ready to collect. A state
         // changing again while it is already ready only updates, and so does the shop.
-        val sameCode = shownKey?.startsWith("$brand|${r.code}|") == true
-        val fresh = !sameCode || ready(r.status) && !ready(shownStatus)
-        cardAlpha = if (fresh) FADE_FROM else 1f
-        runCatching { post(ctx, r, page, fresh) }
+        val sameCode = card.key?.startsWith("$brand|${r.code}|") == true
+        val fresh = !sameCode || ready(r.status) && !ready(card.status)
+        card.alpha = if (fresh) FADE_FROM else 1f
+        runCatching { post(ctx, r, card, fresh) }
             .onSuccess {
-                shownKey = key
-                shownStatus = r.status
-                shownPage = page
-                if (fresh) fade(ctx, r, page)
+                card.key = key
+                card.status = r.status
+                if (fresh) fade(ctx, r, card)
             }
             .onFailure {
                 Xp.log(TAG + "not posted: $it")
-                cardAlpha = 1f
+                card.alpha = 1f
             }
     }
 
@@ -246,16 +258,16 @@ internal object PickupIsland {
      * (the tag is unchanged, so it is an update of the same island and not a new one), and only
      * for a code that is being floated up; a steady state re-read leaves the card alone.
      */
-    private fun fade(c: Context, r: PickupParse.Result, page: Page) {
+    private fun fade(c: Context, r: PickupParse.Result, card: Card) {
         if (!PickupCodeIsland.sCard) return
         // A newer fade, or the card coming down, ends this one.
-        val g = ++fadeGen
+        val g = ++card.fadeGen
         val steps = floatArrayOf(0.3f, 0.6f, 0.85f, 1f)
         steps.forEachIndexed { i, a ->
             bg.postDelayed({
-                if (g != fadeGen) return@postDelayed
-                cardAlpha = a
-                runCatching { post(c, r, page, false) }
+                if (g != card.fadeGen || cards[card.page.task] !== card) return@postDelayed
+                card.alpha = a
+                runCatching { post(c, r, card, false) }
                     .onFailure { Xp.log(TAG + "fade step $i not posted: $it") }
             }, 80L * (i + 1))
         }
@@ -289,34 +301,34 @@ internal object PickupIsland {
         else -> null
     }
 
-    /** Nothing is up: forget what the island was showing. */
-    private fun clear() {
-        fadeGen++
-        shownKey = null
-        shownStatus = null
-        shownTag = null
+    /** Nothing is up for [card]: forget what it was showing. */
+    private fun clear(card: Card) {
+        card.fadeGen++
+        card.key = null
+        card.status = null
+        card.tag = null
     }
 
     /**
-     * Whether our own notification is still posted, the island going when it goes. Only this
-     * process's notifications are listed, and only ours is on [CHANNEL] - matched on that rather
-     * than on an id, which changes with every fresh code ([ID]). null is the system not saying -
-     * not an answer, so the caller keeps what it had; reading a failure as "gone" would float the
-     * island open again on every read.
+     * Whether [card]'s notification is still posted, the island going when it goes. null is the
+     * system not saying - not an answer, so the caller keeps what it had; reading a failure as "gone"
+     * would float the island open again on every read.
      */
+    private fun up(c: Context, card: Card): Boolean? = runCatching {
+        c.getSystemService(NotificationManager::class.java)?.activeNotifications
+            ?.any { it.notification.channelId == CHANNEL && it.tag == card.tag && it.id == card.id }
+    }.getOrNull()
+
+    /** Whether any card of ours is posted at all (the probe's `up=`). */
     fun up(c: Context): Boolean? = runCatching {
         c.getSystemService(NotificationManager::class.java)?.activeNotifications
             ?.any { it.notification.channelId == CHANNEL }
     }.getOrNull()
 
     /**
-     * Every card of ours cancelled.
-     *
-     * The back screen's widget for a card is removed when that card's *notification* is removed, and
-     * each fresh code goes out under an id of its own ([ID]) - so the one before has to be taken
-     * down by hand, or its widget stays on the back screen beside the new one. Matched on the
-     * channel rather than on [shownId], which is also what catches a card left posted by an earlier
-     * run of this process.
+     * Every card of ours cancelled - the switch going off, and once per run of this process for the
+     * cards an earlier run left posted. The back screen's widget for a card is removed when that
+     * card's *notification* is removed, so a card nobody here remembers would stay there for good.
      */
     private fun sweep(nm: NotificationManager) {
         runCatching {
@@ -325,11 +337,26 @@ internal object PickupIsland {
         }
     }
 
-    fun takeDown(why: String) {
-        if (shownKey == null) return
-        clear()
+    private fun cancel(c: Context, card: Card) {
+        val tag = card.tag ?: return
+        runCatching { c.getSystemService(NotificationManager::class.java)?.cancel(tag, card.id) }
+    }
+
+    /** [task]'s card down, for [why]. */
+    fun takeDown(task: Int, why: String) {
+        val card = cards.remove(task) ?: return
+        if (card.key == null) return
+        Main.appContext()?.let { cancel(it, card) }
+        clear(card)
+        Xp.log(TAG + "taken down ($task): $why")
+    }
+
+    /** Every card down: the switch going off. */
+    fun takeDownAll(why: String) {
+        cards.values.forEach { clear(it) }
+        cards.clear()
         Main.appContext()?.getSystemService(NotificationManager::class.java)?.let { sweep(it) }
-        Xp.log(TAG + "taken down: $why")
+        Xp.log(TAG + "all taken down: $why")
     }
 
     /**
@@ -352,21 +379,37 @@ internal object PickupIsland {
             override fun onReceive(c: Context, i: Intent) {
                 when (i.action) {
                     ACTION_OPEN -> bg.post { open(c, i) }
-                    ACTION_GONE -> bg.post {
-                        val k = shownKey ?: return@post
-                        muted = k.split('|').take(2).joinToString("|")
-                        mutedUntil = SystemClock.elapsedRealtime() + LIFE
-                        clear()
-                        PickupObserver.end("swiped away")
-                        Xp.log(TAG + "swiped away")
-                    }
+                    ACTION_GONE -> bg.post { done("swiped away", c, i.getIntExtra(EXTRA_TASK, -1), cancel = false) }
+                    // The order is collected: the card comes down and is not put up again for this
+                    // code, and the wait for it is over.
+                    ACTION_PICKED -> bg.post { done("picked up", c, i.getIntExtra(EXTRA_TASK, -1), cancel = true) }
                 }
             }
         }
         ctx.registerReceiver(r, IntentFilter().apply {
             addAction(ACTION_OPEN)
             addAction(ACTION_GONE)
+            addAction(ACTION_PICKED)
         }, Context.RECEIVER_NOT_EXPORTED)
+    }
+
+    /**
+     * The user is done with [task]'s card - swiped it away, or told it the order is collected. That
+     * code is not shown again for [LIFE], and the wait on it ends. A swipe has already taken the
+     * notification away; [cancel] takes it down for the button.
+     */
+    private fun done(why: String, c: Context, task: Int, cancel: Boolean) {
+        val card = cards.remove(task)
+        if (card != null) {
+            card.key?.let { k -> muted[k.split('|').take(2).joinToString("|")] = SystemClock.elapsedRealtime() + LIFE }
+            if (cancel) {
+                cancel(c, card)
+                collapse(c)
+            }
+            clear(card)
+        }
+        if (task >= 0) PickupObserver.end(task, why)
+        Xp.log(TAG + "$why ($task)")
     }
 
     /**
@@ -391,18 +434,19 @@ internal object PickupIsland {
         // (measured 2026-10-10 - 44999 before the restart, 45007 after), while the card that is up
         // is the older one, and tapping it has to land somewhere. It did not: the only task left to
         // try was the one from the card, so the button fell through to opening 微信 itself.
-        val tasks = listOf(i.getIntExtra(EXTRA_TASK, -1), shownPage?.task ?: -1, PickupCodeIsland.trackedTask())
-            .filter { it >= 0 }.distinct()
-        val pkg = i.getStringExtra(EXTRA_HOST)?.takeIf { it.isNotEmpty() } ?: shownPage?.host ?: WECHAT
+        val tapped = i.getIntExtra(EXTRA_TASK, -1)
+        val page = cards[tapped]?.page
+        val tasks = listOf(tapped, PickupCodeIsland.trackedTask()).filter { it >= 0 }.distinct()
+        val pkg = i.getStringExtra(EXTRA_HOST)?.takeIf { it.isNotEmpty() } ?: page?.host ?: WECHAT
         val scheme = i.getStringExtra(EXTRA_SCHEME).orEmpty().ifEmpty {
-            if (pkg == ALIPAY) shownPage?.scheme.orEmpty() else ""
+            if (pkg == ALIPAY) page?.scheme.orEmpty() else ""
         }
         // The one path in this file with nothing else to go on when it does not work.
-        Xp.log(TAG + "tap: pkg=$pkg tasks=$tasks scheme=${scheme.isNotEmpty()} known=${shownKey != null}")
-        if (PickupPark.parked() >= 0) {
+        Xp.log(TAG + "tap: pkg=$pkg tasks=$tasks scheme=${scheme.isNotEmpty()} known=${page != null}")
+        if (PickupPark.isParked(tapped)) {
             // §6.5: the task goes back to the display the user can see before it is brought to the
             // front - moved to the front while parked, it would come up on the hidden one.
-            PickupObserver.end("the island was tapped", front = true) { openNow(c, tasks, pkg, scheme) }
+            PickupObserver.end(tapped, "the island was tapped", front = true) { openNow(c, tasks, pkg, scheme) }
         } else {
             openNow(c, tasks, pkg, scheme)
         }
@@ -478,7 +522,11 @@ internal object PickupIsland {
     }.onFailure { Xp.log(TAG + "scheme not opened: $it") }.isSuccess
 
     @android.annotation.SuppressLint("NotificationPermission")
-    private fun post(c: Context, r: PickupParse.Result, page: Page, fresh: Boolean) {
+    private fun post(c: Context, read: PickupParse.Result, card: Card, fresh: Boolean) {
+        val page = card.page
+        // ColorOS's 「the code is coming」 card: no code yet, so the card says that where the code goes.
+        val waiting = read.code.isEmpty()
+        val r = if (waiting) read.copy(code = "等待出码") else read
         val brand = page.brand
         val oemRule = page.rule
         val host = page.host
@@ -502,7 +550,9 @@ internal object PickupIsland {
         // three values cannot say 「已准备完毕」, and its middle one is what it defaults to when it
         // read nothing it knows (see [oemTitle]). Both mean the same thing to a reader - what the
         // order is doing - so the page, which has the finer vocabulary, is the one to hear.
-        val title = r.status ?: oemTitle(r) ?: r.label
+        // The order's state, and how long it has left where its page says (「制作中 约5分钟」).
+        val title = (if (waiting) r.label else listOfNotNull(r.status ?: oemTitle(r) ?: r.label, r.waitTime)
+            .joinToString(" "))
         // 「麦当劳示例广场餐厅」 under 麦当劳 is 「示例广场餐厅」.
         val store = r.store?.removePrefix(brand)?.trimStart('（', '(', ' ')?.ifEmpty { null }
         // The rules' own `<show_meal_name>`, which says whether the meal's name is shown at all;
@@ -627,12 +677,23 @@ internal object PickupIsland {
         // url, so that it still knows where to go after a SystemUI restart has emptied this process
         // of everything it read - see [EXTRA_TASK]. FLAG_UPDATE_CURRENT keeps them current: the same
         // PendingIntent goes out with every card, and the one in the notification is the last card's.
-        val tap = PendingIntent.getBroadcast(c, ID, Intent(ACTION_OPEN).setPackage(SYSUI)
+        // The notification this post goes out under - see the end of this function - decided here,
+        // because each card's intents are told apart by it: one set of request codes per card, or a
+        // second order's tap would carry the first one's task.
+        val tag = if (fresh || card.tag == null) "mc-" + SystemClock.elapsedRealtime() else card.tag
+        val id = if (fresh || card.tag == null) ID + (++ids % IDS) else card.id
+        val tap = PendingIntent.getBroadcast(c, id * 4, Intent(ACTION_OPEN).setPackage(SYSUI)
             .putExtra(EXTRA_TASK, task)
             .putExtra(EXTRA_HOST, host)
             .putExtra(EXTRA_SCHEME, if (host == ALIPAY) page.scheme.ifEmpty { null } else null),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val gone = PendingIntent.getBroadcast(c, ID + 1, Intent(ACTION_GONE).setPackage(SYSUI),
+        // Ready to collect, the pill says so and takes the card down; before that it opens the order.
+        val ready = PickupParse.isReady(r.status) && r.status !in PickupParse.DONE
+        val action = if (ready) PickupCard.PICKED else PickupCard.OPEN
+        val actionTap = if (!ready) tap else PendingIntent.getBroadcast(c, id * 4 + 2,
+            Intent(ACTION_PICKED).setPackage(SYSUI).putExtra(EXTRA_TASK, task),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val gone = PendingIntent.getBroadcast(c, id * 4 + 1, Intent(ACTION_GONE).setPackage(SYSUI).putExtra(EXTRA_TASK, task),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = Notification.Builder(c, CHANNEL)
             .setSmallIcon(Icon.createWithBitmap(pic))
@@ -643,7 +704,9 @@ internal object PickupIsland {
             .setOnlyAlertOnce(!fresh)
             .setShowWhen(false)
             .setAutoCancel(false)
-            .setTimeoutAfter(LIFE)
+            // ColorOS keeps an order being waited on up to `seeding_max_time` (2 hours), and one
+            // with no state of its own `seeding_max_time_unfinish` (30 minutes).
+            .setTimeoutAfter(if (r.status != null && r.status !in PickupParse.DONE) WAITED else LIFE)
             .setDeleteIntent(gone)
             .setContentIntent(tap)
             .addExtras(extras)
@@ -654,9 +717,9 @@ internal object PickupIsland {
         if (PickupCodeIsland.sCard) {
             runCatching {
                 PickupCard.build(c, oemRule, r.code, meal, r.temperature, store, brand, tap,
-                    cardAlpha, false) to
+                    card.alpha, false, action, actionTap) to
                     PickupCard.build(c, oemRule, r.code, meal, r.temperature, store, brand, tap,
-                        cardAlpha, true)
+                        card.alpha, true, action, actionTap)
             }.onSuccess { (day, night) ->
                 // Every key Xiaomi's own focus notification sets, which is what this copies (the
                 // assistant's card builder, `jd3.b`): the card in both themes, the always-on form,
@@ -684,7 +747,7 @@ internal object PickupIsland {
         // one above is drawn by SystemUI around the island while this one is the whole card.
         if (rearDisplay(c) != null) {
             runCatching {
-                PickupCard.rear(c, oemRule, r.code, meal, r.temperature, store, brand, tap)
+                PickupCard.rear(c, oemRule, r.code, meal, r.temperature, store, brand, tap, action, actionTap)
             }.onSuccess { card ->
                 // Both keys get the same card: the rear one is dark to begin with, and the screen
                 // it goes on is the one that is always at least a little dark.
@@ -715,14 +778,19 @@ internal object PickupIsland {
         // is a new id and so a new widget there, which is the only post that screen slides out by
         // itself - see [ID]. The card before it is swept first, since its widget only goes when its
         // own notification does.
-        val tag = if (fresh) "mc-" + SystemClock.elapsedRealtime() else shownTag
-        val id = if (fresh) ID + (++ids % IDS) else shownId
         runCatching {
-            if (fresh) sweep(nm)
+            // The first post of this process takes down what an earlier run left; after that a fresh
+            // post replaces this card's own notification only - the other orders' cards stay.
+            if (!swept) {
+                swept = true
+                sweep(nm)
+            } else if (tag != card.tag) {
+                card.tag?.let { nm.cancel(it, card.id) }
+            }
             nm.notify(tag, id, n)
         }.onSuccess {
-            shownTag = tag
-            shownId = id
+            card.tag = tag
+            card.id = id
         }
         Xp.log(TAG + (if (fresh) "up: " else "updated: ") + brand + " (tag=${tag ?: "-"})")
     }
