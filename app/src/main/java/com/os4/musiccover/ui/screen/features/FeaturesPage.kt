@@ -303,6 +303,17 @@ private fun CoverGroup(
         // The one slider left belongs to the full-screen cover alone, and it is the one that has
         // to stay a slider: where the cover sits vertically is a share of the screen, and the
         // screen is not the same on every phone.
+        // Both styles: the square plays it in the card, the full-screen cover in the wallpaper.
+        // No summary, like every row on this page.
+        SwitchPreference(
+            title = stringResource(R.string.cover_motion),
+            checked = module.motionCover,
+            enabled = enabled,
+            onCheckedChange = {
+                onChange(module.copy(motionCover = it))
+                ModuleBridge.setMotionCover(context, it)
+            },
+        )
         if (module.coverStyle == 0) {
             ValueSlider(
                 title = stringResource(R.string.cover_bias),

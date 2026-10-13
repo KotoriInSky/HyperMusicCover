@@ -9,6 +9,7 @@
     <string name="about_feedback">反馈与建议</string>
     <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
     <string name="cover_bias">封面纵向位置</string>
+    <string name="cover_motion">动态封面</string>
     <string name="cover_style">封面展现形式</string>
     <string name="cover_style_full">全屏封面</string>
     <string name="cover_style_card">方形卡片</string>
@@ -87,6 +88,7 @@
     <string name="credits_hypertweak">隐藏锁屏指纹图案和指纹动画的做法</string>
     <string name="credits_amll">锁屏歌词的动画手感</string>
     <string name="credits_amll_db">逐字歌词的主要来源</string>
+    <string name="credits_cllb">动态封面的思路：从 Apple Music 页面取视频、在锁屏上播放</string>
     <string name="credits_accompanist">解析 TTML、LRC、YRC、KRC 四种歌词</string>
     <string name="credits_lyricinfo">播放器歌词的来源之一</string>
     <string name="credits_hle">QQ 音乐、酷我、TTML Hub 取词与歌曲匹配规则</string>

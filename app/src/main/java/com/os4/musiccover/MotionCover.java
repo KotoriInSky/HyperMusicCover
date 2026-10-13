@@ -1,0 +1,367 @@
+package com.os4.musiccover;
+
+import android.content.Context;
+import android.content.Intent;
+import android.media.MediaMetadata;
+import android.media.session.MediaController;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
+import android.os.Handler;
+import android.os.HandlerThread;
+
+import java.io.File;
+import java.util.Arrays;
+
+/**
+ * Motion covers: which video the cover shows for the track on screen, and who plays it.
+ *
+ * SystemUI side. CoverPush tells this about every cover it puts up and takes down; this looks the
+ * track up (MotionArt, on its own thread), keeps the videos in a cache keyed by album, and hands
+ * the file to whichever cover is showing:
+ *
+ *   square card  -> CardVideo, in this process; the backdrop behind it stays the still
+ *   full screen  -> the wallpaper process (op vidtex), which draws it into the lock wallpaper's
+ *                   own frame so the clock glass and the card blur see it - see WallpaperVideo
+ *
+ * The still is what shows until a video is ready, and whenever there is none. Off by default;
+ * downloads only on an unmetered network. Cached videos play on any network.
+ */
+final class MotionCover {
+
+    private MotionCover() {
+    }
+
+    private static final String TAG = "[MCMotion] ";
+    static volatile boolean sEnabled;
+
+    private static final String DIR = "motion";
+    private static final String INDEX = "index.txt";
+    private static final long CACHE_BYTES = 300L * 1024 * 1024;
+    /** A store that answered "no motion artwork" is asked again after this. */
+    private static final long NONE_TTL_MS = 7L * 24 * 3600 * 1000;
+    /** A request that did not get through is tried again after this. */
+    private static final long FAIL_TTL_MS = 30L * 60 * 1000;
+    /** Where the full-screen cover's video goes for the wallpaper process to read. */
+    private static final String SHARED_NAME = "mc_motion.mp4";
+
+    private static HandlerThread sThread;
+    private static Handler sWork;
+
+    /** Main-thread state: the lookup being answered, and what is playing. */
+    private static int sGen;
+    private static String sWantKey = "";
+    private static String sPlayingFile;
+    private static boolean sPlayingCard;
+    private static String sLast = "nothing yet";
+
+    private static synchronized Handler work() {
+        if (sWork == null) {
+            sThread = new HandlerThread("MCMotion");
+            sThread.start();
+            sWork = new Handler(sThread.getLooper());
+        }
+        return sWork;
+    }
+
+    // ================================================================ from CoverPush
+
+    /** A cover is up for what the watched session is playing. Any thread. */
+    static void onCover(final boolean card) {
+        final Context ctx = Main.sAppCtx;
+        MediaController c = Main.watched();
+        MediaMetadata md = c == null ? null : c.getMetadata();
+        if (ctx == null || md == null) return;
+        final String title = md.getString(MediaMetadata.METADATA_KEY_TITLE);
+        final String artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST);
+        final String album = md.getString(MediaMetadata.METADATA_KEY_ALBUM);
+        final long dur = md.getLong(MediaMetadata.METADATA_KEY_DURATION);
+        Main.main().post(() -> track(ctx, title, artist, album, dur, card));
+    }
+
+    /** The cover is gone. Any thread. */
+    static void onCoverOff() {
+        Main.main().post(() -> {
+            sGen++;
+            sWantKey = "";
+            stopVideo("cover off");
+        });
+    }
+
+    private static void track(Context ctx, String title, String artist, String album, long dur,
+                              boolean card) {
+        // The full-screen cover over a video lock wallpaper is a view in SystemUI, not the
+        // wallpaper's texture, and there is no image engine there to draw a video into.
+        if (!card && Main.sVideoWallpaper) {
+            sGen++;
+            sWantKey = "";
+            stopVideo("video lock wallpaper");
+            return;
+        }
+        if (!sEnabled || title == null || title.trim().isEmpty()) {
+            sGen++;
+            sWantKey = "";
+            stopVideo(sEnabled ? "no title" : "off");
+            return;
+        }
+        final String key = cacheKey(title, artist, album);
+        if (key.equals(sWantKey) && sPlayingFile != null && sPlayingCard == card) return;
+        // Same album, same video: a track change inside an album keeps it playing.
+        boolean sameVideo = sPlayingFile != null && sPlayingCard == card
+                && sPlayingFile.equals(cachedFile(ctx, key));
+        sWantKey = key;
+        if (sameVideo) return;
+        stopVideo("track");
+        final int gen = ++sGen;
+        work().post(() -> {
+            File f = resolve(ctx, key, title, artist, album, dur);
+            Main.main().post(() -> {
+                if (gen != sGen || f == null || !Main.sCoverMode) return;
+                startVideo(ctx, f, card);
+            });
+        });
+    }
+
+    // ================================================================ players
+
+    private static void startVideo(Context ctx, File f, boolean card) {
+        sPlayingFile = f.getPath();
+        sPlayingCard = card;
+        f.setLastModified(System.currentTimeMillis());   // the cache's LRU clock
+        if (card) {
+            CardVideo.load(ctx, f.getPath());
+            return;
+        }
+        // The wallpaper process has another uid; it reads from the directory the composed
+        // covers already go through, written beside the target and renamed over it.
+        work().post(() -> {
+            String shared = share(f);
+            if (shared == null) return;
+            Main.main().post(() -> {
+                if (!f.getPath().equals(sPlayingFile) || sPlayingCard) return;
+                Intent i = new Intent("com.os4.musiccover.WPROBE");
+                i.setPackage("com.miui.miwallpaper");
+                i.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                i.putExtra("op", "vidtex");
+                i.putExtra("path", shared);
+                ProbeGuard.send(ctx, i);
+            });
+        });
+    }
+
+    private static void stopVideo(String why) {
+        if (sPlayingFile == null) return;
+        boolean card = sPlayingCard;
+        sPlayingFile = null;
+        if (card) {
+            CardVideo.unload(why);
+        } else {
+            Context ctx = Main.sAppCtx;
+            if (ctx == null) return;
+            Intent i = new Intent("com.os4.musiccover.WPROBE");
+            i.setPackage("com.miui.miwallpaper");
+            i.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+            i.putExtra("op", "vidtex");
+            i.putExtra("on", false);
+            ProbeGuard.send(ctx, i);
+        }
+    }
+
+    private static String share(File f) {
+        try {
+            File dst = new File(CoverPush.SHARE_DIR, SHARED_NAME);
+            File tmp = new File(CoverPush.SHARE_DIR, SHARED_NAME + ".tmp");
+            try (java.io.FileInputStream in = new java.io.FileInputStream(f);
+                 java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) {
+                byte[] b = new byte[256 * 1024];
+                int n;
+                while ((n = in.read(b)) > 0) out.write(b, 0, n);
+            }
+            tmp.setReadable(true, false);
+            if (!tmp.renameTo(dst)) throw new java.io.IOException("rename");
+            return dst.getPath();
+        } catch (Throwable t) {
+            Xp.w(TAG + "cannot share the video with the wallpaper process: " + t);
+            return null;
+        }
+    }
+
+    // ================================================================ cache
+
+    /** By album when the player names one - the whole album shares one video - else by song. */
+    private static String cacheKey(String title, String artist, String album) {
+        String a = MotionArt.norm(MotionArt.firstArtist(artist));
+        String al = MotionArt.norm(album);
+        return al.isEmpty() ? "s:" + a + "|" + MotionArt.norm(title) : "a:" + a + "|" + al;
+    }
+
+    private static File dir(Context ctx) {
+        File d = new File(ctx.getFilesDir(), DIR);
+        if (!d.isDirectory()) d.mkdirs();
+        return d;
+    }
+
+    /** The cached video for a key, if it is on disk. Main thread safe: reads one small file. */
+    private static synchronized String cachedFile(Context ctx, String key) {
+        String[] e = entry(ctx, key);
+        if (e == null || !e[1].startsWith("v:")) return null;
+        File f = new File(dir(ctx), e[1].substring(2));
+        return f.isFile() ? f.getPath() : null;
+    }
+
+    /** {key, state, time}: state "v:<file>", "none" or "fail". */
+    private static synchronized String[] entry(Context ctx, String key) {
+        for (String line : readIndex(ctx)) {
+            String[] p = line.split("\t");
+            if (p.length == 3 && p[0].equals(key)) return p;
+        }
+        return null;
+    }
+
+    private static synchronized void put(Context ctx, String key, String state) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        for (String line : readIndex(ctx)) {
+            if (!line.startsWith(key + "\t")) lines.add(line);
+        }
+        lines.add(key + "\t" + state + "\t" + System.currentTimeMillis());
+        // Bounded: one line per album ever looked up is small, but not forever.
+        while (lines.size() > 2000) lines.remove(0);
+        try {
+            File tmp = new File(dir(ctx), INDEX + ".tmp");
+            try (java.io.FileOutputStream os = new java.io.FileOutputStream(tmp)) {
+                os.write(String.join("\n", lines).getBytes("UTF-8"));
+            }
+            tmp.renameTo(new File(dir(ctx), INDEX));
+        } catch (Throwable t) {
+            Xp.w(TAG + "index write: " + t);
+        }
+    }
+
+    private static java.util.List<String> readIndex(Context ctx) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        File f = new File(dir(ctx), INDEX);
+        if (!f.isFile()) return out;
+        try {
+            for (String l : new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8")
+                    .split("\n")) {
+                if (!l.isEmpty()) out.add(l);
+            }
+        } catch (Throwable ignored) {
+        }
+        return out;
+    }
+
+    /** Worker thread. The video for this track, from the cache or the store; null for none. */
+    private static File resolve(Context ctx, String key, String title, String artist,
+                                String album, long dur) {
+        String[] e = entry(ctx, key);
+        long now = System.currentTimeMillis();
+        if (e != null) {
+            long at = parse(e[2]);
+            if (e[1].startsWith("v:")) {
+                File f = new File(dir(ctx), e[1].substring(2));
+                if (f.isFile()) {
+                    sLast = "cached " + f.getName() + " for " + key;
+                    return f;
+                }
+            } else if ("none".equals(e[1]) && now - at < NONE_TTL_MS) {
+                sLast = "no motion artwork (asked " + ((now - at) / 3600000) + "h ago) " + key;
+                return null;
+            } else if ("fail".equals(e[1]) && now - at < FAIL_TTL_MS) {
+                sLast = "failed recently, waiting " + key;
+                return null;
+            }
+        }
+        if (!unmetered(ctx)) {
+            sLast = "not on an unmetered network; " + key + " not looked up";
+            Xp.log(TAG + sLast);
+            return null;
+        }
+        long t0 = android.os.SystemClock.uptimeMillis();
+        try {
+            MotionArt.Found found = MotionArt.find(title, artist, album, dur);
+            if (found == null) {
+                put(ctx, key, "none");
+                sLast = "no motion artwork for " + key + " ("
+                        + (android.os.SystemClock.uptimeMillis() - t0) + "ms)";
+                Xp.log(TAG + sLast);
+                return null;
+            }
+            String name = found.albumId + ".mp4";
+            File f = new File(dir(ctx), name);
+            if (!f.isFile()) {
+                if (!MotionArt.download(found.master, f)) {
+                    put(ctx, key, "none");
+                    sLast = "motion artwork not usable for " + key;
+                    return null;
+                }
+                trim(ctx);
+            }
+            put(ctx, key, "v:" + name);
+            sLast = "found \"" + found.albumTitle + "\" for " + key + " in "
+                    + (android.os.SystemClock.uptimeMillis() - t0) + "ms";
+            Xp.log(TAG + sLast);
+            return f;
+        } catch (MotionArt.Transient t) {
+            put(ctx, key, "fail");
+            sLast = "network failed for " + key + ": " + t.getMessage();
+            Xp.log(TAG + sLast);
+            return null;
+        } catch (Throwable t) {
+            put(ctx, key, "fail");
+            sLast = "lookup failed for " + key + ": " + t;
+            Xp.w(TAG + sLast);
+            return null;
+        }
+    }
+
+    /** Oldest-played first, until the videos fit the budget. The one playing is the newest. */
+    private static void trim(Context ctx) {
+        File[] files = dir(ctx).listFiles((d, n) -> n.endsWith(".mp4"));
+        if (files == null) return;
+        long total = 0;
+        for (File f : files) total += f.length();
+        if (total <= CACHE_BYTES) return;
+        Arrays.sort(files, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
+        for (File f : files) {
+            if (total <= CACHE_BYTES) break;
+            if (f.getPath().equals(sPlayingFile)) continue;
+            total -= f.length();
+            f.delete();
+        }
+    }
+
+    private static boolean unmetered(Context ctx) {
+        try {
+            ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
+            NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static long parse(String s) {
+        try {
+            return Long.parseLong(s);
+        } catch (Throwable t) {
+            return 0L;
+        }
+    }
+
+    /** For `op motion`. */
+    static String describe() {
+        return "enabled=" + sEnabled + " want=" + sWantKey + " playing=" + sPlayingFile
+                + (sPlayingFile == null ? "" : (sPlayingCard ? " (card)" : " (wallpaper)"))
+                + " last=" + sLast;
+    }
+
+    /** Forget what was looked up and found - for `op motion --ez forget true`. */
+    static void forget(Context ctx) {
+        work().post(() -> {
+            File[] files = dir(ctx).listFiles();
+            if (files != null) for (File f : files) f.delete();
+            sLast = "cache cleared";
+        });
+    }
+}

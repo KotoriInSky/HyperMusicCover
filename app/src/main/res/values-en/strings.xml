@@ -9,6 +9,7 @@
     <string name="about_feedback">Feedback</string>
     <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
     <string name="cover_bias">Vertical position</string>
+    <string name="cover_motion">Motion cover</string>
     <string name="cover_style">Cover presentation</string>
     <string name="cover_style_full">Full-screen cover</string>
     <string name="cover_style_card">Square card</string>
@@ -87,6 +88,7 @@
     <string name="credits_hypertweak">Hiding the lock screen\'s fingerprint print and its animation</string>
     <string name="credits_amll">How the lock screen lyrics move</string>
     <string name="credits_amll_db">Where the word-by-word lyrics come from</string>
+    <string name="credits_cllb">The idea behind motion covers: the video off Apple Music\'s pages, played on the lock screen</string>
     <string name="credits_accompanist">Parses TTML, LRC, YRC and KRC lyrics</string>
     <string name="credits_lyricinfo">One of the places player lyrics come from</string>
     <string name="credits_hle">QQ Music, Kuwo and TTML Hub lyrics, and the song matching rules</string>

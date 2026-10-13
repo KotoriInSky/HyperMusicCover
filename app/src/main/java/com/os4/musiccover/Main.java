@@ -439,6 +439,10 @@ public class Main extends XposedModule {
     private static volatile float sGlassEnd = DEFAULT_GLASS_END;
     /** The session we are mirroring, plus the callback that keeps the cover on the right track. */
     private static MediaController sWatched;
+
+    static MediaController watched() {
+        return sWatched;
+    }
     private static MediaController.Callback sMediaCb;
 
     /**
@@ -2002,6 +2006,7 @@ public class Main extends XposedModule {
                     + "\ntap=" + (sTapToggle ? 1 : 0)
                     + ShadeLayer.dumpCfg()
                     + "\nfadewp=" + (sFadeWp ? 1 : 0)
+                    + "\nmotion=" + (MotionCover.sEnabled ? 1 : 0)
                     + "\nvcfade=" + (sVideoFade ? 1 : 0)
                     + "\nfsmode2=" + sFadeMode
                     // A measurement rather than a setting, and kept for the same reason the
@@ -2124,6 +2129,7 @@ public class Main extends XposedModule {
                         else if ("mctap".equals(k)) sMcTitleTap = "1".equals(v);
                         else if ("tap".equals(k)) sTapToggle = "1".equals(v);
                         else if ("fadewp".equals(k)) sFadeWp = "1".equals(v);
+                        else if ("motion".equals(k)) MotionCover.sEnabled = "1".equals(v);
                         else if ("vcfade".equals(k)) sVideoFade = "1".equals(v);
                         else if ("fsmode2".equals(k)) sFadeMode = Integer.parseInt(v);
                         else if ("covergap".equals(k)) CoverPush.sCoverFadeGapMs = Long.parseLong(v);
@@ -2552,6 +2558,18 @@ public class Main extends XposedModule {
                         // ImmersiveHost, whose page closing onto the cover waits for this.
                         CoverCardLayer.releaseHeld();
                         ImmersiveHost.coverShown();
+                    } else if ("motion".equals(op)) {
+                        // Motion covers. `--ez on` switches them, `--ez forget true` empties the
+                        // cache; either way the answer is the state. See MotionCover.
+                        if (i.hasExtra("on")) {
+                            MotionCover.sEnabled = i.getBooleanExtra("on", false);
+                            saveState();
+                            Xp.log(TAG + "motion covers " + (MotionCover.sEnabled ? "on" : "off"));
+                            // The cover on screen now gets one, or loses its own.
+                            if (sCoverMode) CoverPush.pushArtAsync(true, false);
+                        }
+                        if (i.getBooleanExtra("forget", false)) MotionCover.forget(c);
+                        setResultData(MotionCover.describe());
                     } else if ("cardvideo".equals(op)) {
                         // The square card's motion cover, fixed file for now; see CardVideo.
                         if (i.getBooleanExtra("stats", false)) {
@@ -3016,6 +3034,7 @@ public class Main extends XposedModule {
                         out.putBoolean("mctap", sMcTitleTap);
                         out.putBoolean("tap", sTapToggle);
                         out.putBoolean("fadewp", sFadeWp);
+                        out.putBoolean("motion", MotionCover.sEnabled);
                         out.putInt("fsmode2", sFadeMode);
                         out.putBoolean("vcfade", sVideoFade);
                         out.putBoolean("hidefp", sHideFp);

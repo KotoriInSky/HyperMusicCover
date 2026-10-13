@@ -108,6 +108,8 @@ object ModuleBridge {
         val mcArtInLyrics: Boolean = true,
         val mcTitleTap: Boolean = false,
         val hideFingerprint: Boolean = false,
+        /** Apple Music motion artwork in place of the still cover. Off by default. */
+        val motionCover: Boolean = false,
         /** Draw the big clock's colon on the styles that drop it. */
         val forceColon: Boolean = false,
         /** Light the media card's progress bar the way the island's is lit (#49). On by default. */
@@ -440,6 +442,9 @@ object ModuleBridge {
     // wire would make moving it later a protocol change.
     fun setHideFingerprint(context: Context, on: Boolean) =
         send(context, "hidefp") { putExtra("on", on) }
+
+    fun setMotionCover(context: Context, on: Boolean) =
+        send(context, "motion") { putExtra("on", on) }
 
     /** See the note above [setClockHeight]: no row offers this any more, the op still works. */
     fun setAodSmall(context: Context, on: Boolean) =
@@ -841,6 +846,7 @@ object ModuleBridge {
             mcArtInLyrics = b.getBoolean("mclyricart", true),
             mcTitleTap = b.getBoolean("mctap", false),
             hideFingerprint = b.getBoolean("hidefp", false),
+            motionCover = b.getBoolean("motion", false),
             forceColon = b.getBoolean("colon", false),
             mediaBarGlow = b.getBoolean("seekglow", true),
             lyrics = b.getBoolean("lyrics", true),

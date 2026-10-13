@@ -101,6 +101,7 @@ final class CoverPush {
         // looking at, and the clock is not springing either.
         out.putExtra("fade", Main.sFadeWp && Main.screenOn());
         if (!on) {
+            MotionCover.onCoverOff();
             CoverCardLayer.clear();
             if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0);
             out.putExtra("off", true);
@@ -119,6 +120,7 @@ final class CoverPush {
         }
         if (art == null) { Xp.log(Main.TAG + "pushart: no album art"); return; }
         if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) CoverCardLayer.publish(art);
+        MotionCover.onCover(Main.sCoverCardStyle.mode == CoverCardStyle.CARD);
         int w = Main.sScreenW, h = Main.sScreenH;
         if (!Main.sVideoWallpaper && Main.sWpComposes) {
             // The source goes over instead of the composed picture, and the wallpaper process

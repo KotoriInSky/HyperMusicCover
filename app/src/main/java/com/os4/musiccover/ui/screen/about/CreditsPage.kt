@@ -124,6 +124,11 @@ fun CreditsPageContent(
             "https://github.com/juren233/HyperLyrics-Enhanced",
         ),
         Credit(
+            "ColorOS Live Lyrics Bridge",
+            stringResource(R.string.credits_cllb),
+            "https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge",
+        ),
+        Credit(
             "@DaguDuiyuan",
             stringResource(R.string.credits_daguduiyuan),
             "https://github.com/DaguDuiyuan",
