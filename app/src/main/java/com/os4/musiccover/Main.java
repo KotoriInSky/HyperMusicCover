@@ -960,6 +960,12 @@ public class Main extends XposedModule {
             MetroCodeIsland.INSTANCE.install(param.getDefaultClassLoader());
             return;
         }
+        // 小爱同学, only so that its 「记忆」 read of an order page that the module asks for plays
+        // no swipe animation. See XiaoaiMemory.
+        if (PickupConst.PKG_VOICE_ASSIST.equals(pkg)) {
+            XiaoaiMemory.INSTANCE.handle(param.getDefaultClassLoader());
+            return;
+        }
         if (!"com.android.systemui".equals(pkg)) return;
 
         final ClassLoader cl = param.getDefaultClassLoader();

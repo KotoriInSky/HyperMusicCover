@@ -33,6 +33,8 @@ internal object XiaoaiMemory {
     private const val VA = "com.miui.voiceassist"
     private const val SERVICE = "com.xiaomi.voiceassistant.VoiceService"
     private const val CHANNEL = "memory_island_channel"
+    /** The extra only 小爱's scene card (the order) carries. */
+    private const val SCENE = "miui.focus.param.custom"
     private const val LISTENER = "com.android.systemui.statusbar.notification.MiuiNotificationListener"
     /** How long after asking 小爱's notifications are taken as the answer: it took 3.4s, measured. */
     private const val WINDOW = 20_000L
@@ -56,6 +58,60 @@ internal object XiaoaiMemory {
     /** 小爱's card's own timeout (its param's `timeout: 720` minutes): a stopped key is kept no longer. */
     private const val KEEP = 12 * 60 * 60_000L
     private const val FILE = "mc_xiaoai_stopped"
+
+    /**
+     * On the intent the module sends: the swipe's 「remember」 animation - the screenshot drawn
+     * into a glowing shrink by `RememberMglTextureView` - is not played for it. A swipe of the
+     * user's own carries no such extra and plays as before.
+     */
+    private const val QUIET = "com.os4.musiccover.xiaoai_quiet"
+    /** ThreeGestureUpEffectWindow, R8-named (8.2.62.3916): `show(Bitmap)` adds and starts the effect. */
+    private const val EFFECT = "com.xiaomi.voiceassistant.mainui.x2"
+    private const val EFFECT_VIEW = "com.xiaomi.voiceassist.shaderanimation.mgl.remember.RememberMglTextureView"
+    /** Until when the next effect is ours to drop (uptime, in 小爱's process); one effect, then 0. */
+    @Volatile private var quietUntil = 0L
+
+    /** In 小爱's own process: the quiet extra noticed, and the effect it asks for dropped. */
+    fun handle(cl: ClassLoader) {
+        runCatching {
+            Xp.hookAll(Xp.findClass(SERVICE, cl), "onStartCommand") { chain ->
+                val i = chain.args.firstOrNull() as? Intent
+                if (i != null && runCatching { i.getBooleanExtra(QUIET, false) }.getOrDefault(false)) {
+                    quietUntil = SystemClock.uptimeMillis() + 10_000L
+                    Xp.log(TAG + "quiet ask")
+                }
+                chain.proceed()
+            }
+        }.onFailure { Xp.log(TAG + "asks not told apart, the effect plays: $it"); return }
+        // By the window's own show(Bitmap), when the R8 name still holds one; otherwise at
+        // addView, which show() wraps in its own catch and then starts nothing.
+        val show = runCatching {
+            Xp.findClass(EFFECT, cl).declaredMethods.firstOrNull {
+                it.name == "show" && it.parameterTypes.contentEquals(arrayOf(android.graphics.Bitmap::class.java))
+            }
+        }.getOrNull()
+        runCatching {
+            if (show != null) {
+                Xp.hook(show) { chain -> if (quiet()) null else chain.proceed() }
+                Xp.log(TAG + "effect dropped at show")
+            } else {
+                Xp.hookAll(Xp.findClass("android.view.WindowManagerImpl", null), "addView") { chain ->
+                    if (chain.args.firstOrNull()?.javaClass?.name == EFFECT_VIEW && quiet()) {
+                        throw IllegalStateException("not shown: asked by MusicCover")
+                    }
+                    chain.proceed()
+                }
+                Xp.log(TAG + "no $EFFECT.show(Bitmap), effect dropped at addView")
+            }
+        }.onFailure { Xp.log(TAG + "effect not dropped: $it") }
+    }
+
+    private fun quiet(): Boolean {
+        if (SystemClock.uptimeMillis() > quietUntil) return false
+        quietUntil = 0L
+        Xp.log(TAG + "remember effect skipped")
+        return true
+    }
 
     fun install(cl: ClassLoader) {
         runCatching {
@@ -122,7 +178,8 @@ internal object XiaoaiMemory {
         askedUntil = SystemClock.elapsedRealtime() + WINDOW
         ctx.startForegroundService(Intent(Intent.ACTION_ASSIST)
             .setComponent(ComponentName(VA, SERVICE))
-            .putExtra("voice_assist_start_from_key", "three_gesture_up"))
+            .putExtra("voice_assist_start_from_key", "three_gesture_up")
+            .putExtra(QUIET, true))
         Xp.log(TAG + "asked for $code")
         true
     }.onFailure {
@@ -144,8 +201,12 @@ internal object XiaoaiMemory {
         if (n.channelId == CHANNEL) {
             val x = n.extras
             val code = x.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
-            // The 「记忆中」 placeholder has no title; the answer has the code there.
-            if (code.isNotEmpty()) {
+            // Two senders share the channel (8.2.62.3916). The 「记忆中」 placeholder, and the plain
+            // 「已记住」 when nothing on the page was an order, come from MemoryIslandManager: a title
+            // of its own (`memory_island_summary_state_left_title`), 记忆中 as the text, and the stock
+            // `miui.focus.param`. The order comes from MemorySceneIslandManager, the only one with
+            // `miui.focus.param.custom` - a title alone let the placeholder through as an answer.
+            if (code.isNotEmpty() && x.containsKey(SCENE)) {
                 val answer = Answer(code,
                     x.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim()?.ifEmpty { null },
                     x.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim()?.ifEmpty { null })

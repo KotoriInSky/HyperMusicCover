@@ -9,5 +9,6 @@
         <item>com.autonavi.minimap</item>
         <item>com.miui.personalassistant</item>
         <item>com.xiaomi.subscreencenter</item>
+        <item>com.miui.voiceassist</item>
     </string-array>
 </resources>
