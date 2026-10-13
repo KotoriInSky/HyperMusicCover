@@ -1,5 +1,7 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.immersive;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.PageSpring;
+import com.os4.musiccover.Xp;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;

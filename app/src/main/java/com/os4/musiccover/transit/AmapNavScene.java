@@ -1,5 +1,5 @@
 package com.os4.musiccover.transit;
-import com.os4.musiccover.LiveAlertScene;
+import com.os4.musiccover.immersive.LiveAlertScene;
 import com.os4.musiccover.ProbeGuard;
 import com.os4.musiccover.Xp;
 import android.content.Context;

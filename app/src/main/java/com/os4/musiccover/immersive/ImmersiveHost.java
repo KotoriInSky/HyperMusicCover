@@ -1,5 +1,10 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.immersive;
+import com.os4.musiccover.ClockCollapse;
+import com.os4.musiccover.EdgeBlurView;
+import com.os4.musiccover.LockIslands;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.MiniPlayerRuntime;
+import com.os4.musiccover.Xp;
 import com.os4.musiccover.transit.AmapNavScene;
 import com.os4.musiccover.transit.AmapTransitScene;
 import android.animation.ValueAnimator;
@@ -243,12 +248,12 @@ public final class ImmersiveHost {
     // ---------------------------------------------------------------- what the rest asks
 
     /** The lock screen is given up to a page: the clock is small and the cut-out gone for it. */
-    static boolean holdsClock() {
+    public static boolean holdsClock() {
         return sHolding;
     }
 
     /** The scene a tap on this focus island opens; null for an island that has none. */
-    static ImmersiveScene sceneFor(String pkg, boolean focus, String key) {
+    public static ImmersiveScene sceneFor(String pkg, boolean focus, String key) {
         for (ImmersiveScene s : SCENES) {
             if (s.serves(pkg, focus) && s.servesKey(key)) return s;
         }
@@ -278,7 +283,7 @@ public final class ImmersiveHost {
      * open the app, which on the lock screen is the bouncer - and neither does swipe-to-unlock.
      * Returns whether the event was ours.
      */
-    static boolean routeTouch(android.view.MotionEvent ev) {
+    public static boolean routeTouch(android.view.MotionEvent ev) {
         int a = ev.getActionMasked();
         if (a == android.view.MotionEvent.ACTION_DOWN) {
             endTap();
@@ -430,7 +435,7 @@ public final class ImmersiveHost {
     // ---------------------------------------------------------------- what the rest tells
 
     /** From LockIslands: the scene's island was tapped open. */
-    static void open(ImmersiveScene scene) {
+    public static void open(ImmersiveScene scene) {
         if (sOpen == scene && !sYield) return;
         // Another page on the lit lock screen - just closed for this one, or still open: the one
         // dips out and the other in (SWAP_OUT_SHARE). The new one appears from nothing - or, when it is
@@ -458,7 +463,7 @@ public final class ImmersiveHost {
     }
 
     /** From LockIslands: the scene's island was pulled back in. */
-    static void close(ImmersiveScene scene) {
+    public static void close(ImmersiveScene scene) {
         if (sOpen != scene) return;
         sLetGo.remove(scene);
         boolean wasYielding = sYield;
@@ -525,7 +530,7 @@ public final class ImmersiveHost {
     private static final long UNLOCKED_RELEASE_MS = 3000L;
 
     /** The phone was unlocked (ACTION_USER_PRESENT). Main thread. */
-    static void onUnlocked() {
+    public static void onUnlocked() {
         armRelease("user present");
     }
 
@@ -557,7 +562,7 @@ public final class ImmersiveHost {
      * The screen went off, which locks it: a let-go pending is off, and a slot waiting to prepare
      * is asked to draw, so the doze's first frame prepares it.
      */
-    static void onScreenOff() {
+    public static void onScreenOff() {
         cancelRelease("screen off");
         if (sSlot != null) sSlot.invalidate();
     }
@@ -629,7 +634,7 @@ public final class ImmersiveHost {
      * went with an old window, or that was waited for because there was no window when a scene
      * became ready, is put in now.
      */
-    static void onContainerAttached() {
+    public static void onContainerAttached() {
         if (!anyReady()) return;
         if (sSlot != null && sSlot.isAttachedToWindow()) return;
         ensureSlot();
@@ -640,7 +645,7 @@ public final class ImmersiveHost {
      * Cover mode has started in: the cover is being composed for the wallpaper. An open page
      * yields to it, fading out onto it the way a close does.
      */
-    static void coverEntering() {
+    public static void coverEntering() {
         // Already there: nothing to wait for.
         sCoverPendingAt = sCoverOnWall ? 0L : SystemClock.uptimeMillis();
         ImmersiveScene open = sOpen;
@@ -661,7 +666,7 @@ public final class ImmersiveHost {
     }
 
     /** Cover mode has ended: a page that yielded to it, and is still open, comes back. */
-    static void coverLeft() {
+    public static void coverLeft() {
         if (!sYield) return;
         sYield = false;
         sFadeInNext = litNow();
@@ -670,7 +675,7 @@ public final class ImmersiveHost {
     }
 
     /** The wallpaper has started showing the cover. Any thread. */
-    static void coverShown() {
+    public static void coverShown() {
         sCoverOnWall = true;
         sMain.post(() -> {
             sCoverPendingAt = 0L;
@@ -679,7 +684,7 @@ public final class ImmersiveHost {
     }
 
     /** The cover's leave has gone out to the wallpaper. Any thread (CoverPush's worker). */
-    static void coverOffSent() {
+    public static void coverOffSent() {
         sCoverOnWall = false;
     }
 
@@ -687,7 +692,7 @@ public final class ImmersiveHost {
      * How long the cover's leave should wait: while a page is fading in over it, the rest of that
      * fade. Asked by CoverPush on the way out of cover mode, on the main thread.
      */
-    static long coverOffHoldMs() {
+    public static long coverOffHoldMs() {
         // A page that yielded to this cover comes back when it goes (coverLeft), and CoverPush
         // asks before cover mode has ended: the whole fade in is still ahead of it.
         if (sYield && sOpen != null && sOpen.ready() && sOpen.hasContent() && litNow()) {
@@ -728,7 +733,7 @@ public final class ImmersiveHost {
     };
 
     /** SystemUI has started: scenes whose app may already be in the state ask it. */
-    static void onStart(Context ctx) {
+    public static void onStart(Context ctx) {
         AmapNavScene.INSTANCE.ask(ctx);
     }
 
@@ -1001,7 +1006,7 @@ public final class ImmersiveHost {
     }
 
     /** The setting changed: weighed again on the next frame the shade window draws. */
-    static void navKeepOnChanged() {
+    public static void navKeepOnChanged() {
         sMain.post(new Runnable() {
             @Override
             public void run() {
@@ -1102,7 +1107,7 @@ public final class ImmersiveHost {
     private static boolean sExiting;
 
     /** The lock screen started leaving (KeyguardService's exit animation). Main thread. */
-    static void onLockScreenLeaving() {
+    public static void onLockScreenLeaving() {
         final ImmersiveScene page = sOpen;
         if (!sShown || page == null || sExiting) return;
         sExiting = true;
@@ -1474,7 +1479,7 @@ public final class ImmersiveHost {
     // ---------------------------------------------------------------- probe
 
     /** {@code op immersive}: any thread; the work is posted, the answer is the state now. */
-    static String command(String id, String what) {
+    public static String command(String id, String what) {
         final ImmersiveScene scene = byId(id);
         if (what != null && scene != null) {
             final String w = what;

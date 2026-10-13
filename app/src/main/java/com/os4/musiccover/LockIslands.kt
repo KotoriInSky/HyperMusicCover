@@ -1,5 +1,8 @@
 package com.os4.musiccover
 
+import com.os4.musiccover.immersive.CountdownScene
+import com.os4.musiccover.immersive.ImmersiveHost
+import com.os4.musiccover.immersive.ImmersiveScene
 import com.os4.musiccover.app.AppsIcon
 import android.app.Notification
 import android.app.PendingIntent

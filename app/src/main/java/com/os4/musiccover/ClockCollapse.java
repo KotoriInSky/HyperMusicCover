@@ -346,7 +346,7 @@ public final class ClockCollapse {
         return pt[1] + LOC[1];
     }
 
-    static Phase phase() {
+    public static Phase phase() {
         return sPhase;
     }
 

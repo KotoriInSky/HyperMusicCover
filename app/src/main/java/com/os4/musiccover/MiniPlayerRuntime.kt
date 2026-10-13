@@ -2,6 +2,7 @@
 // Copyright 2026 btm_m
 package com.os4.musiccover
 
+import com.os4.musiccover.immersive.ImmersiveHost
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap

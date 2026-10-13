@@ -40,7 +40,7 @@ import java.util.List;
  *
  * All sizes are fractions of the view's height, or dp: nothing here depends on the display.
  */
-final class EdgeBlurView extends View {
+public final class EdgeBlurView extends View {
 
     /**
      * Strips in each soft edge; the edge is the whole band now, so more of them. The steepest
@@ -90,13 +90,13 @@ final class EdgeBlurView extends View {
      */
     private static final float PAD_RADIUS_DP = 24f;
 
-    EdgeBlurView(Context ctx) {
+    public EdgeBlurView(Context ctx) {
         super(ctx);
         setWillNotDraw(false);
     }
 
     /** The sharp band, as fractions of the height; null takes the blur away. */
-    void setBand(float[] band) {
+    public void setBand(float[] band) {
         float top = band == null ? Float.NaN : band[0];
         float bottom = band == null ? Float.NaN : band[1];
         if (same(top, mTop) && same(bottom, mBottom)) return;
@@ -118,7 +118,7 @@ final class EdgeBlurView extends View {
     }
 
     /** Whether it is blurring anything: a page's band is set. */
-    boolean hasBand() {
+    public boolean hasBand() {
         return !Float.isNaN(mTop);
     }
 
@@ -126,14 +126,14 @@ final class EdgeBlurView extends View {
     private boolean mCleared = true;
 
     /** The page's own opacity: the blur fades with it, or the wallpaper's edges would blur first. */
-    void setFade(float fade) {
+    public void setFade(float fade) {
         if (fade == mFade) return;
         mFade = fade;
         applyAlphas();
         invalidate();
     }
 
-    boolean unavailable() {
+    public boolean unavailable() {
         return mUnavailable;
     }
 
@@ -141,7 +141,7 @@ final class EdgeBlurView extends View {
      * How far the PIN pad's blur has come, 0..1: the page under the window blurs with it. Emptied
      * and drawn once at 0, like setBand(null), so no region is left registered.
      */
-    void setPad(float level) {
+    public void setPad(float level) {
         if (level == mPadLevel) return;
         mPadLevel = level;
         Drawable d = mPad;

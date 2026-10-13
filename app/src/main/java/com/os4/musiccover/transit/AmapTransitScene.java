@@ -1,9 +1,9 @@
 package com.os4.musiccover.transit;
 import com.os4.musiccover.ClockCollapse;
-import com.os4.musiccover.CountdownScene;
+import com.os4.musiccover.immersive.CountdownScene;
 import com.os4.musiccover.Http;
-import com.os4.musiccover.ImmersiveHost;
-import com.os4.musiccover.ImmersiveScene;
+import com.os4.musiccover.immersive.ImmersiveHost;
+import com.os4.musiccover.immersive.ImmersiveScene;
 import com.os4.musiccover.LockIslands;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.MiniPlayerRuntime;

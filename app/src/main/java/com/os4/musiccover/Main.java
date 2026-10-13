@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.immersive.ImmersiveHost;
 import com.os4.musiccover.shade.ShadeLayer;
 import com.os4.musiccover.transit.AmapFocus;
 import com.os4.musiccover.transit.AmapImmerse;
@@ -154,7 +155,7 @@ public class Main extends XposedModule {
     static volatile Bitmap sCoverBlurBitmap;
     static volatile boolean sVideoCoverBlurred;
 
-    static volatile View sContainer;
+    public static volatile View sContainer;
     private static volatile Class<?> sContainerCls;
     /**
      * The enum KeyguardClockContainer.notifStateChange takes as its third argument, read off
@@ -363,7 +364,7 @@ public class Main extends XposedModule {
     /** SystemUI restarts on its own (observed, with no crash recorded), which used to drop the
      *  hidden flag and bring the old wallpaper's subject back over the album cover. Cover mode
      *  is a property of the phone, not of this process, so it has to outlive the process. */
-    static Context sAppCtx;
+    public static Context sAppCtx;
 
     /** SystemUI's own context, for the helpers that live outside this file. */
     public static Context appContext() {
@@ -876,7 +877,7 @@ public class Main extends XposedModule {
      * Fixed at the OEM preset for this transition: no slider, and loadState does not read one.
      * `op clockspring` still moves it for the rest of the session.
      */
-    static volatile float sClockResponse = EASE_COVER[1];
+    public static volatile float sClockResponse = EASE_COVER[1];
 
     /**
      * The fade that belongs to a spring response: the card's stand-in animator and the
@@ -889,7 +890,7 @@ public class Main extends XposedModule {
      * w0*t alone, so its 95% time is exactly proportional to the response, and so is the T that
      * matches it. 0.18 gives 175ms, 0.60 gives 584.
      */
-    static long fadeMsFor(float response) {
+    public static long fadeMsFor(float response) {
         return Math.round(EASE_COVER_FADE_MS * response / EASE_COVER[1]);
     }
 
@@ -3394,7 +3395,7 @@ public class Main extends XposedModule {
     private static volatile boolean sScreenOn = true;
 
     /** The cached reading, for LockLyrics' per-frame questions. */
-    static boolean screenOnCached() {
+    public static boolean screenOnCached() {
         return sScreenOn;
     }
 
@@ -8888,7 +8889,7 @@ public class Main extends XposedModule {
      * of the alphas from the container down to it. A build where it cannot be found reads 1
      * until the container hides, which is what bouncerShown() gave.
      */
-    static float bouncerLevel() {
+    public static float bouncerLevel() {
         if (!bouncerShown()) {
             sSecurityView = null;
             sBouncerSince = 0L;
@@ -10109,7 +10110,7 @@ public class Main extends XposedModule {
      * the lock screen the way the cover does. Animated only where it can be seen; elsewhere the
      * next wake brings the clock in, as it does for the cover.
      */
-    static void onImmersive(boolean on) {
+    public static void onImmersive(boolean on) {
         boolean visible = screenOn() && onKeyguardNow();
         if (on) LockHold.take(LockHold.Owner.IMMERSIVE, visible, "immersive");
         else LockHold.give(LockHold.Owner.IMMERSIVE, visible);
@@ -10129,7 +10130,7 @@ public class Main extends XposedModule {
      * Whether the shade window is showing the lock screen - lit or dozing - rather than the shade
      * over an unlocked phone. Which doze may show a page is ImmersiveHost's to decide.
      */
-    static boolean immersiveOnLockScreen() {
+    public static boolean immersiveOnLockScreen() {
         return keyguardShowing() && onKeyguardNow();
     }
 
@@ -10533,7 +10534,7 @@ public class Main extends XposedModule {
         }
     }
 
-    static boolean screenOn() {
+    public static boolean screenOn() {
         refreshSysReads();
         return sSysInteractive;
     }
@@ -10661,7 +10662,7 @@ public class Main extends XposedModule {
      * Asked once per sleep, from ClockCollapse.keepInAod(), so the reflection is not on any
      * per-frame path.
      */
-    static boolean fullAodOn() {
+    public static boolean fullAodOn() {
         View c = sContainer;
         if (c != null) {
             try {

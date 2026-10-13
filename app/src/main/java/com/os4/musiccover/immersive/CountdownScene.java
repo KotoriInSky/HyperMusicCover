@@ -1,5 +1,9 @@
-package com.os4.musiccover;
-
+package com.os4.musiccover.immersive;
+import com.os4.musiccover.CoverCompose;
+import com.os4.musiccover.LockIslands;
+import com.os4.musiccover.Main;
+import com.os4.musiccover.PageSpring;
+import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
@@ -65,7 +69,7 @@ public final class CountdownScene implements ImmersiveScene {
 
     static final String ID = "countdown";
     static final String PKG = "com.android.deskclock";
-    static final CountdownScene INSTANCE = new CountdownScene();
+    public static final CountdownScene INSTANCE = new CountdownScene();
 
     private static final String TAG = "MCImmersive: " + ID + ": ";
 
@@ -87,7 +91,7 @@ public final class CountdownScene implements ImmersiveScene {
     }
 
     /** A locked pipeline run's notes, any thread. */
-    void onNotes(List<LockIslands.Note> all) {
+    public void onNotes(List<LockIslands.Note> all) {
         String key = null;
         LockIslands.Timer timer = null;
         for (LockIslands.Note n : all) {
@@ -104,7 +108,7 @@ public final class CountdownScene implements ImmersiveScene {
     }
 
     /** A notification left SystemUI, any thread: the countdown's closes its page. */
-    void onRemoved(String key) {
+    public void onRemoved(String key) {
         mMain.post(() -> {
             if (mKey == null || !mKey.equals(key)) return;
             Xp.log(TAG + "notification removed");

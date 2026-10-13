@@ -1,5 +1,6 @@
 package com.os4.musiccover;
 
+import com.os4.musiccover.immersive.ImmersiveHost;
 import com.os4.musiccover.shade.ShadeLayer;
 import android.annotation.SuppressLint;
 import android.content.Context;
