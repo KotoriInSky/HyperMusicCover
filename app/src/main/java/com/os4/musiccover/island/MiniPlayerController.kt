@@ -7913,8 +7913,32 @@ internal class MiniPlayerController(
      */
     private fun ink(): Int {
         val card = Main.miniPairTitle() as? TextView
-        val color = card?.takeIf { it.isAttachedToWindow }?.currentTextColor ?: rowInk() ?: android.graphics.Color.WHITE
+        val color = card?.takeIf { it.isAttachedToWindow }?.currentTextColor ?: rowInk() ?: materialInk()
         return color or 0xFF000000.toInt()
+    }
+
+    private var materialInkAt = 0L
+    private var materialInkCached = android.graphics.Color.WHITE
+
+    /**
+     * No card and no notification to read it off: the material's own answer. The frost in light
+     * mode writes near black (the card's title, #E5000000); the frost in dark mode and the glass
+     * write white. Defaulting to white, the torch and camera stayed white on the light frost's
+     * discs with nothing else on the lock screen (the user, 2026-10-14). Read every frame by
+     * updateDiscs, so held for a moment rather than asked each time.
+     */
+    private fun materialInk(): Int {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - materialInkAt < MATERIAL_INK_MS) return materialInkCached
+        materialInkAt = now
+        val ctx = Main.sAppCtx ?: return materialInkCached
+        val frost = runCatching {
+            android.provider.Settings.Secure.getInt(ctx.contentResolver, "material_style", 1) == 0
+        }.getOrDefault(false)
+        val night = (ctx.resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        materialInkCached = if (frost && !night) 0xE5000000.toInt() else android.graphics.Color.WHITE
+        return materialInkCached
     }
 
     private fun rowInk(): Int? {
@@ -9583,6 +9607,9 @@ private const val SPREAD_STILL_FRAMES = 3
 
 /** A spread still between its ends this long after it set out is sent to the nearer one for good. */
 private const val SPREAD_GIVE_UP_MS = 3000L
+
+/** How long materialInk holds its answer: it is read every frame the discs are up. */
+private const val MATERIAL_INK_MS = 500L
 
 /** A finger pulling the open list this far toward the fold takes the cards home with it. */
 private const val SPREAD_PULL_DP = 8f
