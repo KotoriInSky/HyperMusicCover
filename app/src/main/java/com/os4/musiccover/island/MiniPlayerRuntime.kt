@@ -448,7 +448,16 @@ object MiniPlayerRuntime {
                 Xp.hookAll(cls, "apply") { chain ->
                     val target = chain.args.firstOrNull() as? View
                     val card = Main.miniPlayerMediaHeader()
-                    val mine = effectDepth == 0 && target != null && (card == null || target === card)
+                    // The pill and the islands live on the lock screen, so they wear the lock
+                    // screen's effect. The OEM dresses the card in the plain one too - often the
+                    // plain effect first and the keyguard one 50ms later, sometimes the plain one
+                    // alone - and recorded last, the plain frost's dark recipe went onto the pill
+                    // while its words took the keyguard card's near black: dark on dark after a
+                    // wallpaper change (#87, the reporter's log ended on MediaViewBlurEffect).
+                    // The plain one is still taken until a keyguard one has been seen at all.
+                    val keyguardKind = isKeyguardEffect(cls.simpleName)
+                    val mine = effectDepth == 0 && target != null && (card == null || target === card) &&
+                        (keyguardKind || !isKeyguardEffect(cardEffect))
                     if (mine) {
                         recordTarget = Main.miniPlayerMediaBg(target)
                         recording = ArrayList()
@@ -998,6 +1007,8 @@ object MiniPlayerRuntime {
 
     /** Which effect dressed the card last, for the log and `op mini`. */
     @Volatile private var cardEffect = "none"
+
+    private fun isKeyguardEffect(name: String) = "OnKeyguard" in name || "FullAod" in name
 
     /** The last effect whose empty recording was thrown away, for `op mini`. */
     @Volatile private var emptyEffect = "none"
