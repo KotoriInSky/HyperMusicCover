@@ -855,6 +855,9 @@ public class Main extends XposedModule {
         RideCodeExit.INSTANCE.install(cl);
         // A 微信 order page's pickup code, as an island (PickupCodeIsland).
         PickupCodeIsland.INSTANCE.install(cl);
+        // "Has notifications" as the clock faces are told it, less the rows nobody can see
+        // (NotifPresence).
+        NotifPresence.install(cl);
 
         try {
             sContainerCls = Xp.findClass(CLS_CONTAINER, cl);
@@ -1964,7 +1967,8 @@ public class Main extends XposedModule {
             return g;
         }
         View cached = ClockViews.sClockTargets.get(root);
-        if (cached != null && cached != root && usable(cached) && cached.getParent() != null) {
+        if (cached != null && cached != root && usable(cached) && cached.getParent() != null
+                && ClockViews.drawnUnder(cached, root)) {
             return cached;
         }
         // The root standing in for itself means "this tree draws no clock" - some styles put the
@@ -1981,6 +1985,7 @@ public class Main extends XposedModule {
             if (was != null && was == clockSize(root)) return null;
         }
         View found = ClockViews.resolveTimeTarget(root);
+        if (found != null && !ClockViews.drawnUnder(found, root)) found = null;
         ClockViews.sClockTargets.put(root, found == null ? root : found);
         if (found == null) ClockViews.sNoClockAt.put(root, clockSize(root));
         else ClockViews.sNoClockAt.remove(root);
@@ -1996,7 +2001,13 @@ public class Main extends XposedModule {
      */
     private static int clockSize(View root) {
         View clock = ClockViews.clockViewOf(root);
-        return clock == null ? -1 : clock.getWidth() * 8191 + clock.getHeight();
+        if (clock == null) return -1;
+        // Which face is showing too, not only its size: oriental A swaps its big face for its
+        // notification variant at the same 1200x2608, and fades its other layer by alpha, and
+        // a "no clock here" taken on the hidden one has to be asked again when that changes.
+        int shown = clock.getVisibility() == View.VISIBLE && clock.getAlpha() > 0.01f ? 1 : 0;
+        return ((System.identityHashCode(clock) * 31 + clock.getWidth()) * 8191
+                + clock.getHeight()) * 2 + shown;
     }
 
     public static String idOf(View v) {

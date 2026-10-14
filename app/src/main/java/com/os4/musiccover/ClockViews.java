@@ -52,13 +52,13 @@ public final class ClockViews {
         // none of them, and on those styles the clock simply did not shrink.
         for (String type : new String[]{"TIME_GROUP", "TIME_AREA", "FULL_TIME"}) {
             View v = oemPart(root, type);
-            if (Main.usable(v)) return v;
+            if (Main.usable(v) && drawnUnder(v, root)) return v;
         }
         java.util.List<View> parts = new java.util.ArrayList<>();
         for (String type : new String[]{"FULL_HOUR", "FULL_MINUTE", "HOUR1", "HOUR2",
                 "MIN1", "MIN2"}) {
             View v = oemPart(root, type);
-            if (Main.usable(v)) parts.add(v);
+            if (Main.usable(v) && drawnUnder(v, root)) parts.add(v);
         }
         if (parts.size() == 1) return parts.get(0);
         if (parts.size() > 1) {
@@ -118,7 +118,31 @@ public final class ClockViews {
     static View clockViewOf(View root) {
         if (!(root instanceof ViewGroup)) return null;
         ViewGroup g = (ViewGroup) root;
+        // The one that is showing. A layer can hold more than one face: oriental A keeps its
+        // big clock and its notification variant side by side and shows one of them, and the
+        // first child was the hidden one - every OEM part asked of it named views nobody sees.
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View c = g.getChildAt(i);
+            if (c.getVisibility() == View.VISIBLE && c.getAlpha() > 0.01f) return c;
+        }
         return g.getChildCount() > 0 ? g.getChildAt(0) : null;
+    }
+
+    /**
+     * Whether v is drawn at all inside its clock layer: it and every view between it and root
+     * VISIBLE and not faded out. The root itself is not asked - see resolveTimeTarget for why.
+     *
+     * usable() looks at the view alone, and that was not enough: oriental A hides its big clock
+     * face by alpha 0 in cover mode, its digits stay VISIBLE inside it, and the collapse scaled
+     * them while the clock on screen stayed full size.
+     */
+    static boolean drawnUnder(View v, View root) {
+        for (View p = v; p != null; ) {
+            if (p == root) return true;
+            if (p.getVisibility() != View.VISIBLE || p.getAlpha() <= 0.01f) return false;
+            p = p.getParent() instanceof View ? (View) p.getParent() : null;
+        }
+        return false;
     }
 
     /**
@@ -176,7 +200,7 @@ public final class ClockViews {
     }
 
     static void collectTimeViews(View v, java.util.List<View> out) {
-        if (!Main.usable(v)) return;
+        if (!Main.usable(v) || v.getAlpha() <= 0.01f) return;
         if (isTimeView(v)) {
             out.add(v);
             return;
@@ -202,6 +226,7 @@ public final class ClockViews {
     static boolean looksLikeTime(CharSequence cs) {
         if (cs == null) return false;
         String t = cs.toString().trim();
+        if (looksLikeChineseTime(t)) return true;
         if (t.isEmpty() || t.length() > 5) return false;
         boolean digit = false;
         for (int i = 0; i < t.length(); i++) {
@@ -211,6 +236,26 @@ public final class ClockViews {
             return false;
         }
         return digit;
+    }
+
+    /**
+     * "十七時零五", "九点〇八" - the oriental C face writes its time in Chinese numerals in one
+     * TextView, and nothing else recognised it: the collapse fell back to the whole container,
+     * date included, and measured that block as the glyph. Numerals with one hour/minute marker
+     * at most, short, and at least one numeral on each side of it - a date ("十月十四日") has a
+     * day marker and is not this.
+     */
+    static boolean looksLikeChineseTime(String t) {
+        if (t.length() < 2 || t.length() > 8) return false;
+        int marks = 0;
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if ("〇零一二两三四五六七八九十".indexOf(c) >= 0) continue;
+            if ("時时点點".indexOf(c) >= 0 && i > 0 && i < t.length() - 1) { marks++; continue; }
+            if (c == '分' && i == t.length() - 1 && i > 0) continue;
+            return false;
+        }
+        return marks == 1;
     }
 
     static boolean containsAll(View ancestor, java.util.List<View> views) {
@@ -275,7 +320,8 @@ public final class ClockViews {
         // and are found above, so the fallback has nothing to add there and a great deal to
         // spoil - the foreground tree draws no ink in the notification variant, and handing it
         // a full-size box is what turned a correct 578x448 ink box into 1200x1159.
-        if (times.isEmpty() && findClockView(root, "time_group") != target) {
+        boolean anchoredTarget = findClockView(root, "time_group") == target;
+        if (times.isEmpty() && !anchoredTarget) {
             // The individual digits if the OEM names them - FULL_HOUR and FULL_MINUTE are the
             // hour and minute CONTAINERS, which on a style that draws both rows around a gap
             // is most of the clock's height - and only then those two.
@@ -348,7 +394,19 @@ public final class ClockViews {
             }
             // Offsets accumulated up to the target, not just one level: a style is free to wrap
             // its digits in as many layouts as it likes between the two.
+            //
+            // And, off all_in_one, each view's own transform on the way: the rhombus face lays
+            // its digits out as a diamond and, for its notification layout, scales every digit to
+            // 0.44 and moves it into one row. Read off the layout alone the box was still the
+            // diamond - 872x1322 for a row 214px tall - and the clock was sized off that.
+            // all_in_one's digits are left as they were measured: nothing of the OEM's moves
+            // them, and its collapse was tuned on exactly these numbers.
+            boolean viaMatrix = !anchoredTarget;
             for (View p = v; p != null && p != target; ) {
+                if (viaMatrix) {
+                    android.graphics.Matrix mx = p.getMatrix();
+                    if (!mx.isIdentity()) mx.mapRect(r);
+                }
                 r.offset(p.getLeft(), p.getTop());
                 p = p.getParent() instanceof View ? (View) p.getParent() : null;
             }
@@ -665,6 +723,7 @@ public final class ClockViews {
     /** The ids the OEM gives a date line, the plain one first. */
     static final String[] DATE_IDS = {
             "text_area", "current_date", "notification_date", "tv_data", "date_and_time",
+            "date_and_week",
     };
 
     /** What the OEM itself calls the date, for the styles whose id is not in the list above. */
@@ -673,8 +732,16 @@ public final class ClockViews {
     };
 
     static boolean usableDate(View v) {
-        return v != null && v.getVisibility() == View.VISIBLE && v.getHeight() > 0
-                && v.isAttachedToWindow();
+        if (v == null || v.getVisibility() != View.VISIBLE || v.getHeight() <= 0
+                || !v.isAttachedToWindow()) return false;
+        // Not inside a face that is faded out: oriental C keeps its big face's date_and_time
+        // VISIBLE under an alpha-0 clock, and that was the date every other lookup hung from.
+        for (android.view.ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {
+            View pv = (View) p;
+            if (pv == Main.sContainer) break;
+            if (pv.getAlpha() <= 0.01f) return false;
+        }
+        return v.getAlpha() > 0.01f;
     }
 
     /**

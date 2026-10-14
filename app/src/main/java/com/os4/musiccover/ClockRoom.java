@@ -36,6 +36,8 @@ public final class ClockRoom {
 
     /** roomForRows at once, for a caller that eases its own way there (ClockCollapse.exitY). */
     static float roomForRowsNow(float requested) {
+        // The yes/no that goes with this y, re-thrown if the rows changed under it.
+        NotifPresence.recheck();
         sRoomUnobstructed = requested >= Float.MAX_VALUE / 2f;
         if (Float.isNaN(requested) || requested >= Float.MAX_VALUE / 2f) return requested;
         float top;
@@ -46,6 +48,16 @@ public final class ClockRoom {
         }
         boolean nativeEmpty = systemClockUnobstructed();
         sRoomUnobstructed = nativeEmpty || top == Float.MAX_VALUE;
+        // No row in sight - the media card is kept in the stack INVISIBLE behind the media island,
+        // and island rows the same - and a style that is not all_in_one: tell it what the system
+        // tells it when there are no notifications at all. These faces do not shrink with the y,
+        // they swap to a separate notification layout for ANY finite one (oriental A drops to its
+        // small clock with the date over it), so the boundary y below, which is all all_in_one
+        // needs, folded the clock for an island that covers nothing.
+        if (!nativeEmpty && top == Float.MAX_VALUE && !ClockViews.anchoredStyle()) {
+            ClockMove.noteRoom(requested, top, Float.MAX_VALUE);
+            return Float.MAX_VALUE;
+        }
         float out = nativeEmpty ? requested : ClockRoomPolicy.resolve(
                 requested, top, top == Float.MAX_VALUE ? unobstructedClockY() : Float.NaN);
         ClockMove.noteRoom(requested, top, out);

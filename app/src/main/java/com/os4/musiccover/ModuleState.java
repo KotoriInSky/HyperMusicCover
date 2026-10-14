@@ -52,6 +52,10 @@ public final class ModuleState {
                     // A measurement, like cardrect: the full clock the size is a fraction of.
                     + (ClockCollapse.fullUnitState() == null ? ""
                             : "\nclockfull=" + ClockCollapse.fullUnitState())
+                    // The anchored styles' full clock, which every other style's size is read
+                    // against - kept apart so switching to one of those does not lose it.
+                    + (Float.isNaN(ClockCollapse.refUnitState()) ? ""
+                            : "\nclockref=" + ClockCollapse.refUnitState())
                     + "\nmctap=" + (Main.sMcTitleTap ? 1 : 0)
                     + "\nmcpage=" + (Main.sMcPageBtn ? 1 : 0)
                     + "\ntap=" + (Main.sTapToggle ? 1 : 0)
@@ -175,6 +179,7 @@ public final class ModuleState {
                         // cover takes is still the user's.
                         else if ("clock".equals(k)) Main.setClockHeightDp(Float.parseFloat(v));
                         else if ("clockfull".equals(k)) ClockCollapse.restoreFullUnit(v);
+                        else if ("clockref".equals(k)) ClockCollapse.restoreRefUnit(Float.parseFloat(v));
                         else if ("clocksize".equals(k)) Main.setClockSize(Float.parseFloat(v));
                         // clockoff, glass and spring are not read: the clock's offset, the glass
                         // clock's end and the transition's spring are all fixed. Each is still
