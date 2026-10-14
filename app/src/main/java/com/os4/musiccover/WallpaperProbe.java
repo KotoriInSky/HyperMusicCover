@@ -203,6 +203,35 @@ public class WallpaperProbe {
     private static volatile Object sDesktopEngine;
 
     /**
+     * The lock screen shows the desktop's still, with no keyguard engine of its own (#84: a
+     * carousel applied to both screens). Told by SystemUI (CoverPush.sSharedLock). While it holds
+     * and the lock screen is up, the desktop renderer IS the lock screen's renderer: its uploads
+     * go through the keyguard branch, cover, fade, frost and all, and the cover is in the
+     * wallpaper window where the clock's glass and the cards sample it.
+     */
+    private static volatile boolean sSharedLock;
+
+    /**
+     * The desktop engine's own word on the lock screen: its show/hideKeyguardWallpaper calls,
+     * which arrive as the keyguard locks and unlocks. Null until the first of them - a process
+     * started on the lock screen - and then SystemUI's reading, carried on its messages, fills in.
+     */
+    private static volatile Boolean sDesktopKgShown;
+
+    /**
+     * The desktop renderer's last getBitmap was answered with one of ours. Read by the upload
+     * that follows it: if the lock screen went in between, that upload is the home screen's,
+     * and it is carrying a cover.
+     */
+    private static volatile boolean sDesktopGaveOurs;
+
+    /** The desktop's renderer, from its last upload. */
+    private static volatile Object sDesktopRenderer;
+
+    /** The desktop's last upload went through the keyguard branch. */
+    private static volatile boolean sDesktopOnLock;
+
+    /**
      * The shade is up, so the DESKTOP wallpaper should be showing the cover.
      *
      * Why the desktop wallpaper at all: the notification shade's glass samples what is BEHIND
@@ -235,6 +264,9 @@ public class WallpaperProbe {
 
     private static final String CLS_KEYGUARD_ENGINE =
             "com.miui.miwallpaper.wallpaperservice.impl.keyguard.KeyguardImageEngineImpl";
+
+    private static final String CLS_DESKTOP_IMAGE_ENGINE =
+            "com.miui.miwallpaper.wallpaperservice.impl.desktop.DesktopImageEngineImpl";
 
     /** Asked for the cover again, at most this often. */
     private static final long ASK_MIN_MS = 2000L;
@@ -567,6 +599,10 @@ public class WallpaperProbe {
             Xp.hookAllLambdas(base, "lambda$onSurfaceCreated$0", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 boolean keyguard = chain.getThisObject().getClass().getName().contains("Keyguard");
+                if (!keyguard && args.length > 0 && args[0] instanceof Bitmap
+                        && chain.getThisObject().getClass().getName().contains("Desktop")) {
+                    keyguard = desktopUpload(chain.getThisObject(), (Bitmap) args[0]);
+                }
                 // Temporary diagnostic: name every renderer that reaches the upload, so the
                 // DESKTOP one can be addressed by name. It shares this code path and is let
                 // through below - nothing here changes for it.
@@ -806,6 +842,36 @@ public class WallpaperProbe {
             Xp.w(TAG + "getBitmap short-circuit failed: " + t);
         }
 
+        // The same short-circuit for the desktop renderer while it draws a shared lock screen's
+        // cover. Its cache is dropped on every reload, so without this each one decoded the
+        // wallpaper off disk first - 150-300ms measured, in front of every fade, and on the way
+        // out the depth cut-out came back that long before the wallpaper began to (#84).
+        try {
+            Class<?> dr = Xp.findClass(
+                    "com.miui.miwallpaper.container.openGL.DesktopAnimImageWallpaperRenderer",
+                    sCl);
+            Xp.hookAll(dr, "getBitmap", chain -> {
+                if (!desktopOnLockWanted()) {
+                    sDesktopGaveOurs = false;
+                    return chain.proceed();
+                }
+                Bitmap ours = null;
+                Bitmap ov = sUploadOverride;
+                if (ov != null && sGpuFade != null && !ov.isRecycled()) ours = ov;
+                if (ours == null) ours = fittedArt();
+                if (ours == null) ours = sOrig;
+                if (ours == null || ours.isRecycled()) {
+                    sDesktopGaveOurs = false;
+                    return chain.proceed();
+                }
+                sDesktopGaveOurs = true;
+                return ours;
+            });
+            Xp.log(TAG + "desktop getBitmap short-circuit installed");
+        } catch (Throwable t) {
+            Xp.w(TAG + "desktop getBitmap short-circuit failed: " + t);
+        }
+
         // Runtime refresh. ImageEngineImpl.U() ("preRender", on the GL thread) re-runs
         //     mRenderer.onSurfaceCreated(); mRenderer.onSurfaceChanged(w, h)
         // whenever its pending-surface flag is set, and onSurfaceCreated is the path that ends in
@@ -852,13 +918,46 @@ public class WallpaperProbe {
                     Object self = chain.getThisObject();
                     String n = self.getClass().getName();
                     if (sEngineNames.add(n)) Xp.log(TAG + "engine instance: " + n);
-                    if (n.contains("Desktop")) sDesktopEngine = self;
+                    if (n.contains("Desktop")) {
+                        sDesktopEngine = self;
+                        // The names live on the shared base class, so the desktop's are the
+                        // keyguard's - but with no keyguard engine nothing would read them, and a
+                        // reload without the pending-surface flag only redraws (#84, shared).
+                        if (sKeyguardEngine == null) EngineNames.resolve(self);
+                    }
                     return result;
                 });
                 Xp.log(TAG + "engine base constructors hooked");
             }
         } catch (Throwable t) {
             Xp.w(TAG + "engine base hook failed: " + t);
+        }
+
+        // The desktop still's word on the lock screen, for a lock screen that shares it. See
+        // sSharedLock. The names are the EngineService interface's and survive R8.
+        try {
+            Class<?> de = Xp.findClass(CLS_DESKTOP_IMAGE_ENGINE, sCl);
+            int n = 0;
+            for (Method m : de.getDeclaredMethods()) {
+                final boolean show = m.getName().equals("showKeyguardWallpaper");
+                if (!show && !m.getName().equals("hideKeyguardWallpaper")) continue;
+                if (Modifier.isAbstract(m.getModifiers())) continue;
+                // Only the (boolean, int) pair: the controller sends it to every engine together
+                // with its setKeyguardLocked. The no-argument hide is something else - sent from
+                // the screen-on and unlock animations with the lock screen still up.
+                if (m.getParameterCount() != 2) continue;
+                Xp.hook(m, chain -> {
+                    Object r = chain.proceed();
+                    if (sSharedLock) onDesktopKeyguard(show);
+                    else sDesktopKgShown = show;
+                    return r;
+                });
+                n++;
+            }
+            Xp.log(TAG + "desktop engine keyguard calls hooked (" + n + ")");
+        } catch (Throwable t) {
+            Xp.w(TAG + "desktop engine keyguard hook failed, a shared lock wallpaper keeps the"
+                    + " cover off: " + t);
         }
 
         // The live lock wallpaper's engine, its player and its path. See hookVideoEngines().
@@ -1241,6 +1340,12 @@ public class WallpaperProbe {
             reloadTexture();
             return;
         }
+        if (sSharedLock && lockEngine() == null) {
+            // The desktop is on screen and the lock screen's picture is not on it: nothing to
+            // fade. The cover is put on when the lock screen comes back - syncSharedLock().
+            if (done != null) done.run();
+            return;
+        }
         if (gpuFadeUsable()) {
             startGpuFade(from, to, done, durMs);
             return;
@@ -1320,7 +1425,7 @@ public class WallpaperProbe {
                 sFadeSentAt = SystemClock.uptimeMillis();
                 // Kept alive between frames: T(false) finishes rendering after every frame,
                 // which throws the EGL context away for the next one to rebuild.
-                reloadEngine(sKeyguardEngine, true);
+                reloadEngine(lockEngine(), true);
                 h.postDelayed(this, FADE_STEP_MS);
             }
         });
@@ -1375,8 +1480,10 @@ public class WallpaperProbe {
     /** Whether the GPU fade can be trusted with the keyguard as it is right now. */
     private static boolean gpuFadeUsable() {
         if (!sGpuFadeOn || sGpuFadeBroken || !sDrawHooked || sPlainProgram == null) return false;
-        Object renderer = sKeyguardRenderer;
-        if (renderer == null || sKeyguardEngine == null) return false;
+        // On a shared still the desktop renderer stands in for the keyguard's, and it is known
+        // before its first upload as the lock screen's - which is the upload the fade starts.
+        Object renderer = sSharedLock ? sDesktopRenderer : sKeyguardRenderer;
+        if (renderer == null || lockEngine() == null) return false;
         try {
             Object prog = Xp.getObjectField(Xp.getObjectField(renderer, "mAnimator"), "mProgram");
             if (prog != null && prog.getClass() == sPlainProgram) return true;
@@ -1458,7 +1565,7 @@ public class WallpaperProbe {
         GpuFade f = new GpuFade(from, to, 1f, 0f, to, durMs, done);
         sUploadOverride = to;
         sGpuFade = f;
-        reloadEngine(sKeyguardEngine, true);
+        reloadEngine(lockEngine(), true);
         return f;
     }
 
@@ -1480,6 +1587,10 @@ public class WallpaperProbe {
         sGpuFade = null;
         sUploadOverride = null;
         if (f.done != null) f.done.run();
+        // A cover that has just faded out leaves the desktop holding the lock screen's cut of
+        // its own picture. Put back now, under the lock screen where it looks the same, rather
+        // than as the user unlocks.
+        if (sSharedLock) syncSharedLock();
         // A video held back by the fade is drawn from the next frame; ask for it rather than
         // wait on the player's next one, which a paused player would never send.
         if (WallpaperVideo.on()) videoFrame();
@@ -1570,7 +1681,7 @@ public class WallpaperProbe {
                         if (sGpuFade != f) return;
                         sUploadOverride = f.dest;
                         f.swapRequested = true;
-                        reloadEngine(sKeyguardEngine, true);
+                        reloadEngine(lockEngine(), true);
                     }
                 });
             }
@@ -1807,6 +1918,13 @@ public class WallpaperProbe {
                         + (carried == null ? " " + i.getExtras() : " jpg=" + carried.length + "B"));
                 try {
                     if (i.hasExtra("video")) noteLockWallpaper(i.getBooleanExtra("video", false));
+                    if (i.hasExtra("shared")) noteSharedLock(i.getBooleanExtra("shared", false));
+                    // Only where the engine has said nothing yet - a process that started on the
+                    // lock screen. Its own show/hide is the authority: a message sent just before
+                    // an unlock can land just after the hide, and must not undo it.
+                    if (i.hasExtra("locked") && sDesktopKgShown == null) {
+                        sDesktopKgShown = i.getBooleanExtra("locked", false);
+                    }
                     if ("cls".equals(op)) {
                         dumpClass(i.getStringExtra("name"), i.getStringExtra("grep"));
                     } else if ("bmp".equals(op)) {
@@ -2100,6 +2218,21 @@ public class WallpaperProbe {
         ProbeGuard.register(ctx, new IntentFilter(ACTION), TAG, Probe::new,
                 "com.android.systemui", BuildConfig.APPLICATION_ID);
         Xp.log(TAG + "receiver registered for " + ACTION);
+        // The backstop for a hide that never reached the desktop engine. The show needs none:
+        // it comes as the keyguard locks, which is at the screen going off, not at the wake.
+        try {
+            IntentFilter screen = new IntentFilter(Intent.ACTION_USER_PRESENT);
+            ctx.registerReceiver(new android.content.BroadcastReceiver() {
+                @Override
+                public void onReceive(Context c, Intent i) {
+                    sDesktopKgShown = false;
+                    if (!sSharedLock) return;
+                    new Handler(Looper.getMainLooper()).post(WallpaperProbe::syncSharedLock);
+                }
+            }, screen, Context.RECEIVER_EXPORTED);
+        } catch (Throwable t) {
+            Xp.w(TAG + "screen receiver failed: " + t);
+        }
         // Unprompted as well as when asked: a restart of this process alone would otherwise
         // leave SystemUI on whatever it last heard, which may be nothing.
         sayHello(ctx);
@@ -2574,12 +2707,128 @@ public class WallpaperProbe {
     }
 
     private static void reloadTexture() {
-        Object eng = sKeyguardEngine;
+        Object eng = lockEngine();
         if (eng == null) {
+            if (sSharedLock) {
+                // Not a failure: the desktop is on screen, and the cover waits for the lock
+                // screen - see syncSharedLock().
+                Xp.log(TAG + "reload: the lock screen shares the desktop and is not up, the cover"
+                        + " waits for it");
+                return;
+            }
             Xp.log(TAG + "reload: no keyguard engine (is the lockscreen wallpaper "
                     + "still the same image as the desktop one?)");
             return;
         }
+        reloadEngine(eng);
+    }
+
+    /**
+     * The engine whose texture the lock screen shows: the keyguard's, or with a shared still the
+     * desktop's while the lock screen is up. Null when the lock screen shows nothing of ours to
+     * reload - shared, and the desktop is what is on screen.
+     */
+    private static Object lockEngine() {
+        if (!sSharedLock) return sKeyguardEngine;
+        return sharedKeyguardShown() ? sDesktopEngine : null;
+    }
+
+    private static boolean sharedKeyguardShown() {
+        Boolean shown = sDesktopKgShown;
+        return shown != null ? shown : lockScreenUp();
+    }
+
+    /** Whether the desktop's next upload is the lock screen's. See sSharedLock. */
+    private static boolean desktopOnLockWanted() {
+        return sSharedLock && (sArt != null || sFade != null) && sharedKeyguardShown();
+    }
+
+    /**
+     * GL thread, from the upload hook: whether this desktop upload goes through the keyguard
+     * branch. When it does not, everything the keyguard branch left on the desktop's texture is
+     * taken back, so the home screen gets its own picture at its own geometry - the texture
+     * dimension hook would otherwise keep answering with the screen-sized cut.
+     */
+    private static boolean desktopUpload(Object renderer, Bitmap orig) {
+        sDesktopRenderer = renderer;
+        boolean lock = desktopOnLockWanted();
+        if (lock != sDesktopOnLock) {
+            sDesktopOnLock = lock;
+            Xp.log(TAG + (lock ? "the desktop renderer draws the lock screen's cover"
+                    : "the desktop renderer is back to its own picture"));
+        }
+        boolean gaveOurs = sDesktopGaveOurs;
+        sDesktopGaveOurs = false;
+        if (lock) return true;
+        if (gaveOurs) {
+            // Unlocked between the source and the upload: what is about to go up is a cover, on
+            // the home screen. Up it goes - this frame cannot be stopped - and straight after it
+            // the desktop's own picture.
+            Xp.log(TAG + "the desktop was handed a cover as the lock screen went; reloading it");
+            final Object eng = sDesktopEngine;
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (!desktopOnLockWanted()) reloadEngine(eng);
+            });
+        }
+        try {
+            Object t = Xp.getObjectField(renderer, "mTexture");
+            if (t != null) {
+                sTexSizes.remove(t);
+                if (sKeyguardTexture == t) sKeyguardTexture = null;
+            }
+        } catch (Throwable ignored) {
+        }
+        if (sKeyguardRenderer == renderer) sKeyguardRenderer = null;
+        // What a cover fades in from. The keyguard branch learns it from the upload that carries
+        // no cover, which on a shared still never comes, so it is taken from the desktop's own
+        // uploads instead, cut to the screen exactly as the keyguard branch would cut it.
+        if (sSharedLock && !sShadeOn && sArt == null && !gaveOurs) {
+            adoptSurfaceOf(renderer);
+            Bitmap screen = screenSized(orig);
+            rememberOriginal(screen != null ? screen : orig);
+        }
+        return false;
+    }
+
+    /** Told by SystemUI on every message. See sSharedLock. */
+    private static void noteSharedLock(boolean shared) {
+        if (shared == sSharedLock) return;
+        sSharedLock = shared;
+        Xp.log(TAG + (shared ? "the lock screen shares the desktop's still: the cover goes on the"
+                + " desktop engine while locked" : "the lock screen has a wallpaper of its own again"));
+        // Whatever was remembered belonged to the other arrangement's lock wallpaper.
+        sOrig = null;
+        new Handler(Looper.getMainLooper()).post(() -> {
+            // The picture the first cover fades in from is learnt from a desktop upload with no
+            // cover on it. One now, of the picture already on screen, so that first fade is not
+            // a cut.
+            if (shared && sArt == null && sDesktopEngine != null) reloadEngine(sDesktopEngine);
+            syncSharedLock();
+        });
+    }
+
+    /**
+     * The desktop engine was told the lock screen showed or hid. Main thread or binder - posted.
+     */
+    private static void onDesktopKeyguard(boolean showing) {
+        sDesktopKgShown = showing;
+        new Handler(Looper.getMainLooper()).post(WallpaperProbe::syncSharedLock);
+    }
+
+    /**
+     * Puts the desktop's texture in step with the lock screen: the cover on it while the lock
+     * screen is up, the desktop's own picture the moment it goes. One reload, and only when the
+     * two disagree, so a phone without a cover never has its desktop touched. Main thread.
+     */
+    private static void syncSharedLock() {
+        boolean want = desktopOnLockWanted();
+        if (want == sDesktopOnLock) return;
+        Object eng = sDesktopEngine;
+        if (eng == null) return;
+        // A fade in the air is left to finish on its own: its frames find no engine to reload
+        // once the lock screen is gone, and its end is what clears the art on the way out.
+        Xp.log(TAG + (want ? "the cover goes on the shared desktop wallpaper"
+                : "the shared desktop wallpaper gets its own picture back"));
         reloadEngine(eng);
     }
 
@@ -2788,7 +3037,7 @@ public class WallpaperProbe {
 
     /** A redraw of what is uploaded, with no reload - the GPU fade's per-frame request. */
     private static void requestFrame(boolean keepAlive) {
-        Object eng = sKeyguardEngine;
+        Object eng = lockEngine();
         if (eng != null && !frameRequest(eng, keepAlive)) reportNoFrameRequest(eng);
     }
 

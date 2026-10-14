@@ -1114,6 +1114,10 @@ public final class CoverPush {
         // out for itself - it only knows which engines it has BUILT, and those are built once
         // per process - and this side re-reads it before every push anyway. See videoPath().
         out.putExtra("video", Main.sVideoWallpaper);
+        out.putExtra("shared", sSharedLock);
+        // For a shared still: the wallpaper process's own reading of the keyguard was measured
+        // false with the phone locked, and its engine is only told at the next lock.
+        if (sSharedLock) out.putExtra("locked", Main.keyguardShowing());
         return out;
     }
 
@@ -1458,6 +1462,15 @@ public final class CoverPush {
     private static volatile boolean sWpCheckedAnswer;
 
     /**
+     * The lock screen has no wallpaper entry of its own and shows the desktop's still picture -
+     * what a carousel applied to both screens leaves behind (锁屏画报's `gallery` on both slots,
+     * #84). MIUI then builds no keyguard engine at all, so the wallpaper process has to put the
+     * cover on the DESKTOP engine while the lock screen is up. The slot is not ours to write: the
+     * carousel owns it. Carried to the wallpaper process on every message, like the video flag.
+     */
+    static volatile boolean sSharedLock;
+
+    /**
      * How long that answer stands. The check is the first thing on the worker before every push,
      * and the artwork read is queued behind it, so its cost lands in front of every track change:
      * two wallpaper files opened and their headers decoded, MIUI's records parsed for both slots,
@@ -1497,6 +1510,18 @@ public final class CoverPush {
         String lockKind = wallpaperKind(ctx, "lock");
         boolean live = Main.liveKind(lockKind);
         Main.sVideoWallpaper = live;
+        boolean shared = false;
+        try {
+            shared = !live && sharesTheDesktopStill(ctx, wm, lockKind);
+        } finally {
+            if (shared != sSharedLock) {
+                Xp.log(Main.TAG + (shared ? "the lock screen shows the desktop's own still ("
+                        + lockKind + "), so the cover goes on the desktop engine while locked"
+                        : "the lock screen no longer shares the desktop's wallpaper"));
+            }
+            sSharedLock = shared;
+        }
+        if (shared) return false;
         if (live) {
             // Nothing to repair, and nothing that may be written: setBitmap(FLAG_LOCK) would
             // unbind the live wallpaper for good. The cover still works - it just goes into
@@ -1581,6 +1606,24 @@ public final class CoverPush {
             Xp.log(Main.TAG + "could not set a lock wallpaper: " + Log.getStackTraceString(t));
             return false;
         }
+    }
+
+    /**
+     * See sSharedLock. Only for a still some other app manages: a plain `image` with no slot of
+     * its own still gets the copy of the home wallpaper below, which is the better answer when the
+     * slot is the user's own.
+     */
+    @SuppressLint("MissingPermission")
+    private static boolean sharesTheDesktopStill(Context ctx, android.app.WallpaperManager wm,
+                                                 String lockKind) {
+        if (Main.KIND_IMAGE.equals(lockKind)) return false;
+        if (wm.getWallpaperId(android.app.WallpaperManager.FLAG_LOCK) >= 0) return false;
+        // MIUI keeps the lock record (`gallery`, carousel="true") while the slot itself follows
+        // the desktop, so the record alone says nothing. What the lock screen shows is the
+        // desktop's picture, and that is what has to be a still.
+        String homeKind = wallpaperKind(ctx, "home");
+        return homeKind != null && !Main.liveKind(homeKind)
+                && (lockKind != null || !Main.KIND_IMAGE.equals(homeKind));
     }
 
     /**
