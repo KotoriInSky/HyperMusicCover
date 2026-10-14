@@ -75,6 +75,12 @@ public final class CoverPush {
 
     private static void pushArtToWallpaper(Context ctx, boolean on, Bitmap art) {
         long t0 = android.os.SystemClock.uptimeMillis();
+        // 保留壁纸: the wallpaper is the user's own throughout. Sent as the way out, so a cover
+        // already up - the style switched with cover mode on - fades back to the wallpaper, and
+        // so everything the way out drops (the motion cover, the square, a live wallpaper's view)
+        // goes with it. The track key stays: it is what tells the next track change from this one.
+        boolean keep = on && Main.keepsWallpaper();
+        if (keep) on = false;
         Intent out = wallpaperIntent("art");
         out.putExtra("cardmode", Main.sCoverCardStyle.mode == CoverCardStyle.CARD);
         // The blur travels with the cover. A lyricblur broadcast is one shot - dropped, or
@@ -109,7 +115,7 @@ public final class CoverPush {
             if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0);
             out.putExtra("off", true);
             ProbeGuard.send(ctx, out);
-            Main.sTrackKey = "";
+            if (!keep) Main.sTrackKey = "";
             // Nothing behind the clock any more, so nothing to take a colour from. The repaint
             // that hands the OEM's own colours back happens with the rest of cover mode.
             Main.sCoverTint = 0;
@@ -118,7 +124,7 @@ public final class CoverPush {
             // card, the release path and the cover op all end up here - so it is the only place
             // the picture has to be dropped.
             if (!ShadeLayer.keepsArt()) ShadeLayer.setArt(null);
-            Xp.log(Main.TAG + "pushart off");
+            Xp.log(Main.TAG + (keep ? "pushart off: the wallpaper is kept" : "pushart off"));
             return;
         }
         if (art == null) { Xp.log(Main.TAG + "pushart: no album art"); return; }

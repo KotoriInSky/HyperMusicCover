@@ -377,9 +377,11 @@ private fun DrawScope.drawCover(sc: CoverScene, look: Look, pal: SkeuoPalette, m
     val (s, o) = sc.cam.view(size.width, size.height, fill = PICTURE_FILL)
     val map = { x: Float, y: Float -> Offset(o.x + x * s, o.y + y * s) }
     val c = sc.cover.value.coerceIn(0f, 1.05f)
-    val cc = c.coerceAtMost(1f)
-    val bg = ramp(0f, 0.7f, c)
     val lyr = sc.lyrics.value
+    // 保留壁纸: no artwork anywhere, and the clock goes small for the lyrics alone.
+    val keep = look.style == 2
+    val cc = if (keep) lyr.coerceIn(0f, 1f) else c.coerceAtMost(1f)
+    val bg = if (keep) 0f else ramp(0f, 0.7f, c)
     val dz = sc.aod.value
     val card = look.style == 1
     withTransform({
@@ -399,7 +401,11 @@ private fun DrawScope.drawCover(sc: CoverScene, look: Look, pal: SkeuoPalette, m
                     val veil = if (card) 0.22f else 0.08f + 0.14f * lyr
                     drawRect(Color.Black.copy(alpha = veil * bg), Offset.Zero, Size(PW, PH))
                 }
-                drawFlight(sc, look, card, lyr)
+                // Its veil: the wallpaper a little darker under the words (KeepDim.MAX_ALPHA).
+                if (keep && lyr > 0.003f) {
+                    drawRect(Color.Black.copy(alpha = 0.25f * lyr), Offset.Zero, Size(PW, PH))
+                }
+                if (!keep) drawFlight(sc, look, card, lyr)
                 drawMedia(sc, pal, bg)
                 for (x in floatArrayOf(12.5f, 87.5f)) {
                     drawCircle(lerp(pal.pill, Color.White.copy(alpha = 0.3f), bg), DISC_D / 2f, Offset(x, RY))

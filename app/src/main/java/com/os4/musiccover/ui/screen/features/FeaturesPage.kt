@@ -311,8 +311,9 @@ private fun CoverGroup(
         WindowDropdownPreference(
             title = stringResource(R.string.cover_style),
             items = listOf(stringResource(R.string.cover_style_full),
-                stringResource(R.string.cover_style_card)),
-            selectedIndex = module.coverStyle.coerceIn(0, 1),
+                stringResource(R.string.cover_style_card),
+                stringResource(R.string.cover_style_keep)),
+            selectedIndex = module.coverStyle.coerceIn(0, 2),
             enabled = enabled,
             onSelectedIndexChange = {
                 onChange(module.copy(coverStyle = it))
@@ -328,7 +329,8 @@ private fun CoverGroup(
         // screen is not the same on every phone.
         // Both styles: the square plays it in the card, the full-screen cover in the wallpaper.
         // No summary, like every row on this page.
-        SwitchPreference(
+        // 保留壁纸 has no artwork to move. Hidden rather than greyed, like the bias below.
+        if (module.coverStyle != 2) SwitchPreference(
             title = stringResource(R.string.cover_motion),
             checked = module.motionCover,
             enabled = enabled,

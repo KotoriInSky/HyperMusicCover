@@ -117,6 +117,9 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                     CoverCardLayer.playback(Main.sCoverCardPlaying);
                 }
                 CoverPush.pushArtAsync(true, false);
+                // Into or out of 保留壁纸, the clock changes hands between cover mode and the
+                // lyric page.
+                Main.syncCoverHold(true);
             }
         } else if ("mediacard".equals(op)) {
             if (i.hasExtra("hideart")) Main.sMcHideArt = i.getBooleanExtra("hideart", false);

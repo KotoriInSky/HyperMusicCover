@@ -1271,6 +1271,8 @@ public final class LockLyrics {
     }
 
     public static void refresh() {
+        // 保留壁纸 hangs the clock on the lyric page, and this is where the page comes and goes.
+        Main.syncCoverHold(Main.screenOnCached());
         updateBlur();
         updateHdr();
         if (wantsAttached()) attach();

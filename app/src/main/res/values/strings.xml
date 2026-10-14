@@ -14,6 +14,7 @@
     <string name="cover_style">封面展现形式</string>
     <string name="cover_style_full">全屏封面</string>
     <string name="cover_style_card">方形卡片</string>
+    <string name="cover_style_keep">保留壁纸</string>
     <string name="cover_clock_section">封面与时钟</string>
     <string name="lyrics_section">锁屏歌词</string>
     <string name="clock_size">时钟大小</string>

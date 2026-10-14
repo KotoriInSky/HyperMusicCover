@@ -14,6 +14,7 @@
     <string name="cover_style">Cover presentation</string>
     <string name="cover_style_full">Full-screen cover</string>
     <string name="cover_style_card">Square card</string>
+    <string name="cover_style_keep">Keep wallpaper</string>
     <string name="cover_clock_section">Cover &amp; clock</string>
     <string name="lyrics_section">Lyrics</string>
     <string name="clock_size">Clock size</string>

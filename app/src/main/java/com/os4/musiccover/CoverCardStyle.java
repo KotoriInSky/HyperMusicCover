@@ -12,6 +12,12 @@ package com.os4.musiccover;
 final class CoverCardStyle {
     static final int FULL = 0;
     static final int CARD = 1;
+    /**
+     * 保留壁纸: cover mode with the user's own wallpaper behind it - nothing is pushed. The clock
+     * goes small, the cut-out goes and the wallpaper dims only while the lyric page is up; off it
+     * the lock screen is the OEM's, big clock and all. What #84's bug looked like, asked for.
+     */
+    static final int KEEP = 2;
     /** Least room kept to the clock, the media card and the screen edges. */
     static final float GAP_DP = 16f;
     static final float MIN_FILL = 0.4f;
@@ -64,7 +70,7 @@ final class CoverCardStyle {
     final float corner;
 
     CoverCardStyle(int mode, float fill, float pos, float corner) {
-        this.mode = mode == CARD ? CARD : FULL;
+        this.mode = mode == CARD || mode == KEEP ? mode : FULL;
         this.fill = finite(fill, MIN_FILL, 1f, FIXED_FILL);
         this.pos = finite(pos, 0f, 1f, FIXED_POS);
         this.corner = Float.isFinite(corner) ? Math.max(0f, Math.min(1f, corner)) : Float.NaN;

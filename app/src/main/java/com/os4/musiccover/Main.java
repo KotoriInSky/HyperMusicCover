@@ -2441,7 +2441,9 @@ public class Main extends XposedModule {
         // The response is the slider's, read when the transition starts and nowhere else, which
         // is what makes a change land on the next transition and never mid-flight. The cut-out
         // goes with it; both are LockHold's, shared with the immersive pages.
-        LockHold.take(LockHold.Owner.COVER, animate, "cover");
+        // With 保留壁纸 the clock is the lyric page's rather than cover mode's: off it the lock
+        // screen keeps the OEM's big clock and the cut-out. See syncCoverHold().
+        syncCoverHold(animate);
         // An immersive page closing in the same tap fades out onto this cover, not ahead of it.
         ImmersiveHost.coverEntering();
         // The reading may predate this cover - the card can come up on art that was pushed
@@ -2484,7 +2486,9 @@ public class Main extends XposedModule {
         // screen while the cover still has it, and the clock and the cut-out never see a moment
         // with no owner.
         ImmersiveHost.coverLeft();
+        sCoverHeld = false;
         LockHold.give(LockHold.Owner.COVER, animate);
+        if (!animate) KeepDim.apply(0f);
         if (LockHold.clockHeld()) {
             MediaCard.sCardP = 0f;
             MediaCard.applyMediaCard();
@@ -2497,6 +2501,46 @@ public class Main extends XposedModule {
         // The lyrics fade out on their own and leave the keyguard once they have.
         LockLyrics.refresh();
         ModuleState.saveState();
+    }
+
+    /** Whether cover mode has the lock screen's clock and cut-out right now. See syncCoverHold(). */
+    private static boolean sCoverHeld;
+
+    /** 保留壁纸: cover mode leaves the wallpaper alone. See CoverCardStyle.KEEP. */
+    static boolean keepsWallpaper() {
+        return sCoverCardStyle.mode == CoverCardStyle.KEEP;
+    }
+
+    /** The clock is small for the cover, or flying back from it. KeepDim's gate. */
+    static boolean coverHoldsClock() {
+        return sCoverHeld || LockHold.exitingFor(LockHold.Owner.COVER);
+    }
+
+    /**
+     * Takes or gives the lock screen's clock and cut-out for cover mode.
+     *
+     * Normally they are cover mode's for as long as it is on. With 保留壁纸 there is no cover to
+     * clear the way for, so they are the lyric page's instead: up, the clock goes small, the
+     * cut-out goes and the wallpaper dims; off - a two-finger tap away, or a song with no lyrics -
+     * the lock screen is the OEM's own, big clock in front of the subject. Called on entry and
+     * whenever the lyric page may have come or gone (LockLyrics.refresh), and idempotent.
+     */
+    public static void syncCoverHold(boolean animate) {
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            main().post(() -> syncCoverHold(animate));
+            return;
+        }
+        boolean want = sCoverMode && (!keepsWallpaper() || LockLyrics.wantsAttached());
+        if (want == sCoverHeld) return;
+        sCoverHeld = want;
+        if (want) {
+            LockHold.take(LockHold.Owner.COVER, animate, "cover");
+            return;
+        }
+        LockHold.give(LockHold.Owner.COVER, animate);
+        if (!animate) KeepDim.apply(0f);
+        // The lyrics fade out with the clock and leave the keyguard once they have.
+        LockLyrics.refresh();
     }
 
     /** ClockCollapse let go of the clock. Outside cover mode, the card goes back with it. */
