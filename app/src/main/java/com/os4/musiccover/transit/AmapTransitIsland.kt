@@ -380,6 +380,23 @@ internal object AmapTransitIsland {
             Uri.parse(trip.deepLink.ifEmpty { "amapuri://amap?clearStack=0&keepStack=1" }))
             .setPackage(ctx.packageName)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val tap = PendingIntent.getActivity(ctx, ID, open,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        // The back screen's card: without one it draws 高德's notifications as a ride-hailing car.
+        try {
+            val (day, night) = TransitRear.cards(ctx, c, title, lineRow, appIcon(ctx),
+                { bigBus(c.lineBg) }, tap)
+            extras.putParcelable("miui.rear.rv", day)
+            extras.putParcelable("miui.rear.rvAOD", night)
+            // Said, not left to the back screen's list: its default for 高德 is `carHailing`, and
+            // naming the same business is what it checks ("Business matched"); a different one
+            // would be rejected outright.
+            extras.putString("miui.rear.param", JSONObject()
+                .put("rear_param_v1", JSONObject().put("business", "carHailing"))
+                .toString())
+        } catch (t: Throwable) {
+            Xp.log(TAG + "no back screen card: $t")
+        }
         val small = ctx.resources.getIdentifier("notification_amap", "drawable", ctx.packageName)
             .takeIf { it != 0 } ?: ctx.applicationInfo.icon
         val n = Notification.Builder(ctx, CHANNEL)
@@ -391,8 +408,7 @@ internal object AmapTransitIsland {
             .setOnlyAlertOnce(!milestone)
             .setShowWhen(false)
             .setTimeoutAfter(timeout(c.status))
-            .setContentIntent(PendingIntent.getActivity(ctx, ID, open,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            .setContentIntent(tap)
             .addExtras(extras)
             .build()
         nm.notify(ID, n)
@@ -726,6 +742,21 @@ internal object AmapTransitIsland {
         c.restore()
         c.drawOval(RectF(600.3f, 244.9f, 602.7f, 248.1f), paint(0xffb8c4dc.toInt()))
         c.restore()
+    }
+
+    /**
+     * [bus] for the back screen card, on the 100 x 40 grid it is drawn on. The card stretches it to
+     * 233dp, about 700px at the back screen's 2.8x, but it goes into the notification twice (the
+     * day card and the always-on one) and the notification is reposted all trip: 300px is a
+     * quarter of the bytes of 600, and a flat drawing loses next to nothing upscaled.
+     */
+    private fun bigBus(line: Int): Bitmap {
+        val w = 300
+        val b = Bitmap.createBitmap(w, w * 2 / 5, Bitmap.Config.ARGB_8888)
+        val c = Canvas(b)
+        c.scale(w / 100f, w / 100f)
+        bus(c, line)
+        return b
     }
 
     /** A bus in the same hand: the same shell and glass, a flat front, three windows, two wheels. */

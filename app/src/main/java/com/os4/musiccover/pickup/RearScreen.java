@@ -33,6 +33,9 @@ public final class RearScreen {
 
     /** Our notification's package. The list has no entry for it; this is the whole problem. */
     private static final String OURS = "com.android.systemui";
+    private static final String AMAP = "com.autonavi.minimap";
+    /** AmapTransitIsland.ID, written out: that object is internal to its package. */
+    private static final int AMAP_TRANSIT_ID = 1239;
 
     private RearScreen() {
     }
@@ -222,6 +225,9 @@ public final class RearScreen {
         org.json.JSONObject extra = entry.optJSONObject("extra");
         if (extra == null) return false;
         String key = extra.optString("notification_key", "");
+        // The bus and subway trip's card (AmapTransitIsland, TransitRear) is posted as 高德, under
+        // the one id only this module uses there, and is a RemoteViews card like the pickup's.
+        if (key.contains("|" + AMAP + "|" + AMAP_TRANSIT_ID + "|")) return true;
         if (!key.contains("|mc-")) return false;
         return OURS.equals(extra.optString("package_name")) || key.contains("|" + OURS + "|");
     }

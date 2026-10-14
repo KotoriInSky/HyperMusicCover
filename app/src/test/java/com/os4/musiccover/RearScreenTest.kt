@@ -59,6 +59,19 @@ class RearScreenTest {
     }
 
     @Test
+    fun theTripCardComesOutAndAmapsOwnStay() {
+        val widgets = JSONArray(
+            listOf(
+                // 高德's own ride-hailing card: its template, not ours.
+                entry("com.autonavi.minimap", "0|com.autonavi.minimap|1236|null|10388"),
+                // The trip's card, posted as 高德 under 1239.
+                entry("com.autonavi.minimap", "0|com.autonavi.minimap|1239|null|10388"),
+            ).joinToString(",", prefix = "[", postfix = "]"))
+        assertEquals(1, RearScreen.drop(widgets))
+        assertEquals(1, widgets.length())
+    }
+
+    @Test
     fun aTagThatOnlyLooksLikeOursIsNotTouched() {
         // `mc-` is this module's tag, but the entry has to be SystemUI's as well: the package is
         // what the widget is keyed on, and another app's file entry is not ours to remove.
