@@ -1596,6 +1596,10 @@ public final class ClockCollapse {
         if (was) Xp.log(TAG + "clock: released (" + why + ")");
     }
 
+    /** The dates placeClock has moved since the clock was last given back. Weak: views go. */
+    private static final java.util.Set<View> MOVED_DATES =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
     private static void clearTransforms() {
         for (View root : Main.clockRoots()) {
             View g = Main.clockTarget(root);
@@ -1608,6 +1612,13 @@ public final class ClockCollapse {
         View date = ClockViews.sDateView;
         if (date != null && date.getTranslationY() != 0f) date.setTranslationY(0f);
         if (date != null && date.getTranslationX() != 0f) date.setTranslationX(0f);
+        // Every date this moved, not only the one looked up now: the lookup can come back with
+        // nothing by the end of the way out - 保留壁纸, its lyrics gone with the player - and
+        // the date it had moved stayed 213px up over the big clock (2026-10-14).
+        for (View d : MOVED_DATES) {
+            if (d.getTranslationY() != 0f) d.setTranslationY(0f);
+        }
+        MOVED_DATES.clear();
         for (View v : ClockViews.signatureViews()) {
             if (v.getTranslationY() != 0f) v.setTranslationY(0f);
         }
@@ -2527,7 +2538,10 @@ public final class ClockCollapse {
         // unless it sits inside the clock, which carries it already.
         if (m.anchored && m.date != null && !Float.isNaN(date)) {
             float dty = date - m.dateTop;
-            if (Math.abs(m.date.getTranslationY() - dty) >= 0.25f) m.date.setTranslationY(dty);
+            if (Math.abs(m.date.getTranslationY() - dty) >= 0.25f) {
+                m.date.setTranslationY(dty);
+                MOVED_DATES.add(m.date);
+            }
         }
         // The signature bar, the same problem one rung down. all_in_one derives its topMargin from
         // the clock's own rect - clockRect.bottom plus the gap between time and signature - and
