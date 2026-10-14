@@ -126,6 +126,15 @@ final class MotionCover {
             stopVideo("video lock wallpaper");
             return;
         }
+        // 保留壁纸 puts no cover up, so there is nothing for a video to stand in for. Not
+        // card is not full screen: the switch is only hidden there, still on, and the video
+        // went to the wallpaper over the user's own (2026-10-14).
+        if (Main.sCoverCardStyle.mode == CoverCardStyle.KEEP) {
+            sGen++;
+            sWantKey = "";
+            stopVideo("keep wallpaper");
+            return;
+        }
         if (!sEnabled || title == null || title.trim().isEmpty()) {
             sGen++;
             sWantKey = "";
