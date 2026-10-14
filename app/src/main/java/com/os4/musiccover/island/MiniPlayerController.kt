@@ -4910,8 +4910,29 @@ internal class MiniPlayerController(
         if (!stackedStyle() || islandKeys.isEmpty() || spread != null ||
             morph != null || exchange != null || noteMorphKey != null || group != null ||
             flight != null || player?.visibility != View.VISIBLE) return false
+        // The music alone, and no notification in the stack either: there is no list to spread
+        // out to. The stack read its fold again a moment after the lift, the spread folded with
+        // it, and the card went back into the pill by itself every time (Xiaomi 13, 2026-10-14).
+        // Pulled up as the row style pulls it: into the card, and the card chosen.
+        if (islandKeys.all { it == MUSIC_ISLAND } && !stackHasRows()) return false
         openSpread("stack swipe", SpreadFinger(startY))
         return spread != null
+    }
+
+    /** Any notification row in the lock screen's stack, folded away or not - the music's aside. */
+    private fun stackHasRows(): Boolean {
+        val stack = notificationStack() ?: return true
+        for (i in 0 until stack.childCount) {
+            val row = stack.getChildAt(i)
+            if (!row.javaClass.name.contains("ExpandableNotificationRow")) continue
+            val media = runCatching {
+                val entry = Xp.callMethod(row, "getEntry")
+                (Xp.getObjectField(entry, "mSbn") as? android.service.notification.StatusBarNotification)
+                    ?.notification?.extras?.containsKey(android.app.Notification.EXTRA_MEDIA_SESSION) == true
+            }.getOrDefault(false)
+            if (!media) return true
+        }
+        return false
     }
 
     /**
