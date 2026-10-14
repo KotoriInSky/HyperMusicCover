@@ -582,9 +582,133 @@ public class WallpaperProbe {
     /** A fade that has not seen its last frame this long after it should have is ended here. */
     private static final long GPU_FADE_GRACE_MS = 1500L;
 
+    /**
+     * The lock clock's colours, taken from the cover while the cover is up.
+     *
+     * SystemUI asks this process for a palette of the clock's region of the lock wallpaper
+     * (IMiuiWallpaperManagerService.getMiuiWallpaperPalette, `clock_palette_region`), and every
+     * clock face builds its colours from it: the solid, overlay and gradient-blur effects take
+     * their text colour from its secondary/neutral tones. The answer is computed from the
+     * wallpaper FILE, which in cover mode is not what is on screen - so only the effects that
+     * sample what is behind them (混色, liquid glass) followed the cover, and the rest kept the
+     * real wallpaper's colours over an album they had nothing to do with (reported 2026-10-14).
+     *
+     * The OEM's own computation, run on the picture it is drawing instead: MiuiColorScheme's
+     * palette over sArt, with the same screen-to-bitmap mapping of the regions. Only for the
+     * LOCK wallpaper and only while the texture shows a cover; everything else - the home screen,
+     * a kept wallpaper, the depth answer - stays the OEM's. The depth (getMiuiLockPartWallpaperIsDeep)
+     * is deliberately not taken over: it decides light text or dark, and the user wants the
+     * clock's colour from the cover without its lightness flipped by it.
+     */
+    private static void installCoverPalette() {
+        try {
+            Class<?> ctl = Xp.findClass("com.miui.miwallpaper.server.MiuiWallPaperControllerService", sCl);
+            Class<?> scheme = Xp.findClass("com.miui.miwallpaper.material.MiuiColorScheme", sCl);
+            Class<?> part = Xp.findClass("com.miui.miwallpaper.material.utils.PartRectColorUtils", sCl);
+            final java.lang.reflect.Method palette = scheme.getMethod("getMiuiWallpaperPalette",
+                    String.class, Bitmap.class, android.graphics.Rect.class);
+            final java.lang.reflect.Method convert = part.getMethod("convertScreenRectsToBitmapRects",
+                    Context.class, java.util.Map.class, float.class, float.class, int.class);
+            // The regions an empty request means - every one the lock screen reads its colours
+            // from - laid out the way the service does it, from the clock style the settings
+            // name. Its two settings readers are obfuscated, so they are found by shape: the one
+            // static no-argument method answering a String, and the one answering an int[].
+            java.lang.reflect.Method regions = null, styleName = null, styleInfo = null;
+            try {
+                for (java.lang.reflect.Method m : part.getMethods()) {
+                    if ("getPartScreenRectUtils".equals(m.getName()) && m.getParameterTypes().length == 6) {
+                        regions = m;
+                    }
+                }
+                Class<?> settings = Xp.findClass("com.miui.miwallpaper.utils.SystemSettingUtils", sCl);
+                for (java.lang.reflect.Method m : settings.getDeclaredMethods()) {
+                    if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())
+                            || m.getParameterTypes().length != 0) continue;
+                    if (m.getReturnType() == String.class) styleName = styleName == null ? m : null;
+                    if (m.getReturnType() == int[].class) styleInfo = styleInfo == null ? m : null;
+                }
+            } catch (Throwable t) {
+                Xp.log(TAG + "cover palette: full requests stay the wallpaper's: " + t);
+            }
+            final java.lang.reflect.Method fRegions = regions, fName = styleName, fInfo = styleInfo;
+            int hooked = 0;
+            for (Class<?> inner : ctl.getDeclaredClasses()) {
+                for (java.lang.reflect.Method m : inner.getDeclaredMethods()) {
+                    if (!"getMiuiWallpaperPalette".equals(m.getName())) continue;
+                    Class<?>[] pt = m.getParameterTypes();
+                    if (pt.length < 2 || pt[0] != int.class
+                            || !java.util.Map.class.isAssignableFrom(pt[pt.length - 1])) continue;
+                    Xp.api().hook(m).intercept(chain -> {
+                        java.util.List<Object> a = chain.getArgs();
+                        int which = (Integer) a.get(0);
+                        Object rects = a.get(a.size() - 1);
+                        Bitmap art = coverForPalette();
+                        if (art == null || (which != 2 && which != 8) || !(rects instanceof java.util.Map)) {
+                            return chain.proceed();
+                        }
+                        boolean full = ((java.util.Map<?, ?>) rects).isEmpty();
+                        if (full && (fRegions == null || fName == null || fInfo == null)) return chain.proceed();
+                        try {
+                            Context ctx = sCtx != null ? sCtx : (Context) Class.forName("android.app.ActivityThread")
+                                    .getMethod("currentApplication").invoke(null);
+                            @SuppressWarnings("unchecked")
+                            java.util.Map<String, android.graphics.Rect> mapped = full
+                                    ? (java.util.Map<String, android.graphics.Rect>) fRegions.invoke(null, ctx,
+                                            fName.invoke(null), fInfo.invoke(null), (float) art.getWidth(), (float) art.getHeight(), which)
+                                    : (java.util.Map<String, android.graphics.Rect>) convert.invoke(null, ctx,
+                                            rects, (float) art.getWidth(), (float) art.getHeight(), which);
+                            java.util.HashMap<String, Object> out = new java.util.HashMap<>();
+                            // A full request answers every region the wallpaper's would, the
+                            // whole-picture one included: start from the OEM's own answer and
+                            // replace what the cover can be read for.
+                            if (full) {
+                                Object orig = chain.proceed();
+                                if (orig instanceof java.util.Map) {
+                                    for (java.util.Map.Entry<?, ?> e : ((java.util.Map<?, ?>) orig).entrySet()) {
+                                        out.put(String.valueOf(e.getKey()), e.getValue());
+                                    }
+                                }
+                                if (out.containsKey("full_image_rect")) {
+                                    Object p = palette.invoke(null, "full_image_rect", art, null);
+                                    if (p != null) out.put("full_image_rect", p);
+                                }
+                            }
+                            for (java.util.Map.Entry<String, android.graphics.Rect> e : mapped.entrySet()) {
+                                Object p = palette.invoke(null, e.getKey(), art, e.getValue());
+                                out.put(e.getKey(), p == null ? new java.util.HashMap<>() : p);
+                            }
+                            sCoverPalettes++;
+                            return out;
+                        } catch (Throwable t) {
+                            Xp.log(TAG + "cover palette failed, the wallpaper's stands: " + t);
+                            return chain.proceed();
+                        }
+                    });
+                    hooked++;
+                }
+            }
+            Xp.log(TAG + "cover palette: " + hooked + " entry point(s)");
+        } catch (Throwable t) {
+            Xp.log(TAG + "cover palette not installed: " + t);
+        }
+    }
+
+    /** How many palettes were answered from the cover, for the probe. */
+    private static volatile int sCoverPalettes;
+
+    /** The picture on the lock texture, when it is ours; null when it is the real wallpaper. */
+    private static Bitmap coverForPalette() {
+        Bitmap art = sArt;
+        if (!sTexShowsCover || art == null || art.isRecycled()) return null;
+        return art;
+    }
+
     public static void handle(XposedModuleInterface.PackageLoadedParam param) {
         sCl = param.getDefaultClassLoader();
         Xp.log(TAG + "loaded into " + PKG);
+        // The lock clock's palette read off the cover while the cover is up. Its own hook, failing
+        // on its own: nothing else here depends on it.
+        installCoverPalette();
 
         // Must be installed at load time: getBitmap() runs when the GL surface is created and
         // the texture is then cached, so a hook added later never sees it.

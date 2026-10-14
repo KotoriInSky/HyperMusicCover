@@ -858,6 +858,8 @@ public class Main extends XposedModule {
         // "Has notifications" as the clock faces are told it, less the rows nobody can see
         // (NotifPresence).
         NotifPresence.install(cl);
+        // The lock screen's per-region palettes read again when the cover changes (CoverPalette).
+        CoverPalette.install(cl);
 
         try {
             sContainerCls = Xp.findClass(CLS_CONTAINER, cl);
@@ -2420,6 +2422,8 @@ public class Main extends XposedModule {
      */
     static void enterCoverMode(boolean animate) {
         sCoverMode = true;
+        // The clock's palette follows the picture behind it (PaletteThrottle.retriggerSoon).
+        PaletteThrottle.INSTANCE.retriggerSoon(CoverPush.PALETTE_AFTER_PUSH_MS);
         // The cover is the media card's alone: the focus notifications stay out of the stack.
         LockIslands.INSTANCE.setCoverMode(true);
         MiniPlayerRuntime.refresh();
@@ -2478,6 +2482,7 @@ public class Main extends XposedModule {
     private static void exitCoverMode(boolean animate) {
         CoverCardLayer.leaving();
         sCoverMode = false;
+        PaletteThrottle.INSTANCE.retriggerSoon(CoverPush.PALETTE_AFTER_PUSH_MS);
         ClockGlass.applyGlassBrightness();
         LockIslands.INSTANCE.setCoverMode(false);
         CoverCardLayer.refresh();

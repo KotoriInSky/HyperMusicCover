@@ -24,6 +24,9 @@ import android.view.ViewTreeObserver;
  * decides WHETHER the cover should be on; Main does that and calls in.
  */
 public final class CoverPush {
+    /** How long after a push the clock asks for its colours again: past the cover's fade. */
+    static final long PALETTE_AFTER_PUSH_MS = 700L;
+
 
     private CoverPush() {
     }
@@ -195,6 +198,8 @@ public final class CoverPush {
                         + src.getWidth() + "x" + src.getHeight() + " source, sent in "
                         + (sent - t0) + "ms, own copy " + (reused ? "reused" : "composed") + " in "
                         + (android.os.SystemClock.uptimeMillis() - sent) + "ms");
+                // The clock's colours are the wallpaper process's reading of this picture.
+                PaletteThrottle.INSTANCE.retriggerSoon(PALETTE_AFTER_PUSH_MS);
                 return;
             }
         }
@@ -273,6 +278,7 @@ public final class CoverPush {
         Xp.log(Main.TAG + "pushart " + w + "x" + h + " bias=" + Main.sBias
                 + " as " + jpg.length + "B jpeg, draw " + (tc - t0) + "ms encode "
                 + (android.os.SystemClock.uptimeMillis() - tc) + "ms");
+        PaletteThrottle.INSTANCE.retriggerSoon(PALETTE_AFTER_PUSH_MS);
 
         // On the video path `full` went to the view above, which owns it now.
         if (!Main.sVideoWallpaper) full.recycle();

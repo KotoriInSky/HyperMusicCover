@@ -986,6 +986,9 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                 setResultData("mini not written: " + t + "\n"
                         + all.substring(0, Math.min(all.length(), 1500)));
             }
+        } else if ("coverpalette".equals(op)) {
+            if (i.getBooleanExtra("now", false)) CoverPalette.refreshSoon(0L);
+            setResultData(CoverPalette.describe());
         } else if ("notifpresence".equals(op)) {
             setResultData(NotifPresence.describe());
         } else if ("datestatus".equals(op)) {

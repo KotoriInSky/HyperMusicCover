@@ -34,6 +34,13 @@ internal object PaletteThrottle {
     private var asked = 0
     private var ran = 0
 
+    /** The last extraction the system asked for, to ask again with (retrigger). */
+    private var lastTarget: Any? = null
+    private var lastMethod: Method? = null
+    private var lastArgs: Array<Any?>? = null
+    private var retrigger: Runnable? = null
+    private var retriggered = 0
+
     fun install(classLoader: ClassLoader) {
         val cls = runCatching { Xp.findClass(CLS, classLoader) }.getOrElse {
             Xp.w("MCPalette: $CLS unavailable, extraction not throttled: $it")
@@ -44,6 +51,9 @@ internal object PaletteThrottle {
                 if (passing || Looper.myLooper() != Looper.getMainLooper()) {
                     return@hookAll chain.proceed()
                 }
+                lastTarget = chain.thisObject
+                lastMethod = chain.executable as Method
+                lastArgs = chain.args.toTypedArray()
                 asked++
                 val now = SystemClock.uptimeMillis()
                 if (pending == null && now - lastRun >= QUIET_MS) {
@@ -76,6 +86,32 @@ internal object PaletteThrottle {
         }.onFailure { Xp.log("MCPalette: $NAME not throttled: $it") }
     }
 
+    /**
+     * Asks for the clock's colours again, a moment from now, with the system's own last request.
+     *
+     * The palette is the wallpaper process's answer for what the lock screen shows, and in cover
+     * mode that is the cover (WallpaperProbe.installCoverPalette). But the system only asks when
+     * its clock has moved: a new track under a still clock, or a cover put up or taken down
+     * faster than the clock settles, would keep the last picture's colours. Delayed so the
+     * wallpaper process has the new picture on its texture by the time it is asked, and through
+     * the same throttle as everything else.
+     */
+    fun retriggerSoon(delayMs: Long) {
+        // The other faces read the per-region palettes, which only a wallpaper change pushes.
+        CoverPalette.refreshSoon(delayMs)
+        val m = lastMethod ?: return
+        val t = lastTarget ?: return
+        val a = lastArgs ?: return
+        retrigger?.let(handler::removeCallbacks)
+        val run = Runnable {
+            retrigger = null
+            retriggered++
+            runCatching { m.invoke(t, *a) }.onFailure { Xp.w("MCPalette: retrigger failed: $it") }
+        }
+        retrigger = run
+        handler.postDelayed(run, delayMs)
+    }
+
     /** For `op palette`. */
-    fun describe(): String = "extraction asked $asked, ran $ran"
+    fun describe(): String = "extraction asked $asked, ran $ran, retriggered $retriggered"
 }
