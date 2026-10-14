@@ -1889,6 +1889,12 @@ object MiniPlayerRuntime {
         sessionSelection.nativeRequestedFor(token)
     }
 
+    /** The card chosen with the card already up: nothing to morph, nothing to refresh yet. */
+    internal fun noteNative(token: Any, why: String) {
+        val changed = synchronized(selectionLock) { sessionSelection.requestNative(token) }
+        if (changed) Xp.log("MCMini: dynamic choice -> native ($why)")
+    }
+
     /** The choice is made first; the morph then runs toward it, or turns round if one runs. */
     internal fun selectNative(token: Any) {
         val changed = synchronized(selectionLock) { sessionSelection.requestNative(token) }

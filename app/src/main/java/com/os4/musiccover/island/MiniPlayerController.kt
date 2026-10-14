@@ -7323,6 +7323,22 @@ internal class MiniPlayerController(
      * now points; a scene route needs the mini player to be the selected presentation.
      */
     fun beginTransition(toNative: Boolean, scene: Boolean): Boolean {
+        // The stack spread out as its list - with the music alone, that list is the media card -
+        // and the card's artwork tapped into the cover: the spread stayed open under the scene,
+        // and updateVisibility leaves everything to an open spread, so the card stood beside the
+        // pill from then on, through the cover and after it (#82/#78; reproduced 2026-10-14,
+        // `op mini` showed "spread open" with no end). The scene takes the card from here.
+        spread?.takeIf { scene }?.let { s ->
+            val token = controller?.sessionToken
+            // Into the scene with the music out as the list's card: that card is the choice,
+            // as one opened from the pill would be. Chosen before the spread ends, so the refresh
+            // it ends with keeps the card and not the pill; and no morph - run from the pill, the
+            // card played its opening over again (the user, 2026-10-14).
+            val musicOut = toNative && token != null && s.items.any { it.key == MUSIC_ISLAND }
+            if (musicOut) MiniPlayerRuntime.noteNative(token!!, "spread into the scene")
+            endSpread(folded = false, why = "scene")
+            if (musicOut) return false
+        }
         morph?.let { running ->
             running.aim(toNative)
             morphScene = scene
