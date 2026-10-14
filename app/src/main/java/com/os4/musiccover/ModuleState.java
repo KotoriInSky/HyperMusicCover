@@ -62,6 +62,7 @@ public final class ModuleState {
                     + ShadeLayer.dumpCfg()
                     + "\nfadewp=" + (Main.sFadeWp ? 1 : 0)
                     + "\nmotion=" + (MotionCover.sEnabled ? 1 : 0)
+                    + "\nmotiondata=" + (MotionCover.sOnData ? 1 : 0)
                     + "\nvcfade=" + (Main.sVideoFade ? 1 : 0)
                     + "\nfsmode2=" + Main.sFadeMode
                     // A measurement rather than a setting, and kept for the same reason the
@@ -189,6 +190,7 @@ public final class ModuleState {
                         else if ("tap".equals(k)) Main.sTapToggle = "1".equals(v);
                         else if ("fadewp".equals(k)) Main.sFadeWp = "1".equals(v);
                         else if ("motion".equals(k)) MotionCover.sEnabled = "1".equals(v);
+                        else if ("motiondata".equals(k)) MotionCover.sOnData = "1".equals(v);
                         else if ("vcfade".equals(k)) Main.sVideoFade = "1".equals(v);
                         else if ("fsmode2".equals(k)) Main.sFadeMode = Integer.parseInt(v);
                         else if ("covergap".equals(k)) CoverPush.sCoverFadeGapMs = Long.parseLong(v);

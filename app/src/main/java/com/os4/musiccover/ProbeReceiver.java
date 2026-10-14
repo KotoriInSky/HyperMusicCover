@@ -188,6 +188,13 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                 // The cover on screen now gets one, or loses its own.
                 if (Main.sCoverMode) CoverPush.pushArtAsync(true, false);
             }
+            // `--ez data true`: download on mobile data too.
+            if (i.hasExtra("data")) {
+                MotionCover.sOnData = i.getBooleanExtra("data", false);
+                ModuleState.saveState();
+                Xp.log(Main.TAG + "motion covers on mobile data " + (MotionCover.sOnData ? "on" : "off"));
+                if (MotionCover.sOnData) Main.main().post(MotionCover::retry);
+            }
             if (i.getBooleanExtra("forget", false)) MotionCover.forget(c);
             setResultData(MotionCover.describe());
         } else if ("colon".equals(op)) {
@@ -371,6 +378,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             out.putBoolean("tap", Main.sTapToggle);
             out.putBoolean("fadewp", Main.sFadeWp);
             out.putBoolean("motion", MotionCover.sEnabled);
+            out.putBoolean("motiondata", MotionCover.sOnData);
             out.putInt("fsmode2", Main.sFadeMode);
             out.putBoolean("vcfade", Main.sVideoFade);
             out.putBoolean("hidefp", Fingerprint.sHideFp);

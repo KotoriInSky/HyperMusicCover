@@ -10,6 +10,7 @@
     <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
     <string name="cover_bias">Vertical position</string>
     <string name="cover_motion">Motion cover</string>
+    <string name="cover_motion_on_data">Download on mobile data</string>
     <string name="cover_enabled">Enable lock screen music cover</string>
     <string name="cover_style">Cover presentation</string>
     <string name="cover_style_full">Full-screen cover</string>

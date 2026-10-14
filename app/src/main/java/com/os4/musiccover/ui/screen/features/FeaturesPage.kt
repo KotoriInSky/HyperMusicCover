@@ -339,6 +339,18 @@ private fun CoverGroup(
                 ModuleBridge.setMotionCover(context, it)
             },
         )
+        // Off by default: a video is 5-15MB per album, and not everyone's plan is unlimited.
+        FoldUnder(module.coverStyle != 2 && module.motionCover, settled = module.alive) {
+            SwitchPreference(
+                title = stringResource(R.string.cover_motion_on_data),
+                checked = module.motionOnData,
+                enabled = enabled,
+                onCheckedChange = {
+                    onChange(module.copy(motionOnData = it))
+                    ModuleBridge.setMotionOnData(context, it)
+                },
+            )
+        }
         if (module.coverStyle == 0) {
             ValueSlider(
                 title = stringResource(R.string.cover_bias),

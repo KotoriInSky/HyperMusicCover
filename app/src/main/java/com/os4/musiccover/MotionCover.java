@@ -25,7 +25,7 @@ import java.util.Arrays;
  *                   own frame so the clock glass and the card blur see it - see WallpaperVideo
  *
  * The still is what shows until a video is ready, and whenever there is none. Off by default;
- * downloads only on an unmetered network. Cached videos play on any network.
+ * downloads only on an unmetered network unless sOnData. Cached videos play on any network.
  */
 final class MotionCover {
 
@@ -34,10 +34,14 @@ final class MotionCover {
 
     private static final String TAG = "[MCMotion] ";
     static volatile boolean sEnabled;
+    /** Look up and download on a metered network too - mobile data. Off by default. */
+    static volatile boolean sOnData;
 
     private static final String DIR = "motion";
     private static final String INDEX = "index.txt";
-    private static final long CACHE_BYTES = 300L * 1024 * 1024;
+    // 300MB held about 30 albums at 5-15MB each, and an album played that morning had been
+    // pushed out by evening (2026-10-14, 1989 evicted with 34 files on disk).
+    private static final long CACHE_BYTES = 1024L * 1024 * 1024;
     /** A store that answered "no motion artwork" is asked again after this. */
     private static final long NONE_TTL_MS = 7L * 24 * 3600 * 1000;
     /** A request that did not get through is tried again after this. */
@@ -128,6 +132,7 @@ final class MotionCover {
             stopVideo(sEnabled ? "no title" : "off");
             return;
         }
+        watchNetwork(ctx);
         final String key = cacheKey(title, artist, album);
         // Asked already, for this cover: playing, being looked up, or known to have none. The
         // metadata fires on every state change, and for some players on every sung line.
@@ -334,7 +339,7 @@ final class MotionCover {
                 return null;
             }
         }
-        if (!unmetered(ctx)) {
+        if (!sOnData && !unmetered(ctx)) {
             sLast = "not on an unmetered network; " + key + " not looked up";
             Xp.log(TAG + sLast);
             return null;
@@ -391,6 +396,54 @@ final class MotionCover {
             total -= f.length();
             f.delete();
         }
+    }
+
+    private static boolean sWatching;
+    private static boolean sWasUnmetered;
+
+    /**
+     * A song that started on mobile data was never looked up, and nothing asked again once Wi-Fi
+     * came: the same key is "asked already" to track(). Coming onto an unmetered network with a
+     * cover up and no video, the song is taken from the top (2026-10-14, a whole album stayed
+     * still after the phone joined Wi-Fi). Main thread.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    private static void watchNetwork(Context ctx) {
+        if (sWatching) return;
+        sWatching = true;
+        sWasUnmetered = unmetered(ctx);
+        try {
+            ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
+            cm.registerDefaultNetworkCallback(new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onCapabilitiesChanged(android.net.Network n, NetworkCapabilities nc) {
+                    boolean now = nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
+                    boolean was = sWasUnmetered;
+                    sWasUnmetered = now;
+                    if (!now || was || !sEnabled || sWantKey.isEmpty() || sPlayingFile != null
+                            || !Main.sCoverMode) {
+                        return;
+                    }
+                    Xp.log(TAG + "unmetered network now; asking again for " + sWantKey);
+                    retry();
+                }
+
+                @Override
+                public void onLost(android.net.Network n) {
+                    sWasUnmetered = false;
+                }
+            }, Main.main());
+        } catch (Throwable t) {
+            Xp.w(TAG + "cannot watch the network: " + t);
+        }
+    }
+
+    /** The cover on screen, asked again if it has no video. Main thread. */
+    static void retry() {
+        if (!sEnabled || sWantKey.isEmpty() || sPlayingFile != null || !Main.sCoverMode) return;
+        sWantKey = "";
+        onCover(sWantCard);
     }
 
     // Runs in SystemUI, which holds ACCESS_NETWORK_STATE; this APK's manifest is not the one asked.

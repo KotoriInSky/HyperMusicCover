@@ -10,6 +10,7 @@
     <string name="about_feedback_summary">https://github.com/zyl6932/HyperMusicCover/issues</string>
     <string name="cover_bias">封面纵向位置</string>
     <string name="cover_motion">动态封面</string>
+    <string name="cover_motion_on_data">使用流量下载</string>
     <string name="cover_enabled">启用音乐锁屏封面</string>
     <string name="cover_style">封面展现形式</string>
     <string name="cover_style_full">全屏封面</string>
