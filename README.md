@@ -1,6 +1,6 @@
 # HyperMusicCover
 
-HyperOS 4 音乐锁屏 LSPosed 模块：播歌时把专辑封面变成锁屏壁纸，时钟收成小尺寸。
+HyperOS 4 音乐锁屏
 
 ## Star History
 
