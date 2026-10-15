@@ -26,10 +26,8 @@ import com.os4.musiccover.transit.MetroCodeIsland;
 import com.os4.musiccover.transit.RideCodeExit;
 import com.os4.musiccover.pickup.PickupCloud;
 import com.os4.musiccover.pickup.PickupCodeIsland;
-import com.os4.musiccover.pickup.PickupConst;
 import com.os4.musiccover.pickup.PickupPark;
 import com.os4.musiccover.pickup.RearScreen;
-import com.os4.musiccover.pickup.XiaoaiMemory;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
@@ -823,12 +821,6 @@ public class Main extends XposedModule {
         // 小爱建议, for its subway ride-code card on the island. See MetroCodeIsland.
         if (MetroCodeIsland.PKG.equals(pkg)) {
             MetroCodeIsland.INSTANCE.install(param.getDefaultClassLoader());
-            return;
-        }
-        // 小爱同学, only so that its 「记忆」 read of an order page that the module asks for plays
-        // no swipe animation. See XiaoaiMemory.
-        if (PickupConst.PKG_VOICE_ASSIST.equals(pkg)) {
-            XiaoaiMemory.INSTANCE.handle(param.getDefaultClassLoader());
             return;
         }
         if (!"com.android.systemui".equals(pkg)) return;

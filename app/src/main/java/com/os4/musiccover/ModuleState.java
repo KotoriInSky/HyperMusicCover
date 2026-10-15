@@ -102,7 +102,6 @@ public final class ModuleState {
                     // Read back at startup, so it has to be written too: without it
                     // `--ez card false` lasted until the next SystemUI restart.
                     + "\ncard=" + (PickupCodeIsland.sCard ? 1 : 0)
-                    + "\nxiaoai=" + (PickupCodeIsland.sXiaoai ? 1 : 0)
                     + "\nminicfg=" + android.util.Base64.encodeToString(
                             MiniPlayerRuntime.configJson(Main.sAppCtx).getBytes(java.nio.charset.StandardCharsets.UTF_8),
                             android.util.Base64.NO_WRAP)
@@ -218,7 +217,6 @@ public final class ModuleState {
                         else if ("transit".equals(k)) AmapTransitScene.sOn = "1".equals(v);
                         else if ("pickup".equals(k)) PickupCodeIsland.sOn = "1".equals(v);
                         else if ("card".equals(k)) PickupCodeIsland.sCard = "1".equals(v);
-                        else if ("xiaoai".equals(k)) PickupCodeIsland.sXiaoai = "1".equals(v);
                         // Not applyConfig: this file is migration data, and a config the user has
                         // since changed must win over what was saved here (see restoreLegacyConfig).
                         else if ("minicfg".equals(k)) MiniPlayerRuntime.restoreLegacyConfig(Main.sAppCtx,

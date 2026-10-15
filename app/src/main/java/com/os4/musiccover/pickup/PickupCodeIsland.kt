@@ -105,13 +105,6 @@ internal object PickupCodeIsland {
      */
     @Volatile @JvmField var sCard = true
 
-    /**
-     * Whether 小爱 is asked to read an order page the module has found ([XiaoaiMemory]) - which sends
-     * a screenshot of that page to Xiaomi's cloud, as the user's own three-finger swipe does. On
-     * unless turned off (probe: `op pickup --ez xiaoai false`).
-     */
-    @Volatile @JvmField var sXiaoai = true
-
     val bg: Handler by lazy { Handler(HandlerThread("mc-pickup").apply { start() }.looper) }
 
     // All below on [bg].
@@ -143,10 +136,6 @@ internal object PickupCodeIsland {
     /** The code last read, and whether it was on the front page - what an observe task is made from. */
     private var lastCode: PickupParse.Result? = null
     private var codeOnFront = false
-    /** What 小爱 read for each code it was asked about: the item and the shop, which outrank ours. */
-    private val answers = HashMap<String, XiaoaiMemory.Answer>()
-    /** The code 小爱 was last asked about, so that one order is asked about once. */
-    private var asked = ""
     private var gen = 0
     private var lastRead = ""
     /** The front page's first texts when no code was found, for the probe only (not logged). */
@@ -191,8 +180,6 @@ internal object PickupCodeIsland {
         }, STARTUP_LOOK)
 
         PickupIsland.install()
-        XiaoaiMemory.install(cl)
-        XiaoaiMemory.onAnswer = { a -> bg.post { answered(a) } }
     }
 
     fun setOn(on: Boolean) {
@@ -204,42 +191,6 @@ internal object PickupCodeIsland {
                 PickupObserver.endAll("switched off")
             }
         }
-    }
-
-    /**
-     * [r] with what 小爱 read for its code, where it read anything: its item and its shop are the
-     * cloud's reading of the order and ours is a guess at the page's layout.
-     */
-    fun enrich(r: PickupParse.Result): PickupParse.Result {
-        val a = answers[r.code] ?: return r
-        return r.copy(product = a.product ?: r.product, store = a.store ?: r.store)
-    }
-
-    /**
-     * 小爱 asked about [r], once, under ColorOS's gate for its own cloud reading
-     * (`remoteTextEligible`): a code already read on the phone, an order not over, and the page that
-     * shows it - here, in front, since 小爱 reads a screenshot.
-     */
-    private fun askXiaoai(ctx: Context, r: PickupParse.Result) {
-        if (!sXiaoai || !inFront || !codeOnFront || r.code.isEmpty() || oemRule == null) return
-        if (!useRemoteAi(ctx) || finished(ctx, r) || PickupParse.isOver(r.status)) return
-        if (r.code == asked || answers.containsKey(r.code)) return
-        asked = r.code
-        XiaoaiMemory.ask(ctx, r.code)
-    }
-
-    /** The rules' `use_remote_ai_plugin`: whether ColorOS asks its cloud about an order at all. */
-    private fun useRemoteAi(ctx: Context): Boolean =
-        runCatching { PickupRules.get(ctx).recognitionPolicy().useRemoteAi }.getOrDefault(false)
-
-    private fun answered(a: XiaoaiMemory.Answer) {
-        answers[a.code] = a
-        val r = lastCode
-        if (r == null || r.code != a.code || taskId < 0) {
-            Xp.log(TAG + "小爱 read ${a.code}, the page is at ${r?.code}")
-            return
-        }
-        PickupIsland.show(enrich(r), PickupIsland.Page(taskId, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
     }
 
     /**
@@ -664,8 +615,7 @@ internal object PickupCodeIsland {
                     if (finished(ctx, r) && !inFront) {
                         PickupIsland.takeDown(task, "the order is over")
                     } else {
-                        askXiaoai(ctx, r)
-                        PickupIsland.show(enrich(r), PickupIsland.Page(task, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
+                        PickupIsland.show(r, PickupIsland.Page(task, host, shownBrand(), oemRule, program?.scheme.orEmpty()))
                         if (inFront) PickupObserver.saw(task, r)
                         observe(r)
                     }

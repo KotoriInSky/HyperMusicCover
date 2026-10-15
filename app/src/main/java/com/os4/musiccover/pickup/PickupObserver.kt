@@ -238,7 +238,7 @@ internal object PickupObserver {
         val shown = if (rank(r.status) >= rank(o.status)) r.status else o.status
         o.status = shown
         o.last = "${o.code} ${shown ?: "-"}"
-        PickupIsland.show(PickupCodeIsland.enrich(r.copy(status = shown)), o.page)
+        PickupIsland.show(r.copy(status = shown), o.page)
         if (shown != null && shown in PickupParse.DONE) {
             // Over while the user is away: ColorOS keeps a finished card for 0s once its page is left.
             PickupIsland.takeDown(o.task, "the order reads $shown")

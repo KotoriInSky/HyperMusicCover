@@ -289,11 +289,6 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             }
             // --ez card false draws the island with the system's focus template again,
             // which is the way back if ColorOS's card does not come up on this build.
-            // --ez xiaoai false: no 小爱 reading of the order pages the module finds.
-            if (i.hasExtra("xiaoai")) {
-                PickupCodeIsland.sXiaoai = i.getBooleanExtra("xiaoai", true);
-                ModuleState.saveState();
-            }
             if (i.hasExtra("card")) {
                 PickupCodeIsland.sCard = i.getBooleanExtra("card", true);
                 ModuleState.saveState();
@@ -410,7 +405,6 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             out.putBoolean("transit", AmapTransitScene.sOn);
             out.putBoolean("pickup", PickupCodeIsland.sOn);
             out.putBoolean("card", PickupCodeIsland.sCard);
-            out.putBoolean("xiaoai", PickupCodeIsland.sXiaoai);
             // 设置页那行「手动刷新取餐码云端规则」的副标题，和这一份名单有几个小程序。
             out.putString("rulesdate", PickupCloud.INSTANCE.stamp(PickupCloud.INSTANCE.getUpdatedAt()));
             out.putInt("rulescount", PickupCloud.INSTANCE.count());
