@@ -20,6 +20,9 @@ import java.util.Calendar
  *   - a trip is matched by its city and first station: the commute starting there that has trips
  *     in this half hour, the most of them; else the only commute starting there. Only a city's 3
  *     most ridden commutes are looked at (its route list).
+ * Added here: the two stations before the end a trip came through (its [Trip.approach]), the
+ * commute's the most common pair of them, so the island is put up two stations ahead of the end
+ * as well. The order is the cards', with no line graph to check it against.
  * Not kept: correcting the end over the line graph (Metis has the graph and BLE that misses the
  * last station; the end here is the fare's or 小爱建议's last card), and the fallback by the
  * station next to the start (the graph again).
@@ -38,6 +41,8 @@ internal class MetroCommute(private val file: File?) {
         val transfers: List<String>,
         /** Wall clock, when the trip's first station came. */
         val at: Long,
+        /** Up to two stations ridden through just before [end], in order; not [start]. */
+        val approach: List<String> = emptyList(),
     )
 
     class Route(
@@ -49,9 +54,14 @@ internal class MetroCommute(private val file: File?) {
         /** Trips started in each half hour of the day. */
         val slices: IntArray,
         val updated: Long,
+        /** The two stations before [end] its trips came through most ([Trip.approach]). */
+        val approach: List<String> = emptyList(),
     ) {
-        /** The stations the island is put up at after the first: Metis's remindType 0 and 1. */
-        val stops: Set<String> get() = (transfers + end).toSet()
+        /**
+         * The stations the island is put up at after the first: Metis's remindType 0 and 1, and
+         * the two before the end.
+         */
+        val stops: Set<String> get() = (transfers + approach + end).toSet()
         override fun toString() =
             "$city $start -> " + (if (transfers.isEmpty()) "" else transfers.joinToString(" -> ", postfix = " -> ")) +
                 "$end x$trips"
@@ -108,7 +118,7 @@ internal class MetroCommute(private val file: File?) {
             .sortedWith(compareByDescending<Route> { it.slices[slice] }.thenByDescending { it.updated })
             .firstOrNull()?.let { return it }
         return here.singleOrNull()?.let {
-            Route(it.city, it.start, it.end, emptyList(), it.trips, it.slices, it.updated)
+            Route(it.city, it.start, it.end, emptyList(), it.trips, it.slices, it.updated, it.approach)
         }
     }
 
@@ -126,10 +136,12 @@ internal class MetroCommute(private val file: File?) {
             val a = o.optJSONArray("trips") ?: JSONArray()
             for (k in 0 until a.length()) {
                 val t = a.optJSONObject(k) ?: continue
-                val tr = t.optJSONArray("transfers") ?: JSONArray()
+                fun names(k: String): List<String> {
+                    val a = t.optJSONArray(k) ?: return emptyList()
+                    return (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() }
+                }
                 trips += Trip(t.optString("city"), t.optString("start"), t.optString("end"),
-                    (0 until tr.length()).map { tr.optString(it) }.filter { it.isNotEmpty() },
-                    t.optLong("at"))
+                    names("transfers"), t.optLong("at"), names("approach"))
             }
             prune(System.currentTimeMillis())
         }
@@ -145,7 +157,8 @@ internal class MetroCommute(private val file: File?) {
             val a = JSONArray()
             for (t in trips) {
                 a.put(JSONObject().put("city", t.city).put("start", t.start).put("end", t.end)
-                    .put("transfers", JSONArray(t.transfers)).put("at", t.at))
+                    .put("transfers", JSONArray(t.transfers)).put("at", t.at)
+                    .apply { if (t.approach.isNotEmpty()) put("approach", JSONArray(t.approach)) })
             }
             val tmp = File(f.path + ".tmp")
             tmp.writeText(JSONObject().put("learning", learning).put("trips", a).toString())
@@ -172,7 +185,7 @@ internal class MetroCommute(private val file: File?) {
                 val slices = IntArray(48)
                 for (t in group) slices[slice(t.at)]++
                 out += Route(first.city, first.start, first.end, transfers(group), group.size,
-                    slices, group.maxOf { it.at })
+                    slices, group.maxOf { it.at }, approach(group))
             }
             return out.sortedWith(compareByDescending<Route> { it.trips }.thenByDescending { it.updated })
         }
@@ -190,6 +203,17 @@ internal class MetroCommute(private val file: File?) {
             }
             val most = sequences.values.maxOrNull() ?: return emptyList()
             return sequences.entries.first { it.value == most }.key
+        }
+
+        /**
+         * The two stations before the end the commute's trips came through most. Trips recorded
+         * before these were kept, and ones whose cards missed them, say nothing.
+         */
+        fun approach(group: List<Trip>): List<String> {
+            val counts = LinkedHashMap<List<String>, Int>()
+            for (t in group) if (t.approach.isNotEmpty()) counts[t.approach] = (counts[t.approach] ?: 0) + 1
+            val most = counts.values.maxOrNull() ?: return emptyList()
+            return counts.entries.first { it.value == most }.key
         }
 
         fun slice(at: Long): Int {

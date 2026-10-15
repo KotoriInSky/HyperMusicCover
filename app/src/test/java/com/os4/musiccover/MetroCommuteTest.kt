@@ -1,5 +1,6 @@
 package com.os4.musiccover
 
+import com.os4.musiccover.transit.MetroCommute
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -65,6 +66,22 @@ class MetroCommuteTest {
         assertEquals("国贸", r.end)
         assertTrue(r.transfers.isEmpty())
         assertEquals(setOf("国贸"), r.stops)
+    }
+
+    @Test
+    fun theTwoBeforeTheEndAreStopsAndKeptOnDisk() {
+        val f = File.createTempFile("commute", ".json")
+        f.delete()
+        val c = MetroCommute(f)
+        val t = System.currentTimeMillis()
+        // An old trip without them says nothing; the most common pair wins.
+        c.record(trip("西二旗", "国贸", t - 3 * 86_400_000L))
+        repeat(2) { c.record(MetroCommute.Trip("北京", "西二旗", "国贸", emptyList(), t - it * 86_400_000L, listOf("呼家楼", "金台夕照"))) }
+        c.record(MetroCommute.Trip("北京", "西二旗", "国贸", emptyList(), t, listOf("金台夕照")))
+        val r = MetroCommute(f).routes().single()
+        assertEquals(listOf("呼家楼", "金台夕照"), r.approach)
+        assertEquals(setOf("呼家楼", "金台夕照", "国贸"), r.stops)
+        f.delete()
     }
 
     @Test

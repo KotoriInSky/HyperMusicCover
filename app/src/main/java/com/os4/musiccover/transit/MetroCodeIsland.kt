@@ -23,6 +23,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -60,7 +63,9 @@ import org.json.JSONObject
  * here from [MetroCommute], learned the same way from the trips this ride-code island has seen,
  * and from 高德's plan while it navigates (AmapTransitShare). A trip ends the way TripManager's
  * monitor ends it - no station for a while, or one stayed at too long - or on the way out
- * ([exit], from RideCodeExit in SystemUI), and is then recorded for the learning.
+ * ([exit], from RideCodeExit in SystemUI), and is then recorded for the learning. Beyond ColorOS,
+ * a learned commute also puts it up at the two stations before its end, and each station put up
+ * vibrates once ([buzz]). One swiped away stays down at that station for this trip only.
  *
  * A tap is the widget's own tap: the island opens the assistant's RouterActivity, which hands the
  * card to a SmallMetroCodeWidgetProvider of its own - h() to take the intention, onReceive with
@@ -156,8 +161,6 @@ internal object MetroCodeIsland {
     @Volatile private var ctx: Context? = null
     @Volatile private var shown: Station? = null
     @Volatile private var lastKey: String? = null
-    /** The instance the user swiped away: not put back until another one comes. */
-    @Volatile private var dismissed: String? = null
     @Volatile private var updates = 0
     @Volatile private var lastSeen = "none"
     @Volatile private var lastError: String? = null
@@ -267,11 +270,12 @@ internal object MetroCodeIsland {
         }, Context.RECEIVER_EXPORTED)
         app.registerReceiver(object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
+                // Swiped away, or timed out (a timeout sends the delete intent too): down for now,
+                // put up again at the trip's next station ([Trip.popped] keeps this one down).
                 val s = shown ?: return
-                dismissed = s.instanceId
                 shown = null
                 lastKey = null
-                Xp.log(TAG + "swiped away: ${s.name}")
+                Xp.log(TAG + "gone: ${s.name}")
             }
         }, IntentFilter(ACTION_DISMISS), Context.RECEIVER_NOT_EXPORTED)
         class Trips : ProbeGuard.Receiver() {
@@ -354,7 +358,7 @@ internal object MetroCodeIsland {
             remind = n in plan || n in t.learned
             Xp.log(TAG + "in the trip at ${s.name} (station ${t.stations.size}): " + when {
                 n in plan -> "高德's plan boards or leaves here"
-                remind -> "the learned commute changes or leaves here"
+                remind -> "the learned commute changes, nears its end or leaves here"
                 else -> "riding through"
             })
         } else {
@@ -366,8 +370,8 @@ internal object MetroCodeIsland {
             !remind -> cancel(c, "riding through")
             n in t.popped && shown == null -> Unit
             else -> {
-                t.popped += n
-                post(c, s)
+                val first = t.popped.add(n)
+                if (post(c, s) && first) buzz(c)
             }
         }
     }
@@ -406,11 +410,14 @@ internal object MetroCodeIsland {
         if (fareTo.isNotEmpty() && stations.last() != fareTo) stations += fareTo
         if (stations.size < 2) return
         val changes = MetroCommute.changes(stations, t.lines)
+        // The two before the end, not the start: the start is put up anyway.
+        val approach = stations.subList(1, stations.size - 1).takeLast(2)
         runCatching {
-            c.record(MetroCommute.Trip(t.city, stations.first(), stations.last(), changes, t.startedAt))
+            c.record(MetroCommute.Trip(t.city, stations.first(), stations.last(), changes, t.startedAt, approach))
         }.onFailure { Xp.w(TAG + "trip not recorded: $it") }
         Xp.d(TAG + "recorded: ${stations.first()} -> ${stations.last()}" +
             (if (changes.isEmpty()) "" else ", changing at " + changes.joinToString()) +
+            (if (approach.isEmpty()) "" else ", before the end " + approach.joinToString()) +
             " (${c.count()} trips kept)")
     }
 
@@ -548,12 +555,18 @@ internal object MetroCodeIsland {
 
     // Runs in 小爱建议 and posts as it, under its own notification permission.
     @android.annotation.SuppressLint("NotificationPermission")
-    private fun post(c: Context, s: Station) {
-        if (s.instanceId.isNotEmpty() && s.instanceId == dismissed) return
+    /** Whether the card is up as [s] now - posted, or already up unchanged. */
+    private fun post(c: Context, s: Station): Boolean {
+        val nm = c.getSystemService(NotificationManager::class.java) ?: return false
+        // The island takes the notification down as the app would, which sends no delete intent:
+        // what is up is asked, not remembered.
+        if (lastKey != null && runCatching { nm.activeNotifications.none { it.id == ID } }.getOrDefault(false)) {
+            shown = null
+            lastKey = null
+        }
         val key = s.key()
-        if (key == lastKey) return
+        if (key == lastKey) return true
         val fresh = shown?.instanceId != s.instanceId
-        val nm = c.getSystemService(NotificationManager::class.java) ?: return
         if (nm.getNotificationChannel(CHANNEL) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, "地铁乘车码",
                 NotificationManager.IMPORTANCE_DEFAULT).apply {
@@ -583,7 +596,7 @@ internal object MetroCodeIsland {
             lastKey = key
             lastError = null
             Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} (official card)")
-            return
+            return true
         }
         val open = opener(c, s)
         val appPkg = open?.`package` ?: open?.component?.packageName
@@ -651,6 +664,19 @@ internal object MetroCodeIsland {
         lastError = null
         Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} [$lineText] -> " +
             (open?.let { it.`package` ?: it.component?.flattenToShortString() ?: it.data } ?: "nothing to open"))
+        return true
+    }
+
+    /** Two short pulses, as a notification's: off in silent mode as the user set it. */
+    private fun buzz(c: Context) {
+        try {
+            val v = c.getSystemService(VibratorManager::class.java)?.defaultVibrator ?: return
+            if (!v.hasVibrator()) return
+            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 60, 90, 60), -1),
+                VibrationAttributes.createForUsage(VibrationAttributes.USAGE_NOTIFICATION))
+        } catch (t: Throwable) {
+            Xp.log(TAG + "no vibration: $t")
+        }
     }
 
     /**
@@ -955,10 +981,7 @@ internal object MetroCodeIsland {
         return try {
             when {
                 json != null -> update(c, JSONArray(json), "probe")
-                what == "demo" -> {
-                    dismissed = null
-                    update(c, demo(), "probe")
-                }
+                what == "demo" -> update(c, demo(), "probe")
                 what == "end" -> update(c, JSONArray(), "probe")
                 what == "exit" -> synchronized(this) { exit(c, "probe") }
                 what == "forget" -> synchronized(this) { commute?.forget() }
@@ -973,7 +996,7 @@ internal object MetroCodeIsland {
         val s = shown
         return "metro: updates=$updates seen=[$lastSeen] shown=" +
             (s?.let { "${it.name} id=${it.instanceId} end=${it.end}" } ?: "none") +
-            (dismissed?.let { " dismissed=$it" } ?: "") + (lastError?.let { " error=$it" } ?: "") +
+            (lastError?.let { " error=$it" } ?: "") +
             " trip=" + (trip?.stations?.joinToString(" -> ") ?: "none") +
             " plan=" + planStops.joinToString(",").ifEmpty { "none" } +
             " learned=" + (trip?.learned?.joinToString(",")?.ifEmpty { null } ?: "none") +
