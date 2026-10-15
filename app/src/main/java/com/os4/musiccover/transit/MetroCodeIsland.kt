@@ -668,6 +668,8 @@ internal object MetroCodeIsland {
     }
 
     /** Two short pulses, as a notification's: off in silent mode as the user set it. */
+    // Runs in 小爱建议 and vibrates as it, under its own VIBRATE.
+    @android.annotation.SuppressLint("MissingPermission")
     private fun buzz(c: Context) {
         try {
             val v = c.getSystemService(VibratorManager::class.java)?.defaultVibrator ?: return
