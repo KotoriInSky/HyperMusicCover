@@ -98,6 +98,8 @@ internal object PickupIsland {
     private const val LIFE = 30 * 60_000L
     /** The logo's fade-in, in ms: ColorOS's own `alpha_up_in` is 300ms on `coui_ease_move`. */
     private const val LOGO_FADE = 300L
+    /** The least time between two plays of the card's picture. */
+    private const val REPLAY_GAP = 600L
     /** The opacity a floated card's picture is posted at; [fadePictureIn] takes it up to 1. */
     private const val FADE_FROM = 0.15f
     /** That fade, in ms: the four 80ms steps it used to be posted as. */
@@ -170,14 +172,72 @@ internal object PickupIsland {
                 // would take the whole card down with it - a RemoteViews that throws while it is
                 // applied simply does not appear.
                 if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon) runCatching {
-                    (v.drawable as? android.graphics.drawable.AnimatedImageDrawable)?.start()
-                    fadeLogoIn(v)
-                    fadePictureIn(v)
+                    remember(v, chain.args.firstOrNull())
+                    startPicture(v)
                 }
+                out
+            }
+            // The other half of RemoteViews: an asynchronous apply loads the icon off the main
+            // thread through `setImageIconAsync` and hands back a Runnable that only *sets* the
+            // drawable later (`setImageDrawable`), so the hook above never sees that card.
+            Xp.hookAll(android.widget.ImageView::class.java, "setImageIconAsync") { chain ->
+                val out = chain.proceed()
+                val v = chain.thisObject
+                if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon && out is Runnable) {
+                    val icon = chain.args.firstOrNull()
+                    Runnable {
+                        out.run()
+                        runCatching {
+                            remember(v, icon)
+                            startPicture(v)
+                        }
+                    }
+                } else out
+            }
+            // Played again each time the island opens. Of the many copies of the card SystemUI
+            // keeps, the one the island is about to show is the one that turns visible - and the
+            // platform tells exactly that view so, through `onVisibilityAggregated` (ImageView uses
+            // it to show and hide its drawable; it is not called per frame). The picture is set
+            // again from its icon rather than `start()`ed: a finished one-shot does not rewind, a
+            // freshly loaded one plays from the empty cup.
+            Xp.hookAll(android.widget.ImageView::class.java, "onVisibilityAggregated") { chain ->
+                val out = chain.proceed()
+                val v = chain.thisObject
+                if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon
+                        && chain.args.firstOrNull() == true) runCatching { replay(v) }
                 out
             }
             Xp.log(TAG + "watching the card's picture")
         }.onFailure { Xp.log(TAG + "card's picture not watched: $it") }
+    }
+
+    /** When each copy of the card's picture last started, so one opening plays it once. */
+    private val started = java.util.WeakHashMap<android.widget.ImageView, Long>()
+
+    private fun remember(v: android.widget.ImageView, icon: Any?) {
+        if (icon is android.graphics.drawable.Icon) v.setTag(R.id.mc_pickup_logo, icon)
+    }
+
+    private fun startPicture(v: android.widget.ImageView) {
+        (v.drawable as? android.graphics.drawable.AnimatedImageDrawable)?.start()
+        started[v] = android.os.SystemClock.uptimeMillis()
+        fadeLogoIn(v)
+        fadePictureIn(v)
+    }
+
+    private fun replay(v: android.widget.ImageView) {
+        val icon = v.getTag(R.id.mc_pickup_logo) as? android.graphics.drawable.Icon ?: return
+        // Not while it is still filling: the island's own open animation can toggle the view's
+        // visibility more than once, and the card's first appearance is already a play.
+        val since = android.os.SystemClock.uptimeMillis() - (started[v] ?: 0L)
+        if (since < PickupCard.lastAnimationMs.toLong().coerceAtLeast(REPLAY_GAP)) return
+        v.post {
+            runCatching {
+                v.getTag(R.id.mc_pickup_icon).let { (it as? android.animation.Animator)?.cancel() }
+                (v.parent as? android.view.View)?.findViewById<android.view.View>(R.id.mc_pickup_logo)?.alpha = 0f
+                v.setImageIcon(icon) // runs the setter hook above, which starts it and fades the mark
+            }
+        }
     }
 
     /**
