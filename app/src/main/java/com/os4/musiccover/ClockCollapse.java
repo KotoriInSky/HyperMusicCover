@@ -1630,6 +1630,14 @@ public final class ClockCollapse {
         // The cover no longer asks for the notification layout; the rows decide again.
         NotifPresence.recheck(true);
         ClockGlass.restoreGlass();
+        // The unlock path lands here without an exit frame, so the wallpaper dim has to be
+        // let go explicitly - it is a value in the wallpaper process, not a view that goes
+        // away with the keyguard. Its own call: a failure here must not cost the release.
+        try {
+            KeepDim.apply(0f);
+        } catch (Throwable t) {
+            Xp.w(TAG + "keep-dim release failed: " + t);
+        }
         Main.onClockReleased();
         if (was) Xp.log(TAG + "clock: released (" + why + ")");
     }

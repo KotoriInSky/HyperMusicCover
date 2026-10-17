@@ -1623,6 +1623,10 @@ public class Main extends XposedModule {
                 } else if (Intent.ACTION_SCREEN_OFF.equals(a)) {
                     sScreenOn = false;
                     sAodGrey = Float.NaN;
+                    // The wallpaper dim belongs to the lit lyric page; the doze has its own
+                    // wallpaper dim and stacking the two would darken the AOD. The wake
+                    // re-enters the clock (and with it the veil) if the page is still up.
+                    KeepDim.apply(0f);
                     // Held into a doze, the screen wake lock would pull the phone back out of it.
                     if (sKeepAwakeView != null) keepAwake(false);
                     // A tap still waiting out its double tap window was aimed at a screen that
@@ -1655,6 +1659,9 @@ public class Main extends XposedModule {
                     // A hand-back of the live wallpaper that had to wait for a lock screen.
                     else if (sVideoWpOwed) setDepthHidden(false);
                     if (sCoverMode) MediaCard.applyMediaCard();
+                    // The doze had the wallpaper dim released; ask for it again if the
+                    // lyric page is still what the lock screen shows.
+                    KeepDim.resume();
                     return;
                 }
                 // Cover mode outlives the display going off and the phone being unlocked; its

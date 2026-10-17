@@ -112,6 +112,9 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             CoverCardLayer.refresh();
             ModuleState.saveStateSoon();
             if (Main.sCoverMode && modeChanged) {
+                // Leaving 保留壁纸, the dim belongs to the style that is going away. The clock
+                // may well stay held (another style's cover), so no exit frame will clear it.
+                if (!Main.keepsWallpaper()) KeepDim.apply(0f);
                 if (next.mode == CoverCardStyle.CARD) {
                     CoverCardLayer.attach(CoverPush.coverLayer());
                     CoverCardLayer.playback(Main.sCoverCardPlaying);
@@ -466,6 +469,9 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             // The wallpaper process, on its start or when asked, saying what it can
             // take. See sWpComposes.
             boolean composes = i.getBooleanExtra("composes", false);
+            // It starts with no dim; if it came back while the lyric page was up, hand it
+            // the one on record. See KeepDim.resend().
+            KeepDim.resend();
             // A restarted wallpaper process has forgotten the lyrics' blur.
             LockLyrics.resendBlur();
             if (composes != Main.sWpComposes) {

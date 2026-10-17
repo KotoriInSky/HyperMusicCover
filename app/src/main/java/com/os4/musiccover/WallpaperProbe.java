@@ -583,6 +583,41 @@ public class WallpaperProbe {
     private static final long GPU_FADE_GRACE_MS = 1500L;
 
     /**
+     * 保留壁纸's dim, 0..0.25: the wallpaper's fragment shader multiplies the texture by
+     * 1 - this. It has to be inside the texture and not a view over it, because the media
+     * card's and the clock's glass sample the wallpaper window and never see a SystemUI
+     * view - which is why the card stayed bright over the dimmed wallpaper (issue #96).
+     *
+     * The value is animated HERE, not stepped by SystemUI: the `keepdim` op names a target
+     * and a duration, and a frame pump asks the engine to draw until it is reached. Sending
+     * one value per frame instead was a coarse fade - a wallpaper redraw per broadcast, and
+     * whichever of the two the phone happened to miss read as a snap (2026-10-17).
+     */
+    private static volatile float sKeepDim;
+    private static float sKeepFrom;
+    private static float sKeepTo;
+    private static long sKeepAt;
+    private static int sKeepDurMs = 100;
+    private static boolean sKeepPumping;
+    /** The pump's own frame request, on the main thread. */
+    private static final long KEEP_PUMP_MS = 24L;
+    private static final Handler KEEP_MAIN = new Handler(Looper.getMainLooper());
+    private static final Object KEEP_LOCK = new Object();
+    /** Diagnostics: messages received, drawn changes, and the last few drawn values. */
+    private static int sKeepMsgs;
+    private static int sKeepDraws;
+    private static final int KEEP_LOG = 8;
+    private static final long[] sKeepLogAt = new long[KEEP_LOG];
+    private static final float[] sKeepLogV = new float[KEEP_LOG];
+    private static int sKeepLogN;
+    /** True while the keyguard renderer's own onDrawFrame runs. GL thread only. */
+    private static boolean sKeyguardDrawing;
+    /** The program `uKeepDim` was last resolved on, and its location (-1: not in this one). */
+    private static int sKeepDimProgram;
+    private static int sKeepDimLoc = -1;
+    private static final int[] sCurProgram = new int[1];
+
+    /**
      * The lock clock's colours, taken from the cover while the cover is up.
      *
      * SystemUI asks this process for a palette of the clock's region of the lock wallpaper
@@ -709,6 +744,32 @@ public class WallpaperProbe {
         // The lock clock's palette read off the cover while the cover is up. Its own hook, failing
         // on its own: nothing else here depends on it.
         installCoverPalette();
+
+        // 保留壁纸's dim, written into the wallpaper shader rather than over the screen.
+        //
+        // Must be in before any GL program is built: the shader source is read and compiled when
+        // that program is created, and a hook added later would only affect programs compiled
+        // after it. The keyguard renderer's is built when its surface is created, after this.
+        try {
+            Class<?> prog = Xp.findClass("com.miui.miwallpaper.opengl.ImageGLProgram", sCl);
+            Xp.hookAll(prog, "getShaderResource", chain -> {
+                Object r = chain.proceed();
+                if (!(r instanceof String)) return r;
+                String src = (String) r;
+                // The still image's fragment shader, and only it: the vertex shader has no
+                // uDarken, and the effect programs have their own fragment sources.
+                if (!src.contains("uniform int uDarken;")) return r;
+                String out = src.replace("uniform int uDarken;",
+                        "uniform int uDarken;\nuniform float uKeepDim;");
+                int end = out.lastIndexOf('}');
+                if (end < 0) return r;
+                return out.substring(0, end)
+                        + "    fragColor.rgb *= (1.0 - uKeepDim);\n" + out.substring(end);
+            });
+            Xp.log(TAG + "keep-dim shader hooked");
+        } catch (Throwable t) {
+            Xp.w(TAG + "keep-dim shader hook failed (the KEEP look keeps no dim): " + t);
+        }
 
         // Must be installed at load time: getBitmap() runs when the GL surface is created and
         // the texture is then cached, so a hook added later never sees it.
@@ -1150,30 +1211,50 @@ public class WallpaperProbe {
             sPlainProgram = Xp.findClass(
                     "com.miui.miwallpaper.opengl.ordinary.AnimImageGLProgram", sCl);
             Xp.hookAll(base, "onDrawFrame", chain -> {
-                if (sOemDarkenKnown && !sDarkenBroken
-                        && chain.getThisObject() == sKeyguardRenderer) {
-                    applyDarken(chain.getThisObject());
-                }
-                Object r = chain.getThisObject() == sKeyguardRenderer
-                        && (WallpaperVideo.on() || sVideoGlLive)
-                        ? drawWithVideo(chain) : chain.proceed();
-                if (chain.getThisObject() != sKeyguardRenderer) return r;
-                GpuFade f = sGpuFade;
-                if (f == null && sGlTex == 0) return r;
+                final boolean mine = chain.getThisObject() == sKeyguardRenderer;
+                // The program draw hook reads this to know whose texture it is setting the
+                // dim on. Single GL thread, so a plain flag is enough.
+                if (mine) sKeyguardDrawing = true;
                 try {
-                    drawGpuFade(chain.getThisObject(), f);
-                } catch (Throwable t) {
-                    sGpuFadeBroken = true;
-                    Xp.w(TAG + "gpu fade draw failed, using the CPU fade from now on: "
-                            + Log.getStackTraceString(t));
-                    if (f != null) abortGpuFade(f);
+                    if (sOemDarkenKnown && !sDarkenBroken && mine) {
+                        applyDarken(chain.getThisObject());
+                    }
+                    Object r = mine && (WallpaperVideo.on() || sVideoGlLive)
+                            ? drawWithVideo(chain) : chain.proceed();
+                    if (!mine) return r;
+                    GpuFade f = sGpuFade;
+                    if (f == null && sGlTex == 0) return r;
+                    try {
+                        drawGpuFade(chain.getThisObject(), f);
+                    } catch (Throwable t) {
+                        sGpuFadeBroken = true;
+                        Xp.w(TAG + "gpu fade draw failed, using the CPU fade from now on: "
+                                + Log.getStackTraceString(t));
+                        if (f != null) abortGpuFade(f);
+                    }
+                    return r;
+                } finally {
+                    if (mine) sKeyguardDrawing = false;
                 }
-                return r;
             });
             sDrawHooked = true;
             Xp.log(TAG + "draw hooked for the gpu fade");
         } catch (Throwable t) {
             Xp.w(TAG + "draw hook failed, the fade stays on the CPU: " + t);
+        }
+
+        // The one frame of the wallpaper's own draw. Everything else - the texture, the
+        // uniforms, the program - has been set by the time this is reached, so the dim can
+        // go on the current program immediately before its glDrawArrays.
+        try {
+            Class<?> glw = Xp.findClass("com.miui.miwallpaper.opengl.ImageGLWallpaper", sCl);
+            Xp.hookAll(glw, "draw", chain -> {
+                if (sKeyguardDrawing) applyKeepDim();
+                return chain.proceed();
+            });
+            Xp.log(TAG + "keep-dim uniform hooked");
+        } catch (Throwable t) {
+            Xp.w(TAG + "keep-dim uniform hook failed (the KEEP look keeps no dim): " + t);
         }
 
         Xp.hook(Xp.findMethodExact(Application.class, "onCreate"), chain -> {
@@ -2051,6 +2132,23 @@ public class WallpaperProbe {
                     }
                     if ("cls".equals(op)) {
                         dumpClass(i.getStringExtra("name"), i.getStringExtra("grep"));
+                    } else if ("keepdim".equals(op)) {
+                        // 保留壁纸's dim, as a target and the time to reach it. The frames
+                        // are asked for by KEEP_PUMP and the value is interpolated at draw
+                        // time - see applyKeepDim(). Nearly no logging here on purpose: a
+                        // step arrives during the clock's transition.
+                        float to = Math.max(0f, Math.min(0.5f, i.getFloatExtra("v", 0f)));
+                        int ms = Math.max(1, i.getIntExtra("ms", 100));
+                        synchronized (KEEP_LOCK) {
+                            sKeepFrom = keepDimNowLocked();
+                            sKeepTo = to;
+                            sKeepAt = android.os.SystemClock.uptimeMillis();
+                            sKeepDurMs = ms;
+                            sKeepMsgs++;
+                        }
+                        startKeepPump();
+                    } else if ("keepdimreport".equals(op)) {
+                        setResultData(keepDimReport());
                     } else if ("bmp".equals(op)) {
                         traceBitmaps(i.getStringExtra("name"));
                     } else if ("texfit".equals(op)) {
@@ -3156,6 +3254,117 @@ public class WallpaperProbe {
             requestFrame(true);
         } else {
             new Handler(Looper.getMainLooper()).post(() -> requestFrame(true));
+        }
+    }
+
+    /**
+     * Puts the current dim on whatever program is about to draw. GL thread, inside the
+     * wallpaper's own draw.
+     *
+     * The location is cached per program: the keyguard's program is rebuilt on some
+     * transitions, and asking the driver for the location every frame would be a call per
+     * frame for a value that only moves during a transition.
+     */
+    private static void applyKeepDim() {
+        synchronized (KEEP_LOCK) {
+            if (sKeepAt != 0L) {
+                float t = sKeepDurMs <= 0 ? 1f
+                        : Math.min(1f, (android.os.SystemClock.uptimeMillis() - sKeepAt)
+                        / (float) sKeepDurMs);
+                float e = t * t * (3f - 2f * t);
+                sKeepDim = sKeepFrom + (sKeepTo - sKeepFrom) * e;
+                if (t >= 1f) {
+                    sKeepDim = sKeepTo;
+                    sKeepFrom = sKeepTo;
+                    sKeepAt = 0L;
+                }
+            }
+            noteKeepDrawLocked();
+        }
+        android.opengl.GLES20.glGetIntegerv(android.opengl.GLES20.GL_CURRENT_PROGRAM,
+                sCurProgram, 0);
+        final int prog = sCurProgram[0];
+        if (prog != sKeepDimProgram) {
+            sKeepDimProgram = prog;
+            sKeepDimLoc = prog == 0 ? -1
+                    : android.opengl.GLES20.glGetUniformLocation(prog, "uKeepDim");
+        }
+        if (sKeepDimLoc >= 0) {
+            android.opengl.GLES20.glUniform1f(sKeepDimLoc, sKeepDim);
+        }
+    }
+
+    /** The values the shader was really told, for `op keepdimreport`. Holds KEEP_LOCK. */
+    private static void noteKeepDrawLocked() {
+        int n = sKeepLogN;
+        float last = n == 0 ? Float.NaN : sKeepLogV[(n - 1) % KEEP_LOG];
+        if (!Float.isNaN(last) && Math.abs(last - sKeepDim) < 0.005f) return;
+        sKeepLogAt[n % KEEP_LOG] = android.os.SystemClock.uptimeMillis();
+        sKeepLogV[n % KEEP_LOG] = sKeepDim;
+        sKeepLogN = n + 1;
+        sKeepDraws++;
+    }
+
+    /**
+     * Asks for wallpaper frames while the dim is moving. A still wallpaper draws only when
+     * asked, so without this the value would sit in a uniform nobody renders.
+     */
+    private static final Runnable KEEP_PUMP = new Runnable() {
+        @Override
+        public void run() {
+            boolean live;
+            synchronized (KEEP_LOCK) {
+                live = sKeepAt != 0L;
+                // No frame came back for a while: the request is not reaching the renderer
+                // on this build. Snap and stop rather than pump for ever.
+                if (live && android.os.SystemClock.uptimeMillis() - sKeepAt
+                        > sKeepDurMs + 250L) {
+                    sKeepDim = sKeepTo;
+                    sKeepFrom = sKeepTo;
+                    sKeepAt = 0L;
+                    live = false;
+                }
+            }
+            if (!live) {
+                sKeepPumping = false;
+                return;
+            }
+            requestFrame(true);
+            KEEP_MAIN.postDelayed(this, KEEP_PUMP_MS);
+        }
+    };
+
+    private static void startKeepPump() {
+        if (sKeepPumping) return;
+        sKeepPumping = true;
+        KEEP_MAIN.removeCallbacks(KEEP_PUMP);
+        KEEP_MAIN.post(KEEP_PUMP);
+    }
+
+    /** The value the animation is at now, so a new target starts from what is on screen. */
+    private static float keepDimNowLocked() {
+        if (sKeepAt == 0L) return sKeepDim;
+        float t = sKeepDurMs <= 0 ? 1f
+                : Math.min(1f, (android.os.SystemClock.uptimeMillis() - sKeepAt)
+                / (float) sKeepDurMs);
+        float e = t * t * (3f - 2f * t);
+        return sKeepFrom + (sKeepTo - sKeepFrom) * e;
+    }
+
+    /** For `op keepdimreport`: what was asked for and what the shader actually got. */
+    private static String keepDimReport() {
+        synchronized (KEEP_LOCK) {
+            StringBuilder sb = new StringBuilder("dim=").append(sKeepDim)
+                    .append(" from=").append(sKeepFrom).append(" to=").append(sKeepTo)
+                    .append(" at=").append(sKeepAt).append(" dur=").append(sKeepDurMs)
+                    .append(" msgs=").append(sKeepMsgs).append(" draws=").append(sKeepDraws)
+                    .append(" pumping=").append(sKeepPumping).append(" log=");
+            int keep = Math.min(sKeepLogN, KEEP_LOG);
+            for (int i = 0; i < keep; i++) {
+                int k = (sKeepLogN - keep + i) % KEEP_LOG;
+                sb.append(sKeepLogAt[k]).append(':').append(sKeepLogV[k]).append(' ');
+            }
+            return sb.toString();
         }
     }
 
