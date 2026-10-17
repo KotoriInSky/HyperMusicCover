@@ -890,6 +890,10 @@ public final class LyricSource {
                 if (r.lines.isEmpty() && !files && !instrumental) {
                     local(ctx, controller, r);
                 }
+                // A translation left on the line itself by its tag writer (#95) is hung on the
+                // line before anything reads it: borrow() must see it and not go and fetch a
+                // second one, and the layout must draw it as a translation.
+                r.lines = LyricParse.splitInlineTranslations(r.lines);
                 Xp.log("[MCLyric] " + pkg + " -> " + r.why);
                 onMain(cb, r.lines, r.why, r.source);
                 // Extra to the answer already sent, so nothing in it is worth a thread - and an

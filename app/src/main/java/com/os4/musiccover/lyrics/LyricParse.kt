@@ -404,6 +404,100 @@ object LyricParse {
         return speakers(withLanes(out, prepared.lanes))
     }
 
+    /**
+     * The translation some tag writers leave on the line itself, separated by a thin space
+     * instead of shipped as a row of its own (#95).
+     *
+     * MusicTag for Android and the NetEase exports written by it join a line and its translation
+     * with U+2009 - "Knows me the way I do when I feel overwhelmed\u2009无人像我自己一般了解我"
+     * - and Salt Player reads that separator. lyrics-core does not: the Chinese stayed in the
+     * line's text, drawn at the original's size inside its paragraph, and with no line carrying a
+     * translation the translation switch went and fetched a second one from a catalogue. One
+     * line, two translations, one of them twice the size it should be.
+     *
+     * Only a line that carries CJK is split: U+2009 is a typographic space too, and a Latin line
+     * using one has no translation after it. The head stays the line's text - its word timing
+     * clipped at the separator, since a translation is not sung a syllable at a time - and
+     * everything after becomes its translation, on its own row when there was more than one.
+     * Called on the lines of whichever route answered, before anything reads them, so that borrowing
+     * sees the translations the lyric came with and the layout draws them under the line.
+     */
+    @JvmStatic
+    fun splitInlineTranslations(lines: List<LyricLine>): List<LyricLine> {
+        var changed = false
+        val out = ArrayList<LyricLine>(lines.size)
+        for (line in lines) {
+            val split = splitInline(line)
+            if (split == null) out.add(line) else {
+                out.add(split)
+                changed = true
+            }
+        }
+        return if (changed) out else lines
+    }
+
+    /** The thin and narrow no-break spaces tag writers join a translation to its line with. */
+    private const val THIN_SPACE = '\u2009'
+    private const val NARROW_NO_BREAK_SPACE = '\u202f'
+
+    /** One line with its same-line translation taken off it, or null when it has none. */
+    private fun splitInline(line: LyricLine): LyricLine? {
+        val text = line.text
+        val at = text.indexOfFirst { it == THIN_SPACE || it == NARROW_NO_BREAK_SPACE }
+        if (at <= 0 || at >= text.length - 1) return null
+        if (!hasCjk(text)) return null
+        // The space before the separator is not part of the line either.
+        var cut = at
+        while (cut > 0 && text[cut - 1].isWhitespace()) cut--
+        if (cut == 0) return null
+        val tail = text.substring(at + 1)
+            .split(THIN_SPACE, NARROW_NO_BREAK_SPACE)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        if (tail.isEmpty()) return null
+        val head = text.substring(0, cut)
+        val rest = tail.joinToString("\n")
+        val translation = line.translation?.let { it + "\n" + rest } ?: rest
+        val starts = line.sylStart
+        val ends = line.sylEnd
+        val chars = line.charEnd
+        if (starts == null || ends == null || chars == null) {
+            val copy = LyricLine(head, translation, line.roma, line.start, line.end,
+                line.opposite, null, null, null)
+            copy.bg = line.bg
+            return copy
+        }
+        // The syllables wholly inside the head stay; the one the separator falls in is cut
+        // there, and the rest - the translation - goes with it. charEnd has to run no further
+        // than the text's new length or the word path indexes past its end.
+        val startsOut = ArrayList<Int>(starts.size)
+        val endsOut = ArrayList<Int>(starts.size)
+        val charsOut = ArrayList<Int>(starts.size)
+        var from = 0
+        for (k in starts.indices) {
+            val to = chars[k]
+            if (from >= cut) break
+            val end = if (to > cut) cut else to
+            if (end > from) {
+                startsOut.add(starts[k])
+                endsOut.add(ends[k])
+                charsOut.add(end)
+            }
+            from = to
+        }
+        if (charsOut.isEmpty()) return null
+        val copy = LyricLine(head, translation, line.roma, line.start, line.end,
+            line.opposite, startsOut.toIntArray(), endsOut.toIntArray(), charsOut.toIntArray())
+        copy.bg = line.bg
+        return copy
+    }
+
+    /** Han, kana or hangul: the scripts a same-line translation is written in. */
+    private fun hasCjk(s: String): Boolean = s.any {
+        it.code in 0x3400..0x4DBF || it.code in 0x4E00..0x9FFF
+            || it.code in 0x3040..0x30FF || it.code in 0xAC00..0xD7AF
+    }
+
     /** A body made ready for the parser, and the translations taken off it by their line's start. */
     internal class Prepared(val body: String, val lanes: List<Pair<Int, String>>)
 
