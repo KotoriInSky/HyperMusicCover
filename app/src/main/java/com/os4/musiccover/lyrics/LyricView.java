@@ -1631,7 +1631,7 @@ final class LyricView extends View {
                         .setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED)
                         .build();
                 h += BG_GAP_DP * density + b.bgLay[i].getHeight();
-                if (l.hasWords()) b.charXBg[i] = charXOf(b.bgLay[i], l.bg);
+                if (l.bg.hasWords()) b.charXBg[i] = charXOf(b.bgLay[i], l.bg);
             }
             // Left out of the layout entirely when the switch is off, rather than laid out and
             // skipped in the draw: the rows it would have taken are most of a line's height, and
@@ -1895,10 +1895,37 @@ final class LyricView extends View {
     protected void onDraw(Canvas canvas) {
         LockLyrics.noteStill("draw");
         long t0 = System.nanoTime();
-        drawLyrics(canvas);
+        // A bad lyric is not worth the system UI. An exception that leaves onDraw takes the
+        // frame's draw with it and with it the whole SystemUI process (issue #94); the canvas
+        // save is outside the try so an unbalanced save inside drawLyrics cannot outlive it.
+        int save = canvas.save();
+        try {
+            drawLyrics(canvas);
+        } catch (Throwable t) {
+            reportDrawFailure(t);
+        } finally {
+            canvas.restoreToCount(save);
+        }
         long took = System.nanoTime() - t0;
         drawNsSum += took;
         if (took > drawNsMax) drawNsMax = took;
+    }
+
+    private static long sDrawFailAt;
+    private static int sDrawFailSince;
+
+    /** One line per ten seconds: a draw failure repeats every frame it is not fixed. */
+    private static void reportDrawFailure(Throwable t) {
+        long now = SystemClock.uptimeMillis();
+        if (sDrawFailAt == 0L || now - sDrawFailAt >= 10000L) {
+            Xp.w(TAG + "lyric draw failed" + (sDrawFailSince > 0
+                    ? " (" + sDrawFailSince + " more frames since the last report)" : "")
+                    + ": " + android.util.Log.getStackTraceString(t));
+            sDrawFailAt = now;
+            sDrawFailSince = 0;
+        } else {
+            sDrawFailSince++;
+        }
     }
 
     private void drawLyrics(Canvas canvas) {
@@ -2371,10 +2398,20 @@ final class LyricView extends View {
         if (bl != null && l.bg != null) {
             int save = c.save();
             c.translate(0f, lay.getHeight() + BG_GAP_DP * density);
-            drawWordRows(c, l.bg, bl, bgPaint, charXFor(i, bl, l.bg, charXBg), e,
-                    a * level * BG_ALPHA,
-                    a * (INACTIVE + (1f - INACTIVE) * e * UNSUNG) * BG_ALPHA,
-                    BG_LIFT, false, 1);
+            if (l.bg.hasWords()) {
+                drawWordRows(c, l.bg, bl, bgPaint, charXFor(i, bl, l.bg, charXBg), e,
+                        a * level * BG_ALPHA,
+                        a * (INACTIVE + (1f - INACTIVE) * e * UNSUNG) * BG_ALPHA,
+                        BG_LIFT, false, 1);
+            } else {
+                // A backing vocal can arrive without word timing of its own - a provider may
+                // publish its text and nothing else. It used to be handed to the word path
+                // regardless, where the renderer read the missing syllable array and took
+                // SystemUI down (issue #94); whole, at the brightness of its sung lead.
+                bl.getPaint().setColor(ink(a * level * BG_ALPHA, 0f));
+                bl.draw(c);
+                bl.getPaint().setColor(0xFFFFFFFF);
+            }
             c.restoreToCount(save);
         }
         drawTranslation(c, i, a * level);
@@ -2428,6 +2465,8 @@ final class LyricView extends View {
      */
     private void drawSyllables(Canvas c, LyricLine l, StaticLayout lay, TextPaint p, float[] xs,
                                float e, int r, float liftScale, boolean glowOn) {
+        // Belt and braces: every caller is supposed to have asked hasWords() first.
+        if (l.sylStart == null) return;
         int count = l.sylStart.length;
         int rs = lay.getLineStart(r), re = lay.getLineEnd(r);
         float baseline = lay.getLineBaseline(r);
