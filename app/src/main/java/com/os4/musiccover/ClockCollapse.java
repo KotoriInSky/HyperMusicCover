@@ -125,6 +125,24 @@ public final class ClockCollapse {
     private static float sAodTop = Float.NaN, sAodUnit = Float.NaN, sAodDate = Float.NaN;
 
     /**
+     * The pose our own pre-draw last put on the clock while the lock screen was up.
+     *
+     * A held doze keeps "the pose on screen when the screen fell asleep", and that pose is a
+     * number this class wrote itself - not one to measure again at the moment of sleep. The
+     * keyguard need not be drawing then: the phone can be unlocked when the power button is
+     * pressed, and the lock screen is re-shown behind the sleep. A fresh measurement of that
+     * moment asks for ink that is actually drawn (ClockViews.collectTimeViews, drawnUnder and
+     * usableDate all ignore a faded face), comes back empty, leaves sFromTop NaN, and the doze
+     * hands the clock back to the OEM - the full-size clock (reported 2026-10-14, issue #88).
+     *
+     * Our own last write has none of those preconditions. Written by every ENTER/ON frame that
+     * places the clock; read by toAod(). NaN = nothing placed this session.
+     */
+    private static float sDrawnTop = Float.NaN, sDrawnUnit = Float.NaN, sDrawnDate = Float.NaN;
+    /** One warning per sleep when a held doze has no pose at all. See the AOD branch of frame(). */
+    private static boolean sAodPoseWarned;
+
+    /**
      * The doze pose as the frame before last reported it, waiting for a frame that agrees.
      *
      * Not a pose anything is placed from: it is the previous reading, and a reading is only
@@ -544,7 +562,22 @@ public final class ClockCollapse {
         // once, and the transforms on the views still describe the old one - reading after would
         // start the spring from a clock several times the size of the one on screen.
         boolean flying = (sPhase == Phase.ENTER || sPhase == Phase.ON) && Main.sContainer != null;
-        if (flying) captureFrom();
+        boolean fromDrawn = false;
+        if (flying) {
+            // What our own last pre-draw put on the clock IS the pose on screen; measuring it
+            // again here can come back empty when the keyguard is not drawing (unlocked, being
+            // re-shown) - it did, and the doze showed the OEM's full clock. See sDrawnTop.
+            // The measurement stays as the fallback for a process that has not placed a frame.
+            if (!Float.isNaN(sDrawnTop)) {
+                sFromTop = sDrawnTop;
+                sFromUnit = sDrawnUnit;
+                sFromDate = sDrawnDate;
+                fromDrawn = true;
+            } else {
+                captureFrom();
+            }
+            sAodPoseWarned = false;
+        }
         Float held = Main.sHoldY;
         // Kept for a held doze to put back on, one frame later - see sAodHoldY. ONLY when there
         // is one: the screen falling asleep calls this twice (KeyguardService's sleep hook, then
@@ -617,7 +650,8 @@ public final class ClockCollapse {
             install();
             Xp.log(TAG + "clock: into the AOD holding the cover pose (top="
                     + Main.r1(sFromTop) + " unit=" + Main.r1(sFromUnit)
-                    + " date=" + Main.r1(sFromDate) + ")");
+                    + " date=" + Main.r1(sFromDate)
+                    + " from=" + (fromDrawn ? "drawn" : "measured") + ")");
             return;
         }
         sAodHeld = false;
@@ -1579,6 +1613,10 @@ public final class ClockCollapse {
         sTv = 0f;
         sFromTop = Float.NaN;
         sAodTop = Float.NaN;
+        // The pose an old session put on the clock is not this session's: a cover that comes
+        // back must record its own before toAod() may hold it.
+        sDrawnTop = sDrawnUnit = sDrawnDate = Float.NaN;
+        sAodPoseWarned = false;
         clearAodPend();
         sGlassP = 0f;
         uninstall();
@@ -2192,7 +2230,9 @@ public final class ClockCollapse {
     private static void captureFrom() {
         Live m = LIVE;
         if (!measure(m)) {
-            sFromTop = Float.NaN;
+            // All three, not just the top: a failed capture used to leave the previous unit and
+            // date in place, and "top=NaN unit=75.0 date=238.4" is neither one pose nor none.
+            sFromTop = sFromUnit = sFromDate = Float.NaN;
             return;
         }
         View g = firstTarget();
@@ -2248,6 +2288,25 @@ public final class ClockCollapse {
                 sAodTop = sFromTop;
                 sAodUnit = sFromUnit;
                 sAodDate = sFromDate;
+                return;
+            } else if (sAodHeld) {
+                // A held doze whose pose went missing. Do NOT fall through to the hand-back
+                // below: clearTransforms() is exactly what gives the OEM its full-size clock
+                // back, which is the bug this branch exists to prevent. The transforms survived
+                // the hand-over and still describe the cover's clock, so they are kept; the y
+                // they were written against goes back on the OEM so its own relayout does not
+                // move them. sAodTop is cleared so the wake captures a fresh pose instead of
+                // starting from a doze pose that was never recorded.
+                AodColour.holdAodColour();
+                sCenterK = 1f;
+                if (!Float.isNaN(sAodHoldY)) hold(sAodHoldY);
+                sAodTop = Float.NaN;
+                sAodUnit = Float.NaN;
+                sAodDate = Float.NaN;
+                if (!sAodPoseWarned) {
+                    sAodPoseWarned = true;
+                    Xp.w(TAG + "clock: held doze has no pose, keeping the cover's transforms");
+                }
                 return;
             } else {
                 // The OEM's clock as it is. What it looks like here is the wake's start.
@@ -2419,6 +2478,15 @@ public final class ClockCollapse {
                 : sCenterFrom + (sCenterTo - sCenterFrom) * Math.max(0f, Math.min(1f, sT));
 
         android.os.Trace.beginSection("MC c.write"); try { writePose(m, top, unit, date, phase == Phase.ENTER && sGlyphTail); } finally { android.os.Trace.endSection(); }
+        // The pose the lock screen is showing, for a sleep taken while it is not drawing. See
+        // sDrawnTop. Kept through a hidden keyguard on purpose: the transforms stay on the views
+        // and are still what the lock screen comes back to. An EXIT is on its way to the OEM's
+        // pose, so it is not "the cover's pose" and is not kept.
+        if (phase == Phase.ENTER || phase == Phase.ON) {
+            sDrawnTop = top;
+            sDrawnUnit = unit;
+            sDrawnDate = date;
+        }
         if (phase == Phase.ON) { android.os.Trace.beginSection("MC c.note"); try { notePose(m, top, unit, date, full, room); } finally { android.os.Trace.endSection(); } }
         // Once per drawn frame: onGlyphDrawn re-places from inside the draw, so this runs
         // three times a frame on this style and a trace that kept them all covered a third of
