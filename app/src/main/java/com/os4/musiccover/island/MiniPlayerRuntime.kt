@@ -84,11 +84,15 @@ object MiniPlayerRuntime {
             .also { navKeepOnSaved = it }
 
     /**
-     * Whether the bottom's lasting lines stand after the date (DateStatus): with the islands on,
-     * which is all that is left of it - the placement itself is fixed now (MiniPlayerConfig).
+     * Whether the bottom's lasting lines stand after the date (DateStatus): with the islands on
+     * and the setting on, which is how it has been since 2026-10-09; off puts them back at the
+     * bottom (MiniPlayerConfig.STATUS_AT_DATE).
      */
-    @JvmStatic fun statusAtDate(context: Context): Boolean =
-        JSONObject(configJson(context)).optBoolean(MiniPlayerConfig.ENABLED)
+    @JvmStatic fun statusAtDate(context: Context): Boolean {
+        val config = JSONObject(configJson(context))
+        return config.optBoolean(MiniPlayerConfig.ENABLED) &&
+            config.optBoolean(MiniPlayerConfig.STATUS_AT_DATE, true)
+    }
 
     @JvmStatic fun applyConfig(context: Context, raw: String?) {
         val saved = MiniPlayerConfig.apply(prefs(context), raw)

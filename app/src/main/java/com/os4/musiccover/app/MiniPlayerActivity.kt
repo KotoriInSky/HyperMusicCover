@@ -193,8 +193,13 @@ private fun MiniPlayerPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
                             checked = config.optBoolean(MiniPlayerConfig.NAV_KEEP_ON),
                             enabled = ready,
                             onCheckedChange = { push(MiniPlayerConfig.NAV_KEEP_ON, it) })
-                        // No 状态显示在日期后面 row: the placement is fixed with the islands on
-                        // (MiniPlayerRuntime.statusAtDate), so there is nothing left to switch.
+                        // Off puts 勿扰, charging and the like back at the bottom, where the OEM
+                        // keeps them and the pill can cover them (DateStatus).
+                        SwitchPreference(title = stringResource(R.string.mini_status_at_date),
+                            summary = stringResource(R.string.mini_status_at_date_summary),
+                            checked = config.optBoolean(MiniPlayerConfig.STATUS_AT_DATE, true),
+                            enabled = ready,
+                            onCheckedChange = { push(MiniPlayerConfig.STATUS_AT_DATE, it) })
                         SwitchPreference(title = stringResource(R.string.mini_fod_lift),
                             summary = stringResource(R.string.mini_fod_lift_summary),
                             checked = config.optBoolean(MiniPlayerConfig.FOD_LIFT),

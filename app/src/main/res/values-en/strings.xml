@@ -246,6 +246,8 @@
     <string name="mini_widen_summary">The island fills the space left by disabled lock screen quick functions</string>
     <string name="mini_normals_in_stack">Keep ordinary notifications off islands</string>
     <string name="mini_nav_keep_on">Keep the screen on while navigating</string>
+    <string name="mini_status_at_date">Status info after the date</string>
+    <string name="mini_status_at_date_summary">Off: back at the bottom</string>
     <string name="mini_fod_lift">Clear of the fingerprint sensor</string>
     <string name="mini_fod_lift_summary">On phones with a low optical sensor, lifts the pill above it</string>
     <string name="mini_nav_keep_on_summary">While an Amap navigation or transit page is up</string>

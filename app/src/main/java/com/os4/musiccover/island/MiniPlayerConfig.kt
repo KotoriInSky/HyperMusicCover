@@ -7,7 +7,7 @@ import org.json.JSONObject
 /** Portable settings for the HyperChanger lockscreen mini player. */
 object MiniPlayerConfig {
     /** Sent by SystemUI so the settings app can reject an older loaded module. */
-    const val SCHEMA_VERSION = 8
+    const val SCHEMA_VERSION = 9
     const val ENABLED = "enabled"
     const val WIDTH = "widthDp"
     const val HEIGHT_RADIUS = "heightRadiusDp"
@@ -40,9 +40,8 @@ object MiniPlayerConfig {
     /**
      * 勿扰, charging and the like drawn after the date, clear of the pill (DateStatus).
      *
-     * Not a setting any more (2026-10-09): it is always on, so it sits with the sizes below and
-     * nothing that arrives from anywhere can turn it off. The key stays in the JSON so the state
-     * file and [DateStatus] keep reading the same map.
+     * A switch again (2026-10-19): on by default, so the line stands after the date as it has
+     * since 2026-10-09; off puts the whole line back at the bottom, where the OEM keeps it.
      */
     const val STATUS_AT_DATE = "statusAtDate"
 
@@ -50,7 +49,7 @@ object MiniPlayerConfig {
     const val FOD_LIFT = "fodLift"
 
     private val switches = setOf(ENABLED, ADAPTIVE_WIDTH, NAV_KEEP_ON, FOD_LIFT,
-        NORMALS_IN_STACK)
+        NORMALS_IN_STACK, STATUS_AT_DATE)
 
     private val defaults = linkedMapOf<String, Any>(
         ENABLED to false,
@@ -73,8 +72,8 @@ object MiniPlayerConfig {
 
     /**
      * The config as the module will use it: the switches ([ENABLED], [ADAPTIVE_WIDTH],
-     * [NAV_KEEP_ON], [FOD_LIFT], [NORMALS_IN_STACK]) and the height radius from the input, and the
-     * width, the artwork radius and [STATUS_AT_DATE] always at the values above. The height radius
+     * [NAV_KEEP_ON], [FOD_LIFT], [NORMALS_IN_STACK], [STATUS_AT_DATE]) and the height radius from
+     * the input, and the width and the artwork radius always at the values above. The height radius
      * is shared by the island and both shortcut discs.
      *
      * 221dp is the requested pill width before the runtime fits it between the shortcuts.

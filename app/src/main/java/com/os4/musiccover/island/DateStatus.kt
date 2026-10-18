@@ -84,6 +84,7 @@ internal object DateStatus {
 
     private val hosts = WeakHashMap<View, Host>()
     private var lastAlive = false
+    private var lastActive = false
     private var numStateRef: WeakReference<View>? = null
 
     private val shown = ArrayList<Seg>()
@@ -399,6 +400,13 @@ internal object DateStatus {
         val alive = hostAlive()
         if (alive != lastAlive) {
             lastAlive = alive
+            numStateRef?.get()?.requestLayout()
+        }
+        // The switch takes the line back to the bottom without the date view changing, and the
+        // num state view stays measured as it was unless asked (MiniPlayerConfig.STATUS_AT_DATE).
+        val activeNow = active()
+        if (activeNow != lastActive) {
+            lastActive = activeNow
             numStateRef?.get()?.requestLayout()
         }
         val want = wanted()
