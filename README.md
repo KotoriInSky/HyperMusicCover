@@ -41,15 +41,6 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 
 - **仅支持Hyper OS 4**。HyperOS 3 及其他 ROM 未适配
 
-## 许可证与第三方声明
-
-本项目的自有代码以 **GNU Affero General Public License v3.0（AGPL-3.0）** 发布，全文见 [LICENSE](./LICENSE)。
-
-- 基于或改编自第三方项目的文件，仍保留其原有许可证，具体范围见 [NOTICE](./NOTICE)
-- 第三方组件包括 GPL-3.0（KernelSU、HyperLyrics Enhanced 部分文件）、Apache-2.0（HyperNavBar、miuix、AndroidLiquidGlass、HyperChanger、HyperLyrics Enhanced 部分文件）以及作为依赖使用的 accompanist-lyrics-core
-- 按 AGPL-3.0 的要求，分发本模块或其修改版时，必须同时提供完整的对应源代码
-- 应用内「关于 → 第三方许可证」列出了随包使用的全部开源项目与许可证文本
-
 <h2 align="center">软件界面预览</h2>
 
 <p align="center"><em>截图取自 HyperOS 4 实机，不同机型、主题和壁纸下效果可能不同。</em></p>
@@ -59,22 +50,21 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 <div align="center">
 <table>
   <tr>
-    <td align="center"><strong>全屏封面</strong><br><a href="screenshot/cover-full.png"><img src="screenshot/cover-full.png" width="200px" alt="全屏封面"></a></td>
-    <td align="center"><strong>方形封面</strong><br><a href="screenshot/cover-card.png"><img src="screenshot/cover-card.png" width="200px" alt="方形卡片"></a></td>
-    <td align="center"><strong>视频封面</strong><br><a href="screenshot/cover-video.gif"><img src="screenshot/cover-video.gif" width="200px" alt="视频封面"></a></td>
+    <td align="center"><a href="screenshot/cover-full.png"><img src="screenshot/cover-full.png" width="200px" alt="全屏封面"></a><br><sub><span style="color:#8a8a8a">全屏封面</span></sub></td>
+    <td align="center"><a href="screenshot/cover-card.png"><img src="screenshot/cover-card.png" width="200px" alt="方形封面"></a><br><sub><span style="color:#8a8a8a">方形封面</span></sub></td>
+    <td align="center"><a href="screenshot/cover-video.gif"><img src="screenshot/cover-video.gif" width="200px" alt="视频封面"></a><br><sub><span style="color:#8a8a8a">视频封面</span></sub></td>
   </tr>
 </table>
 </div>
-
 
 <h3 align="center">时钟与歌词</h3>
 
 <div align="center">
 <table>
   <tr>
-    <td align="center"><strong>AOD 歌词</strong><br><a href="screenshot/lyrics-aod.gif"><img src="screenshot/lyrics-aod.gif" width="200px" alt="AOD 歌词"></a></td>
-    <td align="center"><strong>逐字歌词</strong><br><a href="screenshot/lyrics-word.gif"><img src="screenshot/lyrics-word.gif" width="200px" alt="逐字歌词"></a></td>
-    <td align="center"><strong>歌词与封面的切换动画</strong><br><a href="screenshot/lyrics-cover-switch.gif"><img src="screenshot/lyrics-cover-switch.gif" width="200px" alt="歌词与封面的切换动画"></a></td>
+    <td align="center"><a href="screenshot/lyrics-aod.gif"><img src="screenshot/lyrics-aod.gif" width="200px" alt="AOD 歌词"></a><br><sub><span style="color:#8a8a8a">AOD 歌词</span></sub></td>
+    <td align="center"><a href="screenshot/lyrics-word.gif"><img src="screenshot/lyrics-word.gif" width="200px" alt="逐字歌词"></a><br><sub><span style="color:#8a8a8a">逐字歌词</span></sub></td>
+    <td align="center"><a href="screenshot/lyrics-cover-switch.gif"><img src="screenshot/lyrics-cover-switch.gif" width="200px" alt="歌词与封面的切换动画"></a><br><sub><span style="color:#8a8a8a">歌词与封面的切换动画</span></sub></td>
   </tr>
 </table>
 </div>
@@ -84,12 +74,10 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 <div align="center">
 <table>
   <tr>
-    <td align="center"><strong>并排</strong><br><a href="screenshot/island-row.gif"><img src="screenshot/island-row.gif" width="200px" alt="并排"></a></td>
-    <td align="center"><strong>堆叠</strong><br><a href="screenshot/island-stack.gif"><img src="screenshot/island-stack.gif" width="200px" alt="堆叠"></a></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>音乐岛</strong><br><a href="screenshot/island-media.gif"><img src="screenshot/island-media.gif" width="200px" alt="音乐岛"></a></td>
-    <td align="center"><strong>导航岛</strong><br><a href="screenshot/island-nav.png"><img src="screenshot/island-nav.png" width="200px" alt="导航岛"></a></td>
+    <td align="center"><a href="screenshot/island-row.gif"><img src="screenshot/island-row.gif" width="200px" alt="并排"></a><br><sub><span style="color:#8a8a8a">并排</span></sub></td>
+    <td align="center"><a href="screenshot/island-stack.gif"><img src="screenshot/island-stack.gif" width="200px" alt="堆叠"></a><br><sub><span style="color:#8a8a8a">堆叠</span></sub></td>
+    <td align="center"><a href="screenshot/island-media.gif"><img src="screenshot/island-media.gif" width="200px" alt="音乐岛"></a><br><sub><span style="color:#8a8a8a">音乐岛</span></sub></td>
+    <td align="center"><a href="screenshot/island-nav.png"><img src="screenshot/island-nav.png" width="200px" alt="导航岛"></a><br><sub><span style="color:#8a8a8a">导航岛</span></sub></td>
   </tr>
 </table>
 </div>
@@ -103,6 +91,15 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 - 本项目不提供任何音乐、歌词或视频资源，也不对第三方来源的可用性、准确性负责
 - 因使用本模块造成的设备故障、数据丢失问题，作者不承担责任
 - 如你认为本项目侵犯了你的权益或违反许可证，请通过 [Issues](https://github.com/zyl6932/HyperMusicCover/issues) 联系
+
+## 许可证与第三方声明
+
+本项目的自有代码以 **GNU Affero General Public License v3.0（AGPL-3.0）** 发布，全文见 [LICENSE](./LICENSE)。
+
+- 基于或改编自第三方项目的文件，仍保留其原有许可证，具体范围见 [NOTICE](./NOTICE)
+- 第三方组件包括 GPL-3.0（KernelSU、HyperLyrics Enhanced 部分文件）、Apache-2.0（HyperNavBar、miuix、AndroidLiquidGlass、HyperChanger、HyperLyrics Enhanced 部分文件）以及作为依赖使用的 accompanist-lyrics-core
+- 按 AGPL-3.0 的要求，分发本模块或其修改版时，必须同时提供完整的对应源代码
+- 应用内「关于 → 第三方许可证」列出了随包使用的全部开源项目与许可证文本
 
 ## 开源致谢
 
