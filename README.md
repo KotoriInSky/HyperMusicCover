@@ -9,6 +9,7 @@
 [![Android](https://img.shields.io/badge/Android-17-3DDC84?logo=android&logoColor=white)](https://www.android.com/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-orange)](./LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/zyl6932/HyperMusicCover/total?logo=github&logoColor=green)](https://github.com/zyl6932/HyperMusicCover/releases)
+[![Stars](https://img.shields.io/github/stars/zyl6932/HyperMusicCover?logo=github&logoColor=yellow)](https://github.com/zyl6932/HyperMusicCover/stargazers)
 
 </div>
 
@@ -115,8 +116,6 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 - **ColorOS Live Lyrics Bridge** — 动态封面的思路：从 Apple Music 页面取视频并在锁屏播放
 - **AMLL / amll-ttml-db** — 歌词动画手感与逐字歌词数据
 - **autopickupisland** — 取餐码的整套做法：ColorOS PCR 插件、云端品牌规则与卡片素材
-
-<h2 align="center">Star History</h2>
 
 <div align="center">
 <a href="https://www.star-history.com/#zyl6932/HyperMusicCover&Date">
