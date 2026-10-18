@@ -2,6 +2,8 @@
 
 HyperOS 4 音乐锁屏
 
+[![GitHub Downloads](https://img.shields.io/github/downloads/zyl6932/HyperMusicCover/total?logo=github&logoColor=green)](https://github.com/zyl6932/HyperMusicCover/releases)
+
 ## Star History
 
 <a href="https://www.star-history.com/#zyl6932/HyperMusicCover&Date">
