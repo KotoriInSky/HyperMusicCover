@@ -74,10 +74,10 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 <div align="center">
 <table>
   <tr>
-    <td align="center" width="25%"><a href="screenshot/island-row.gif"><img src="screenshot/island-row.gif" width="200px" alt="并排"></a><br><sub><span style="color:#8a8a8a">并排</span></sub></td>
-    <td align="center" width="25%"><a href="screenshot/island-stack.gif"><img src="screenshot/island-stack.gif" width="200px" alt="堆叠"></a><br><sub><span style="color:#8a8a8a">堆叠</span></sub></td>
-    <td align="center" width="25%"><a href="screenshot/island-media.gif"><img src="screenshot/island-media.gif" width="200px" alt="音乐岛"></a><br><sub><span style="color:#8a8a8a">音乐岛</span></sub></td>
-    <td align="center" width="25%"><a href="screenshot/island-nav.png"><img src="screenshot/island-nav.png" width="200px" alt="导航岛"></a><br><sub><span style="color:#8a8a8a">导航岛</span></sub></td>
+    <td align="center" width="25%"><a href="screenshot/island-row.gif"><img src="screenshot/island-row.gif" width="180px" alt="并排"></a><br><sub><span style="color:#8a8a8a">并排</span></sub></td>
+    <td align="center" width="25%"><a href="screenshot/island-stack.gif"><img src="screenshot/island-stack.gif" width="180px" alt="堆叠"></a><br><sub><span style="color:#8a8a8a">堆叠</span></sub></td>
+    <td align="center" width="25%"><a href="screenshot/island-media.gif"><img src="screenshot/island-media.gif" width="180px" alt="音乐岛"></a><br><sub><span style="color:#8a8a8a">音乐岛</span></sub></td>
+    <td align="center" width="25%"><a href="screenshot/island-nav.png"><img src="screenshot/island-nav.png" width="180px" alt="导航岛"></a><br><sub><span style="color:#8a8a8a">导航岛</span></sub></td>
   </tr>
 </table>
 </div>
