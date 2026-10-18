@@ -8,8 +8,8 @@
 
 [![Android](https://img.shields.io/badge/Android-17-3DDC84?logo=android&logoColor=white)](https://www.android.com/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-orange)](./LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/zyl6932/HyperMusicCover/total?logo=github&logoColor=green)](https://github.com/zyl6932/HyperMusicCover/releases)
-[![Stars](https://img.shields.io/github/stars/zyl6932/HyperMusicCover?logo=github&logoColor=yellow)](https://github.com/zyl6932/HyperMusicCover/stargazers)
+[![Downloads](https://img.shields.io/github/downloads/zyl6932/HyperMusicCover/total?label=Downloads&logo=github&logoColor=green&cacheSeconds=3600)](https://github.com/zyl6932/HyperMusicCover/releases)
+[![Stars](https://img.shields.io/github/stars/zyl6932/HyperMusicCover?label=Stars&logo=github&logoColor=yellow&cacheSeconds=3600)](https://github.com/zyl6932/HyperMusicCover/stargazers)
 
 </div>
 
@@ -40,7 +40,7 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 
 ## 兼容性与已知问题
 
-- **仅支持Hyper OS 4**。HyperOS 3 及其他 ROM 未适配
+- **仅支持 HyperOS 4**。HyperOS 3 及其他 ROM 未适配
 
 <h2 align="center">软件界面预览</h2>
 
@@ -109,13 +109,13 @@ HyperMusicCover 是一个**澎湃 OS 4（HyperOS 4）** 的音乐锁屏模块，
 - [HyperNavBar](https://github.com/HyperNavBar/HyperNavBar) — 界面骨架、主题
 - [miuix](https://github.com/compose-miuix-ui/miuix) — 设置界面使用的全部 Compose 组件与动效参数
 - [AndroidLiquidGlass](https://github.com/Kyant0/AndroidLiquidGlass) — 液态玻璃组件库
-- [HyperChanger](https://github.com/ColdP/HyperChanger) —景深限制解除、锁屏搭配数量上限、时钟冒号与柔光玻璃
+- [HyperChanger](https://github.com/ColdP/HyperChanger) — 景深限制解除、锁屏搭配数量上限、时钟冒号与柔光玻璃
 - [HyperLyrics Enhanced](https://github.com/juren233/HyperLyrics-Enhanced) — QQ 音乐取词与解密、TTML Hub 目录、歌曲匹配规则
 - [accompanist-lyrics-core](https://github.com/6xingyv/accompanist-lyrics-core) — TTML、LRC、YRC、KRC 解析
-- [InstallerX](https://github.com/iamr0s/InstallerX) — 更新交给系统安装器、隐藏图标与拨号密令的做法
-- **ColorOS Live Lyrics Bridge** — 动态封面的思路：从 Apple Music 页面取视频并在锁屏播放
-- **AMLL / amll-ttml-db** — 歌词动画手感与逐字歌词数据
-- **autopickupisland** — 取餐码的整套做法：ColorOS PCR 插件、云端品牌规则与卡片素材
+- [InstallerX Revived](https://github.com/wxxsfxyzm/InstallerX-Revived) — 更新交给系统安装器、隐藏图标与拨号密令的做法
+- [ColorOS Live Lyrics Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge) — 动态封面的思路：从 Apple Music 页面取视频并在锁屏播放
+- [AMLL](https://github.com/amll-dev/applemusic-like-lyrics) / [amll-ttml-db](https://github.com/amll-dev/amll-ttml-db) — 歌词动画手感与逐字歌词数据
+- [AutoPickupIsland](https://github.com/Maga-King/AutoPickupIsland) — 取餐码的整套做法：ColorOS PCR 插件、云端品牌规则与卡片素材
 
 <div align="center">
 <a href="https://www.star-history.com/#zyl6932/HyperMusicCover&Date">
