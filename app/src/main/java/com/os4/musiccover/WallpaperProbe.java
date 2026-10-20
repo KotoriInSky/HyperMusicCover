@@ -635,7 +635,8 @@ public class WallpaperProbe {
      * is deliberately not taken over: it decides light text or dark, and the user wants the
      * clock's colour from the cover without its lightness flipped by it.
      */
-    private static void installCoverPalette() {
+    private static int installCoverPalette() {
+        int hooked = 0;
         try {
             Class<?> ctl = Xp.findClass("com.miui.miwallpaper.server.MiuiWallPaperControllerService", sCl);
             Class<?> scheme = Xp.findClass("com.miui.miwallpaper.material.MiuiColorScheme", sCl);
@@ -666,10 +667,10 @@ public class WallpaperProbe {
                 Xp.log(TAG + "cover palette: full requests stay the wallpaper's: " + t);
             }
             final java.lang.reflect.Method fRegions = regions, fName = styleName, fInfo = styleInfo;
-            int hooked = 0;
             for (Class<?> inner : ctl.getDeclaredClasses()) {
                 for (java.lang.reflect.Method m : inner.getDeclaredMethods()) {
                     if (!"getMiuiWallpaperPalette".equals(m.getName())) continue;
+                    final String name = m.getName();
                     Class<?>[] pt = m.getParameterTypes();
                     if (pt.length < 2 || pt[0] != int.class
                             || !java.util.Map.class.isAssignableFrom(pt[pt.length - 1])) continue;
@@ -679,10 +680,10 @@ public class WallpaperProbe {
                         Object rects = a.get(a.size() - 1);
                         Bitmap art = coverForPalette();
                         if (art == null || (which != 2 && which != 8) || !(rects instanceof java.util.Map)) {
-                            return chain.proceed();
+                            return PaletteCache.proceed(chain, name);
                         }
                         boolean full = ((java.util.Map<?, ?>) rects).isEmpty();
-                        if (full && (fRegions == null || fName == null || fInfo == null)) return chain.proceed();
+                        if (full && (fRegions == null || fName == null || fInfo == null)) return PaletteCache.proceed(chain, name);
                         try {
                             Context ctx = sCtx != null ? sCtx : (Context) Class.forName("android.app.ActivityThread")
                                     .getMethod("currentApplication").invoke(null);
@@ -697,7 +698,7 @@ public class WallpaperProbe {
                             // whole-picture one included: start from the OEM's own answer and
                             // replace what the cover can be read for.
                             if (full) {
-                                Object orig = chain.proceed();
+                                Object orig = PaletteCache.proceed(chain, name);
                                 if (orig instanceof java.util.Map) {
                                     for (java.util.Map.Entry<?, ?> e : ((java.util.Map<?, ?>) orig).entrySet()) {
                                         out.put(String.valueOf(e.getKey()), e.getValue());
@@ -716,7 +717,7 @@ public class WallpaperProbe {
                             return out;
                         } catch (Throwable t) {
                             Xp.log(TAG + "cover palette failed, the wallpaper's stands: " + t);
-                            return chain.proceed();
+                            return PaletteCache.proceed(chain, name);
                         }
                     });
                     hooked++;
@@ -726,6 +727,7 @@ public class WallpaperProbe {
         } catch (Throwable t) {
             Xp.log(TAG + "cover palette not installed: " + t);
         }
+        return hooked;
     }
 
     /** How many palettes were answered from the cover, for the probe. */
@@ -743,7 +745,10 @@ public class WallpaperProbe {
         Xp.log(TAG + "loaded into " + PKG);
         // The lock clock's palette read off the cover while the cover is up. Its own hook, failing
         // on its own: nothing else here depends on it.
-        installCoverPalette();
+        // Its fall-throughs to the OEM go through PaletteCache, which also takes the depth
+        // question - and the palette itself if this hook did not go in.
+        int coverHooks = installCoverPalette();
+        PaletteCache.install(sCl, coverHooks == 0);
 
         // 保留壁纸's dim, written into the wallpaper shader rather than over the screen.
         //
@@ -2368,6 +2373,11 @@ public class WallpaperProbe {
                         Xp.log(TAG + "gpu fade " + (sGpuFadeOn ? "on" : "off")
                                 + " (draw hooked=" + sDrawHooked + ", usable now="
                                 + gpuFadeUsable() + ")");
+                    } else if ("pcache".equals(op)) {
+                        // The clock-colour answers kept until the wallpaper changes; see
+                        // PaletteCache. `--ez clear true` drops them.
+                        if (i.getBooleanExtra("clear", false)) PaletteCache.clear();
+                        setResultData(PaletteCache.describe());
                     } else if ("vidbias".equals(op)) {
                         WallpaperVideo.setBias(i.getFloatExtra("bias", 0.25f));
                     } else if ("vidtex".equals(op)) {
