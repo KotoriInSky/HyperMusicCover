@@ -1951,25 +1951,19 @@ object MiniPlayerRuntime {
         if (changed) Xp.log("MCMini: media session ended ($reason)")
     }
 
-    /** Prefer a real notification row's material; use its keyguard palette until one is drawn. */
+    /**
+     * A real notification row's material, once one has been drawn; until then none, and the
+     * islands wear the media card's own recipe. The fallback used to be the media recipe's modes
+     * over the focus list's keyguard colours (mFocusNotifiColorList) - the expanded focus card's
+     * darker material, a 60% black layer last. A lock screen with only focus notifications and
+     * the music never draws an ordinary row, so every island dressed there went near black once
+     * that list was filled; dressed before it was (all zeros, just after a restart) they were
+     * light, which is why the black came and went with switches (#91, logged 2026-10-20).
+     */
     private fun notificationLook(): Pair<IntArray, FloatArray>? {
-        val recordedBlend = notificationBlend
-        val recordedGlass = notificationGlass
-        if (recordedBlend != null && recordedGlass != null)
-            return recordedBlend.copyOf() to recordedGlass.copyOf()
-        val controller = aodController?.get() ?: return null
-        val focus = runCatching { Xp.getObjectField(controller, "mFocusNotifiColorList") as? IntArray }
-            .getOrNull()?.takeIf { it.size == 6 } ?: return null
-        val glass = runCatching { Xp.getObjectField(controller, "mGlassParamsOnKeyguard") as? FloatArray }
-            .getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
-        // The odd positions are blend modes. Keep the media recipe's modes and replace its
-        // three colours with the notification card's own keyguard colours.
-        val blend = cardRecipe?.firstOrNull { it.method.name == "applyElementViewBlend" }
-            ?.args?.firstOrNull { it is IntArray } as? IntArray ?: return null
-        if (blend.size != 6) return null
-        return blend.copyOf().also { values ->
-            for (i in 0..2) values[2 * i] = focus[2 * i]
-        } to glass.copyOf()
+        val recordedBlend = notificationBlend ?: return null
+        val recordedGlass = notificationGlass ?: return null
+        return recordedBlend.copyOf() to recordedGlass.copyOf()
     }
 
     /**
