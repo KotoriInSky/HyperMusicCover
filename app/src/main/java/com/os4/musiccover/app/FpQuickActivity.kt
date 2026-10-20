@@ -483,6 +483,13 @@ private fun HiveEditor(slots: List<JSONObject>, onTap: (Int) -> Unit) {
             return kotlin.math.sign(v) * (limit + m * (1f - 1f / (over / m + 1f)))
         }
 
+        // The face hugs the honeycomb (the user, 2026-10-21): its radius is the furthest any
+        // icon's edge reaches at rest, plus a margin. The lens never takes an icon further out
+        // than that, however the grid is dragged.
+        val faceR = CELLS.maxOf { c ->
+            val l = lens(c, 0f, 0f)
+            kotlin.math.hypot(l[0], l[1]) + iconPx * l[2] / 2f
+        } + with(density) { 6.dp.toPx() }
         val ox = rubber(ax.value)
         val oy = rubber(ay.value)
         val placed = CELLS.map { lens(it, ox, oy) }
@@ -554,7 +561,7 @@ private fun HiveEditor(slots: List<JSONObject>, onTap: (Int) -> Unit) {
                 }
         ) {
             // The watch face.
-            Canvas(Modifier.fillMaxSize()) { drawCircle(face, radius = size.minDimension / 2f) }
+            Canvas(Modifier.fillMaxSize()) { drawCircle(face, radius = faceR) }
             // Each icon's grow, sprung rather than switched (the user, 2026-10-21: it was
             // abrupt): the chosen one eases up to 1.15 with a little overshoot, the one it took
             // over from eases back, and the disc behind fades with the grow.
