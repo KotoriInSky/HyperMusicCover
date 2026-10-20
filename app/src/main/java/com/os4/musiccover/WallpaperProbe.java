@@ -1221,7 +1221,10 @@ public class WallpaperProbe {
                 final boolean mine = chain.getThisObject() == sKeyguardRenderer;
                 // The program draw hook reads this to know whose texture it is setting the
                 // dim on. Single GL thread, so a plain flag is enough.
-                if (mine) sKeyguardDrawing = true;
+                if (mine) {
+                    sKeyguardDrawing = true;
+                    sKeyguardGlTid = android.os.Process.myTid();
+                }
                 try {
                     if (sOemDarkenKnown && !sDarkenBroken && mine) {
                         applyDarken(chain.getThisObject());
@@ -1711,7 +1714,69 @@ public class WallpaperProbe {
         return false;
     }
 
+    /** The keyguard renderer's GL thread, as its last frame ran on; 0 until one has drawn. */
+    private static volatile int sKeyguardGlTid;
+    /** What boostForFade raised, and from what. Main thread. */
+    private static int sBoostedMainFrom = Integer.MIN_VALUE;
+    private static int sBoostedGlTid;
+    private static int sBoostedGlFrom;
+    private static boolean sBoostLogged;
+
+    /**
+     * The fade's two threads at display priority while it runs, and back after. Main thread.
+     *
+     * With four cores up and all four full - SystemUI's frames, its GC, WeChat in the background -
+     * the fade's main thread and GL thread sat runnable for 400-800ms of a 1.1s entry (trace
+     * 2026-10-20): the cover came up late and stalled half way, though each of its frames is a
+     * millisecond or two. Raised only as far as URGENT_DISPLAY, still below SystemUI's render
+     * thread, and never lowered from where it already was.
+     */
+    private static void boostForFade(boolean on) {
+        final int want = android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY;
+        try {
+            if (on) {
+                if (sBoostedMainFrom == Integer.MIN_VALUE) {
+                    int now = android.os.Process.getThreadPriority(android.os.Process.myTid());
+                    if (now > want) {
+                        android.os.Process.setThreadPriority(want);
+                        sBoostedMainFrom = now;
+                    }
+                }
+                int gl = sKeyguardGlTid;
+                if (gl != 0 && sBoostedGlTid == 0) {
+                    int now = android.os.Process.getThreadPriority(gl);
+                    if (now > want) {
+                        android.os.Process.setThreadPriority(gl, want);
+                        sBoostedGlTid = gl;
+                        sBoostedGlFrom = now;
+                        if (!sBoostLogged) {
+                            sBoostLogged = true;
+                            Xp.log(TAG + "fade threads raised to " + want + " (GL " + gl + " from "
+                                    + now + ", main from " + sBoostedMainFrom + ")");
+                        }
+                    }
+                }
+                return;
+            }
+            if (sBoostedMainFrom != Integer.MIN_VALUE) {
+                android.os.Process.setThreadPriority(sBoostedMainFrom);
+                sBoostedMainFrom = Integer.MIN_VALUE;
+            }
+            if (sBoostedGlTid != 0) {
+                int gl = sBoostedGlTid;
+                sBoostedGlTid = 0;
+                android.os.Process.setThreadPriority(gl, sBoostedGlFrom);
+            }
+        } catch (Throwable t) {
+            // Not allowed, or the GL thread is gone: the fade runs as it always did.
+            sBoostedMainFrom = Integer.MIN_VALUE;
+            sBoostedGlTid = 0;
+            Xp.d(TAG + "fade priority: " + t);
+        }
+    }
+
     private static void startGpuFade(Bitmap from, Bitmap to, Runnable done, long durMs) {
+        boostForFade(true);
         // A CPU fade still running owns sFade; stop it before the texture changes hands. A GPU
         // fade overtaken by this one simply stops too, without running its completion - the
         // same rule the CPU fade's generation check follows, and for the same reason: the one
@@ -1802,6 +1867,7 @@ public class WallpaperProbe {
         if (sGpuFade != f) return;
         sGpuFade = null;
         sUploadOverride = null;
+        boostForFade(false);
         if (f.done != null) f.done.run();
         // A cover that has just faded out leaves the desktop holding the lock screen's cut of
         // its own picture. Put back now, under the lock screen where it looks the same, rather
