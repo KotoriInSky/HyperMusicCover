@@ -749,6 +749,8 @@ public class WallpaperProbe {
         // question - and the palette itself if this hook did not go in.
         int coverHooks = installCoverPalette();
         PaletteCache.install(sCl, coverHooks == 0);
+        // This process composes the covers: their full-screen draws on its GPU, not its CPU.
+        CoverCompose.sGpu = true;
 
         // 保留壁纸's dim, written into the wallpaper shader rather than over the screen.
         //

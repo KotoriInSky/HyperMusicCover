@@ -144,28 +144,29 @@ public final class CoverCompose {
      * centred, 1 flush with the bottom. Centred is what the media card covers, so the default
      * sits above that.
      */
-    static Bitmap composeWallpaper(Bitmap src, int w, int h, float bias) {
-        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas cv = new android.graphics.Canvas(out);
-        android.graphics.Paint p = new android.graphics.Paint(
-                android.graphics.Paint.FILTER_BITMAP_FLAG);
-
-        float coverH = src.getHeight() * (w / (float) src.getWidth());
+    static Bitmap composeWallpaper(final Bitmap src, final int w, int h, float bias) {
+        final float coverH = src.getHeight() * (w / (float) src.getWidth());
         if (bias < 0f) bias = 0f;
         if (bias > 1f) bias = 1f;
-        float top = (h - coverH) * bias;
+        final float top = (h - coverH) * bias;
 
         Bitmap bg = mirroredBackground(src, w, h, bias);
-        Bitmap blurred = blur(bg, 48, 4, 3);
+        final Bitmap blurred = blur(bg, 48, 4, 3);
         if (blurred != bg) bg.recycle();
-        // The 8% wash rides on the stretch rather than being a full-screen pass of its own.
-        p.setColorFilter(WASH);
-        cv.drawBitmap(blurred, null, new android.graphics.RectF(0, 0, w, h), p);
-        blurred.recycle();
-        p.setColorFilter(null);
-        drawBand(cv, src, w, Math.round(coverH), Math.round(top),
-                Math.min(240, Math.round(coverH / 4f)), p);
-        return out;
+        try {
+            return full(w, h, cv -> {
+                android.graphics.Paint p = new android.graphics.Paint(
+                        android.graphics.Paint.FILTER_BITMAP_FLAG);
+                // The 8% wash rides on the stretch rather than being a full-screen pass of its own.
+                p.setColorFilter(WASH);
+                cv.drawBitmap(blurred, null, new android.graphics.RectF(0, 0, w, h), p);
+                p.setColorFilter(null);
+                drawBand(cv, src, w, Math.round(coverH), Math.round(top),
+                        Math.min(240, Math.round(coverH / 4f)), p);
+            });
+        } finally {
+            blurred.recycle();
+        }
     }
 
     /** Card mode uses the same mirrored, softened artwork as the full-cover backdrop. */
@@ -173,13 +174,12 @@ public final class CoverCompose {
         Bitmap backdrop = mirroredBackground(src, w, h, 0.5f);
         Bitmap soft = blur(backdrop, 48, 4, 3);
         try {
-            Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            android.graphics.Canvas cv = new android.graphics.Canvas(out);
-            android.graphics.Paint p = new android.graphics.Paint(
-                    android.graphics.Paint.FILTER_BITMAP_FLAG);
-            p.setColorFilter(WASH);
-            cv.drawBitmap(soft, null, new android.graphics.RectF(0, 0, w, h), p);
-            return out;
+            return full(w, h, cv -> {
+                android.graphics.Paint p = new android.graphics.Paint(
+                        android.graphics.Paint.FILTER_BITMAP_FLAG);
+                p.setColorFilter(WASH);
+                cv.drawBitmap(soft, null, new android.graphics.RectF(0, 0, w, h), p);
+            });
         } finally {
             if (soft != backdrop) soft.recycle();
             backdrop.recycle();
@@ -344,11 +344,54 @@ public final class CoverCompose {
     }
 
     /** A frostedSmallFor() picture at the texture's size. The small one is the caller's. */
-    static Bitmap stretchFrosted(Bitmap small, int w, int h) {
-        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        new android.graphics.Canvas(out).drawBitmap(small, null,
+    static Bitmap stretchFrosted(final Bitmap small, final int w, final int h) {
+        return full(w, h, cv -> cv.drawBitmap(small, null,
                 new android.graphics.RectF(0, 0, w, h),
-                new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+                new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)));
+    }
+
+    /**
+     * Whether full-screen draws go to the GPU (full). The wallpaper process's switch alone: in
+     * SystemUI the GPU's renderer is the lock screen's own, and a cover drawn there would queue
+     * in front of its frames.
+     */
+    static volatile boolean sGpu;
+    private static volatile boolean sGpuBroken;
+
+    /** One full-screen picture's draws. */
+    interface Draw {
+        void into(android.graphics.Canvas c);
+    }
+
+    /**
+     * A w x h software bitmap with [draw] in it, drawn by the GPU where sGpu says so.
+     *
+     * Rasterising these on the CPU was the cost of a new cover: the stretch of the blur over all
+     * 3.1M pixels, the colour filter on it, the band and the frosting's stretch - 736ms of CPU on
+     * a phone at 1.1GHz with four cores up, the most of any thread on it while a track changed,
+     * and SystemUI's own frames went 73-112ms waiting for those cores (trace 2026-10-20). Recorded
+     * as a Picture and rendered as a HARDWARE bitmap, the same draws are a GPU pass, and what is
+     * left on the CPU is reading the pixels back - which the texture upload needs anyway. The
+     * bitmaps drawn from must stay alive until this returns; it is synchronous.
+     */
+    static Bitmap full(int w, int h, Draw draw) {
+        if (sGpu && !sGpuBroken) {
+            try {
+                android.graphics.Picture pic = new android.graphics.Picture();
+                draw.into(pic.beginRecording(w, h));
+                pic.endRecording();
+                Bitmap hw = Bitmap.createBitmap(pic, w, h, Bitmap.Config.HARDWARE);
+                Bitmap out = hw.copy(Bitmap.Config.ARGB_8888, true);
+                hw.recycle();
+                if (out != null) return out;
+                throw new IllegalStateException("no read back");
+            } catch (Throwable t) {
+                sGpuBroken = true;
+                Xp.w("[MCCompose] GPU drawing unavailable, back on the CPU: " + t);
+            }
+        }
+        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        draw.into(new android.graphics.Canvas(out));
         return out;
     }
 
