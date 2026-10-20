@@ -187,6 +187,12 @@ object ModuleBridge {
          */
         val rulesDate: String = "",
         val rulesCount: Int = 0,
+        /** 指纹快捷功能: the module's config JSON (FingerprintQuick.configJson), as it holds it. */
+        val fpQuick: String = "{}",
+        /** The system's own switch for the menu, Settings.Secure fod_quick_open. */
+        val fpQuickSystem: Boolean = true,
+        /** Whether the module found the quick-open menu on this phone. */
+        val fpQuickOk: Boolean = false,
         /**
          * The notification-shade settings, keyed exactly as the module's own CFG_KEYS.
          *
@@ -530,6 +536,37 @@ object ModuleBridge {
             intent("cloud").apply { putExtra("do", "fetch") }, REFRESH_TIMEOUT_MS)
             ?: return PickupRefresh(false, "同步超时：模块没有在 ${REFRESH_TIMEOUT_MS / 1000} 秒内回答")
         return PickupRefresh(reply.extras?.getBoolean("ok", false) == true, reply.data.orEmpty())
+    }
+
+    /** 指纹快捷功能's whole config, as FingerprintQuick reads it: total, move, items. */
+    fun setFpQuick(context: Context, json: String) =
+        send(context, "fpquick") { putExtra("json", json) }
+
+    /** The system's own switch for the menu; only SystemUI may write it. */
+    fun setFpQuickSystem(context: Context, on: Boolean) =
+        send(context, "fpquick") { putExtra("sys", on) }
+
+    /** The packages that have shortcuts, asked of SystemUI; null when the module did not answer. */
+    suspend fun fpQuickShortcutApps(context: Context): Set<String>? =
+        ask(context, "fpquick") { putExtra("shortcutapps", true) }
+            ?.getStringArray("pkgs")?.toSet()
+
+    /** One of an app's launcher shortcuts, for the picker. */
+    class FpShortcut(val id: String, val label: String, val icon: Bitmap?)
+
+    /**
+     * An app's shortcuts, asked of SystemUI: LauncherApps answers only a launcher or a holder of
+     * ACCESS_SHORTCUTS, and this app is neither. Null when the module did not answer.
+     */
+    suspend fun fpQuickShortcuts(context: Context, pkg: String): List<FpShortcut>? {
+        val b = ask(context, "fpquick") { putExtra("shortcuts", pkg) } ?: return null
+        val ids = b.getStringArray("ids") ?: return null
+        val labels = b.getStringArray("labels") ?: return null
+        return ids.indices.map { i ->
+            val png = b.getByteArray("icon$i")
+            FpShortcut(ids[i], labels.getOrElse(i) { ids[i] },
+                png?.let { BitmapFactory.decodeByteArray(it, 0, it.size) })
+        }
     }
 
     /** A cloud refresh's outcome, and the module's sentence about it for the row's summary. */
@@ -894,6 +931,9 @@ object ModuleBridge {
             lyriconInstalled = b.getBoolean("lyricon", false),
             fpAvoid = b.getInt("fpavoid", 0),
             transit = b.getBoolean("transit", true),
+            fpQuick = b.getString("fpquick") ?: "{}",
+            fpQuickSystem = b.getBoolean("fpquicksys", true),
+            fpQuickOk = b.getBoolean("fpquickok", false),
             pickup = b.getBoolean("pickup", true),
             rulesDate = b.getString("rulesdate") ?: "",
             rulesCount = b.getInt("rulescount", 0),

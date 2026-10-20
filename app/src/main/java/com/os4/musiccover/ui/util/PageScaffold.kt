@@ -55,6 +55,7 @@ fun PageScaffold(
     extraBottomPadding: Dp = 0.dp,
     onBack: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
+    floatingActionButton: @Composable () -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
@@ -64,6 +65,9 @@ fun PageScaffold(
 
     Scaffold(
         popupHost = { },
+        // The page's main action, where miuix's own docs put it (FloatingActionButton, bound to
+        // the Scaffold). Empty on every page that has none.
+        floatingActionButton = floatingActionButton,
         topBar = {
             BlurredBar(backdrop, blurActive, scrollBehavior) {
                 TopAppBar(

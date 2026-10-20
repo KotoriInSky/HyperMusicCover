@@ -893,6 +893,7 @@ public class Main extends XposedModule {
         Fingerprint.hookFingerprintIcon(cl);
         Fingerprint.hookFingerprintPrintView(cl);
         Fingerprint.hookFingerprintAvoidance(cl);
+        FingerprintQuick.install(cl);
         hookKeyguardWallpaperManager(cl);
         MediaCard.hookMediaCard(cl);
         LockTaps.hookLockScreenTap(cl);

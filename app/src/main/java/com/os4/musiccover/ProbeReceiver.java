@@ -278,6 +278,19 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             // the same door.
             ShadeLayer.configure(i.getStringExtra("key"), i.getIntExtra("v", 0));
             ModuleState.saveState();
+        } else if ("fpquick".equals(op)) {
+            // 指纹快捷功能: --es json '{"total":ms,"move":bool,"items":[...]}', or nothing to
+            // just read it back. The format belongs to FingerprintQuick. --ez sys writes the
+            // system's own switch; --es shortcuts <pkg> answers that app's shortcuts in the
+            // extras, for the settings page's picker.
+            if (i.hasExtra("sys")) FingerprintQuick.setSystemSwitch(c, i.getBooleanExtra("sys", true));
+            if (i.getBooleanExtra("shortcutapps", false)) {
+                setResultExtras(FingerprintQuick.shortcutApps(c));
+            }
+            if (i.hasExtra("shortcuts")) {
+                setResultExtras(FingerprintQuick.shortcuts(c, i.getStringExtra("shortcuts")));
+            }
+            setResultData(FingerprintQuick.apply(c, i.getStringExtra("json")));
         } else if ("minicfg".equals(op)) {
             MiniPlayerRuntime.applyConfig(c, i.getStringExtra("json"));
             ModuleState.saveState();
@@ -405,6 +418,9 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             out.putBoolean("sessionlyric", LockLyrics.sSawSessionLyric
                     || LyricSource.hasLyricInfo(Main.sWatched));
             out.putInt("fpavoid", Fingerprint.sFpAvoid);
+            out.putString("fpquick", FingerprintQuick.configJson(c));
+            out.putBoolean("fpquicksys", FingerprintQuick.systemSwitch(c));
+            out.putBoolean("fpquickok", FingerprintQuick.installed());
             out.putBoolean("transit", AmapTransitScene.sOn);
             out.putBoolean("pickup", PickupCodeIsland.sOn);
             out.putBoolean("card", PickupCodeIsland.sCard);

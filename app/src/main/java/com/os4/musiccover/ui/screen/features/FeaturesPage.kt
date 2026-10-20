@@ -31,6 +31,7 @@ import com.os4.musiccover.R
 import com.os4.musiccover.app.ShadeActivity
 import com.os4.musiccover.app.MiniPlayerActivity
 import com.os4.musiccover.app.TransitActivity
+import com.os4.musiccover.app.FpQuickActivity
 import com.os4.musiccover.ui.util.PageScaffold
 import kotlinx.coroutines.delay
 import org.json.JSONObject
@@ -128,6 +129,14 @@ private fun FeatureList(
                         title = stringResource(R.string.features_transit_title),
                         summary = stringResource(R.string.features_transit_summary),
                         onClick = { onOpen(TransitActivity::class.java) },
+                    )
+                }
+                // 指纹快捷功能 last, as the newest (2026-10-21).
+                Card(modifier = Modifier.nextCard()) {
+                    ArrowPreference(
+                        title = stringResource(R.string.features_fpquick_title),
+                        summary = stringResource(R.string.features_fpquick_summary),
+                        onClick = { onOpen(FpQuickActivity::class.java) },
                     )
                 }
             }
