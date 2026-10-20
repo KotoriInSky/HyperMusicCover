@@ -4054,6 +4054,11 @@ public class Main extends XposedModule {
         return end < 0 ? key.substring(from) : key.substring(from, end);
     }
 
+    /** The watched session's title now: what CoverPush checks a precompose is still about. */
+    static String watchedTitle() {
+        return titleOf(sWatched);
+    }
+
     /** The session's track title, which is what a queue item can be matched against. */
     private static String titleOf(MediaController c) {
         if (c == null) return null;
@@ -4177,8 +4182,13 @@ public class Main extends XposedModule {
         Runnable r = new Runnable() {
             @Override
             public void run() {
-                if (on) enterCoverMode(animate && screenOn());
-                else exitCoverMode(animate && screenOn());
+                if (on) {
+                    enterCoverMode(animate && screenOn());
+                    // With the lyrics' frost decided now (LockLyrics.attach), the kept cover.
+                    CoverPush.sendKeptFirst();
+                } else {
+                    exitCoverMode(animate && screenOn());
+                }
             }
         };
         if (Looper.myLooper() == Looper.getMainLooper()) r.run();

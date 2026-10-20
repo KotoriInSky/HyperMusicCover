@@ -118,6 +118,10 @@ public final class CoverPush {
             if (Main.sVideoWallpaper) showVideoCover(ctx, false, null, null, 0);
             out.putExtra("off", true);
             ProbeGuard.send(ctx, out);
+            // The wallpaper process keeps what was up for 30s more (WallpaperProbe.composedLater).
+            if (sKeptUntil == Long.MAX_VALUE) {
+                sKeptUntil = android.os.SystemClock.uptimeMillis() + KEPT_AFTER_OFF_MS;
+            }
             if (!keep) Main.sTrackKey = "";
             // Nothing behind the clock any more, so nothing to take a colour from. The repaint
             // that hands the OEM's own colours back happens with the rest of cover mode.
@@ -146,7 +150,18 @@ public final class CoverPush {
             try {
                 android.os.Trace.beginSection("MC push.source");
                 src = CoverCompose.prepareSource(art, w);
-                shared = writeSharedSource(src, w, h, Main.sBias);
+                // The picture the lock screen handed over ahead of this tap (precomposeAsync) is
+                // already on disk: the wallpaper process is pointed at it rather than given the
+                // same megabyte again. 20-68ms of a busy phone's entry went on that write.
+                shared = preSourceFor(art, w, h);
+                if (shared == null) shared = writeSharedSource(src, w, h, Main.sBias);
+                // Named, so the wallpaper process keeps it under this key and the next tap can
+                // ask for it by name - and so a push for the picture the tap already put up
+                // (sendKeptFirst) is let pass.
+                boolean card = Main.sCoverCardStyle.mode == CoverCardStyle.CARD;
+                String keptKey = preKey(art, w, h, card);
+                out.putExtra("prekey", keptKey);
+                noteKept(keptKey, layoutKey(w, h, card), Long.MAX_VALUE);
             } catch (Throwable t) {
                 Xp.w(Main.TAG + "source hand-over failed, sending the composed JPEG instead: " + t);
             } finally {
@@ -1299,9 +1314,31 @@ public final class CoverPush {
 
     /** Where a precompose's source goes: its own file, so a real push's is never written over. */
     static final String SHARE_PRE_SOURCE = "mc_src_pre.raw";
-    /** The last precompose's inputs and when it went. Worker thread only. */
-    private static String sPreKey = "";
-    private static long sPreAt;
+    /**
+     * The last precompose's inputs and when it went. Written on the worker; read on the main
+     * thread too, by the tap's own message (sendKeptFirst).
+     */
+    private static volatile String sPreKey = "";
+    private static volatile long sPreAt;
+    /**
+     * The picture the wallpaper process has kept, as far as this side knows: its key, the song
+     * the session was on, the screen, bias and mode, and until when it is kept there. Set by a
+     * precompose (kept 60s there) and by every push (kept while the cover shows it, and 30s
+     * after it goes). What the tap's own message asks for (sendKeptFirst).
+     */
+    private static volatile String sKeptKey = "";
+    private static volatile String sKeptTitle;
+    private static volatile String sKeptLayout = "";
+    private static volatile long sKeptUntil;
+    private static final long KEPT_AFTER_PRE_MS = 50_000L;
+    private static final long KEPT_AFTER_OFF_MS = 25_000L;
+
+    private static void noteKept(String key, String layout, long until) {
+        sKeptTitle = Main.watchedTitle();
+        sKeptLayout = layout;
+        sKeptKey = key;
+        sKeptUntil = until;
+    }
     private static volatile boolean sPrePending;
     /** Shorter than the wallpaper process keeps it (PRECOMPOSED_KEEP_MS), so it is never gone. */
     private static final long PRE_RESEND_MS = 50_000L;
@@ -1332,8 +1369,7 @@ public final class CoverPush {
                     if (art == null) return;
                     int w = Main.sScreenW, h = Main.sScreenH;
                     boolean card = Main.sCoverCardStyle.mode == CoverCardStyle.CARD;
-                    String key = artPrint(art) + ":" + art.getWidth() + "x" + art.getHeight()
-                            + ":" + w + "x" + h + ":" + Main.sBias + ":" + card;
+                    String key = preKey(art, w, h, card);
                     long now = android.os.SystemClock.uptimeMillis();
                     if (key.equals(sPreKey) && now - sPreAt < PRE_RESEND_MS) return;
                     Bitmap src = CoverCompose.prepareSource(art, w);
@@ -1342,9 +1378,11 @@ public final class CoverPush {
                     Intent out = wallpaperIntent("precompose");
                     out.putExtra("src", f.getAbsolutePath());
                     out.putExtra("cardmode", card);
+                    out.putExtra("prekey", key);
                     ProbeGuard.send(ctx, out);
                     sPreKey = key;
                     sPreAt = now;
+                    noteKept(key, layoutKey(w, h, card), now + KEPT_AFTER_PRE_MS);
                 } catch (Throwable t) {
                     Xp.w(Main.TAG + "precompose failed: " + t);
                 } finally {
@@ -1352,6 +1390,71 @@ public final class CoverPush {
                 }
             }
         }, delayMs);
+    }
+
+    private static String layoutKey(int w, int h, boolean card) {
+        return w + "x" + h + ":" + Main.sBias + ":" + card;
+    }
+
+    /**
+     * The tap's own message, sent from the main thread the moment cover mode is asked for: "the
+     * picture you were handed ahead of this - show it". Only when that picture is still this
+     * song's, for this screen, bias and mode.
+     *
+     * The push it goes ahead of runs on the worker, and on a busy phone the worker waited
+     * 60-270ms to be run at all between reading the artwork and handing it over, with the clock
+     * already moving (trace 2026-10-20: tap to background 60-554ms, all of the spread in three
+     * queues). This skips that queue and the wallpaper process's composer queue both.
+     *
+     * Sent once cover mode is on (Main.setCoverEnabled, after enterCoverMode), not with the push:
+     * the lyrics decide the frost as they attach, and a message sent before that carried "sharp"
+     * - the cover faded in sharp, then the frost waited that fade out and faded again, and the
+     * lyrics waited for both (2026-10-20). The push
+     * still goes - the clock's tint and the shade are made there - and carries the same key, so
+     * a wallpaper process that already put this picture up lets it pass; one that could not
+     * (restarted, the kept picture let go) takes the push as it always did.
+     */
+    static void sendKeptFirst() {
+        Context ctx = Main.sAppCtx;
+        if (ctx == null || android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) return;
+        String key = sKeptKey;
+        if (key.isEmpty() || !Main.sWpComposes || Main.sVideoWallpaper || Main.keepsWallpaper()) {
+            return;
+        }
+        if (android.os.SystemClock.uptimeMillis() >= sKeptUntil) return;
+        boolean card = Main.sCoverCardStyle.mode == CoverCardStyle.CARD;
+        if (!layoutKey(Main.sScreenW, Main.sScreenH, card).equals(sKeptLayout)) return;
+        String title = sKeptTitle;
+        if (title == null || !title.equals(Main.watchedTitle())) return;
+        try {
+            Intent out = wallpaperIntent("art");
+            out.putExtra("cardmode", card);
+            LockLyrics.putBlurOn(out);
+            out.putExtra("fade", Main.sFadeWp && Main.sScreenOn);
+            out.putExtra("prekey", key);
+            ProbeGuard.send(ctx, out);
+            Xp.log(Main.TAG + "pushart: the kept cover asked for from the tap");
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "the tap's cover message failed, the push carries it: " + t);
+        }
+    }
+
+    /** What a precompose's file holds, as one string: the art, the screen, the bias, the mode. */
+    private static String preKey(Bitmap art, int w, int h, boolean card) {
+        return artPrint(art) + ":" + art.getWidth() + "x" + art.getHeight()
+                + ":" + w + "x" + h + ":" + Main.sBias + ":" + card;
+    }
+
+    /**
+     * The precompose's file, when it holds exactly the source this push would write; null when
+     * it does not. Worker thread, as both writers are, so the file cannot change under this.
+     */
+    private static String preSourceFor(Bitmap art, int w, int h) {
+        if (sPreKey.isEmpty()) return null;
+        boolean card = Main.sCoverCardStyle.mode == CoverCardStyle.CARD;
+        if (!preKey(art, w, h, card).equals(sPreKey)) return null;
+        java.io.File f = new java.io.File(SHARE_DIR, SHARE_PRE_SOURCE);
+        return f.isFile() ? f.getAbsolutePath() : null;
     }
 
     /** Only where a cover would be composed from the source by the wallpaper process. */

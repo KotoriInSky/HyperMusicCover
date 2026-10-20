@@ -2242,7 +2242,8 @@ public class WallpaperProbe {
                     } else if ("precompose".equals(op)) {
                         String src = i.getStringExtra("src");
                         if (src != null && !videoPath()) {
-                            precompose(src, i.getBooleanExtra("cardmode", false));
+                            precompose(src, i.getBooleanExtra("cardmode", false),
+                                    i.getStringExtra("prekey"));
                         }
                     } else if ("art".equals(op)) {
                         sCardMode = i.getBooleanExtra("cardmode", false);
@@ -2364,9 +2365,22 @@ public class WallpaperProbe {
                             new File(c.getFilesDir(), SRC_FILE).delete();
                             new File(c.getFilesDir(), "mc_card_mode").delete();
                             Xp.log(TAG + "art cleared");
+                        } else if (i.hasExtra("prekey") && !i.hasExtra("src")) {
+                            applyKept(i.getStringExtra("prekey"), reload, fade);
+                            return;
                         } else if (i.hasExtra("src")) {
+                            // The tap's own message has put this very picture up already: the
+                            // push behind it has nothing to add, and a second fade from the
+                            // cover to itself is all it would make.
+                            String pk = i.getStringExtra("prekey");
+                            Composed kc = sComposed;
+                            if (pk != null && pk.equals(sKeptShown) && kc != null
+                                    && sArt == kc.sharp) {
+                                Xp.log(TAG + "push for the cover the tap put up, passed over");
+                                return;
+                            }
                             composeFromSource(c, i.getStringExtra("src"), reload, fade,
-                                    sCardMode);
+                                    sCardMode, pk);
                             return;
                         } else {
                             byte[] jpg = i.getByteArrayExtra("jpg");
@@ -2838,7 +2852,7 @@ public class WallpaperProbe {
      */
     private static void composeFromSource(final Context c, final String path,
                                           final boolean reload, final boolean fade,
-                                          final boolean cardMode) {
+                                          final boolean cardMode, final String preKey) {
         final int seq = ++sSrcSeq;
         final long t0 = SystemClock.uptimeMillis();
         composer().post(new Runnable() {
@@ -2861,6 +2875,9 @@ public class WallpaperProbe {
                     Composed hit = composedFor(key);
                     kept = hit != null;
                     Composed made = kept ? hit : compose(s, cardMode, key);
+                    // SystemUI's name for it, which the next tap asks for (applyKept).
+                    if (preKey != null) made.preKey = preKey;
+                    made.source = s;
                     b = made.sharp;
                     composed = SystemClock.uptimeMillis();
                     sTmComposed = composed;
@@ -2915,6 +2932,10 @@ public class WallpaperProbe {
         final Bitmap frostSmall;
         /** frostSmall stretched to the texture, made the first time the lyrics want it. */
         volatile Bitmap frost;
+        /** SystemUI's name for it when it came as a precompose: what the tap asks for. */
+        volatile String preKey;
+        /** Its source, for this process's copy on disk once the tap has put it up. */
+        volatile CoverCompose.Source source;
 
         Composed(long key, Bitmap sharp, Bitmap frostSmall) {
             this.key = key;
@@ -2986,6 +3007,34 @@ public class WallpaperProbe {
         }
     };
 
+    /** The precompose key of the cover the tap last put up (applyKept). Main thread. */
+    private static String sKeptShown;
+
+    /**
+     * The tap's own message (CoverPush.sendKeptFirst): the kept composition SystemUI handed over
+     * ahead of it, put up right here on the main thread - no source to read, no composer queue
+     * to wait in. Nothing when it is not here or not this one; the push behind brings it then.
+     */
+    private static void applyKept(String preKey, boolean reload, boolean fade) {
+        Composed c = sComposed;
+        int w = sReportedW, h = sReportedH;
+        if (c == null || preKey == null || !preKey.equals(c.preKey) || c.sharp.isRecycled()
+                || c.sharp.getWidth() != w || c.sharp.getHeight() != h || videoPath()) {
+            Xp.log(TAG + "the tap's kept cover is not here (" + (c == null ? "nothing kept"
+                    : preKey != null && preKey.equals(c.preKey) ? "size or path" : "another")
+                    + "), waiting for the push");
+            return;
+        }
+        // Kept for as long as it is on screen again (DROP_COMPOSED looks at sArt).
+        composer().removeCallbacks(DROP_COMPOSED);
+        if (sLyricBlurWant && !frostedHas(c.sharp)) cacheFrosted(c.sharp, frostOf(c, w, h));
+        sKeptShown = preKey;
+        Xp.log(TAG + "cover put up from the tap, kept composition");
+        applyArt(c.sharp, reload, fade);
+        final CoverCompose.Source src = c.source;
+        if (src != null && sCtx != null) saveSourceLater(sCtx, src, sCardMode);
+    }
+
     private static synchronized boolean frostedHas(Bitmap sharp) {
         return sFrosted != null && sFrostedOf == sharp && !sFrosted.isRecycled()
                 || sFrosted2 != null && sFrostedOf2 == sharp && !sFrosted2.isRecycled();
@@ -2996,7 +3045,8 @@ public class WallpaperProbe {
      * media card on it - and keeps it without showing it, so entering cover mode finds it done.
      * Never touches sSrcSeq: a real cover arriving meanwhile is not overtaken by this.
      */
-    private static void precompose(final String path, final boolean cardMode) {
+    private static void precompose(final String path, final boolean cardMode,
+                                   final String preKey) {
         composer().post(new Runnable() {
             @Override
             public void run() {
@@ -3007,8 +3057,13 @@ public class WallpaperProbe {
                     if (s == null) return;
                     long key = CoverCompose.sourceKey(s, cardMode);
                     Composed have = composedFor(key);
-                    keepComposed(have != null ? have : compose(s, cardMode, key),
-                            PRECOMPOSED_KEEP_MS);
+                    Composed c = have != null ? have : compose(s, cardMode, key);
+                    c.preKey = preKey;
+                    c.source = s;
+                    // Stretched now as well: the tap shows it from the main thread, and a
+                    // full-screen draw there is a frame the fade would start late by.
+                    if (s.w == sReportedW && s.h == sReportedH) frostOf(c, s.w, s.h);
+                    keepComposed(c, PRECOMPOSED_KEEP_MS);
                     Xp.log(TAG + "precomposed" + (have != null ? " (already kept)" : "") + " in "
                             + (SystemClock.uptimeMillis() - t0) + "ms");
                 } catch (Throwable t) {
