@@ -78,7 +78,139 @@ final class PaletteCache {
             }
         }
         Xp.log(TAG + hooked + " entry point(s)" + (paletteToo ? ", palette included" : ""));
+        installDecodeCache(cl);
     }
+
+    // ------------------------------------------------------------ the decoded wallpaper
+
+    private static final String SERVICE = "com.miui.miwallpaper.server.MiuiWallpaperManagerService";
+
+    /**
+     * The answers above are keyed on the regions asked about, and the clock asks about a region
+     * where it stands - which moves with every way into and out of the cover. Measured
+     * 2026-10-20: 140 hits and 32 misses in 78s, every miss a whole-file decode of the 1200x2608
+     * wallpaper (MiuiWallpaperManagerService.s, called by w and r when they are handed no
+     * bitmap), 0.4-2.2s each with several at once - 21.6 CPU seconds on the binder threads, in
+     * the middle of the cover's own composition and fade.
+     *
+     * So the decode itself is kept: s(which) answers a copy of the one it made last, for as long
+     * as the file it reads is that same file. A copy because every caller recycles what s hands
+     * it; a 12.5MB copy is a few milliseconds against a decode's hundreds. Let go after
+     * DECODE_KEEP_MS without a question.
+     */
+    private static final long DECODE_KEEP_MS = 60_000L;
+    private static final ConcurrentHashMap<Integer, Object[]> sDecoded = new ConcurrentHashMap<>();
+    private static java.lang.reflect.Method sFileOf;
+    private static volatile int sDecodeHits, sDecodeMisses;
+    private static android.os.Handler sDropper;
+
+    private static void installDecodeCache(ClassLoader cl) {
+        try {
+            Class<?> svc = Xp.findClass(SERVICE, cl);
+            java.lang.reflect.Method decode = null, file = null;
+            int decodes = 0, files = 0;
+            for (java.lang.reflect.Method m : svc.getDeclaredMethods()) {
+                Class<?>[] pt = m.getParameterTypes();
+                if (pt.length != 1 || pt[0] != int.class) continue;
+                if (m.getReturnType() == android.graphics.Bitmap.class) {
+                    decode = m;
+                    decodes++;
+                } else if (m.getReturnType() == android.os.ParcelFileDescriptor.class) {
+                    file = m;
+                    files++;
+                }
+            }
+            // Read off the dex: one of each. More than one is a build this was not read from.
+            if (decodes != 1 || files != 1) {
+                Xp.log(TAG + "decode not kept: " + decodes + " decoder(s), " + files + " file(s)");
+                return;
+            }
+            file.setAccessible(true);
+            sFileOf = file;
+            Xp.api().hook(decode).intercept(PaletteCache::decoded);
+            Xp.log(TAG + "decode kept through " + decode.getName());
+        } catch (Throwable t) {
+            Xp.log(TAG + "decode not kept: " + t);
+        }
+    }
+
+    private static Object decoded(XposedInterface.Chain chain) throws Throwable {
+        Object which = chain.getArgs().get(0);
+        String file = fileKey(chain.getThisObject(), which);
+        if (!(which instanceof Integer) || file == null) return chain.proceed();
+        Object[] lock = sDecoded.computeIfAbsent((Integer) which, k -> new Object[2]);
+        synchronized (lock) {
+            android.graphics.Bitmap had = (android.graphics.Bitmap) lock[1];
+            if (had != null && file.equals(lock[0]) && !had.isRecycled()) {
+                android.graphics.Bitmap copy = had.copy(had.getConfig(), true);
+                if (copy != null) {
+                    sDecodeHits++;
+                    dropLater();
+                    return copy;
+                }
+            }
+            Object made = chain.proceed();
+            sDecodeMisses++;
+            lock[0] = null;
+            lock[1] = null;
+            if (made instanceof android.graphics.Bitmap && !((android.graphics.Bitmap) made).isRecycled()) {
+                android.graphics.Bitmap b = (android.graphics.Bitmap) made;
+                android.graphics.Bitmap keep = b.copy(b.getConfig(), false);
+                if (keep != null) {
+                    lock[0] = file;
+                    lock[1] = keep;
+                    dropLater();
+                }
+            }
+            return made;
+        }
+    }
+
+    /**
+     * The file s(which) reads - the one its sibling hands it - as inode, size and modification
+     * time, with night mode beside it; null when it cannot be told, which is never kept.
+     */
+    private static String fileKey(Object service, Object which) {
+        android.os.ParcelFileDescriptor pfd = null;
+        try {
+            pfd = (android.os.ParcelFileDescriptor) sFileOf.invoke(service, which);
+            if (pfd == null) return null;
+            android.system.StructStat st = android.system.Os.fstat(pfd.getFileDescriptor());
+            Context ctx = (Context) Class.forName("android.app.ActivityThread")
+                    .getMethod("currentApplication").invoke(null);
+            int night = ctx == null ? -1 : ctx.getResources().getConfiguration().uiMode
+                    & Configuration.UI_MODE_NIGHT_MASK;
+            return st.st_dev + ":" + st.st_ino + ":" + st.st_size + ":" + st.st_mtim.tv_sec + "."
+                    + st.st_mtim.tv_nsec + ":" + night;
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            if (pfd != null) {
+                try {
+                    pfd.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    private static synchronized void dropLater() {
+        if (sDropper == null) sDropper = new android.os.Handler(android.os.Looper.getMainLooper());
+        sDropper.removeCallbacks(DROP_DECODED);
+        sDropper.postDelayed(DROP_DECODED, DECODE_KEEP_MS);
+    }
+
+    private static final Runnable DROP_DECODED = new Runnable() {
+        @Override
+        public void run() {
+            for (Object[] lock : sDecoded.values()) {
+                synchronized (lock) {
+                    lock[0] = null;
+                    lock[1] = null;
+                }
+            }
+        }
+    };
 
     /** The shape both questions have: (int which, ..., Map regions) -> Map. */
     static boolean asked(java.lang.reflect.Method m) {
@@ -171,6 +303,7 @@ final class PaletteCache {
     /** For WPROBE op pcache. */
     static String describe() {
         return "hits=" + sHits + " misses=" + sMisses + " uncached=" + sUncached
-                + " cleared=" + sCleared + " held=" + sAnswers.size() + " picture=" + sPicture;
+                + " cleared=" + sCleared + " held=" + sAnswers.size() + " picture=" + sPicture
+                + " decode hits=" + sDecodeHits + " misses=" + sDecodeMisses;
     }
 }
