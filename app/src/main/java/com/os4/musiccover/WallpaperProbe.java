@@ -1411,7 +1411,11 @@ public class WallpaperProbe {
             return f;
         }
         long t0 = SystemClock.uptimeMillis();
-        Bitmap f = CoverCompose.frosted(sharp);
+        // The kept composition's own frosting when this is it: a stretch, where frosted() is a
+        // full-screen blur (783ms measured on a busy phone, the lyrics switched on in the cover).
+        Composed kept = sComposed;
+        Bitmap f = kept != null && kept.sharp == sharp
+                ? frostOf(kept, sharp.getWidth(), sharp.getHeight()) : CoverCompose.frosted(sharp);
         cacheFrosted(sharp, f);
         Xp.log(TAG + "frosted " + describe(sharp) + " in " + (SystemClock.uptimeMillis() - t0)
                 + "ms");
@@ -2167,6 +2171,11 @@ public class WallpaperProbe {
                         Xp.log(TAG + "texture fit to screen " + (sTexFit ? "ON" : "off")
                                 + " (surface " + sSurfaceW + "x" + sSurfaceH + ")");
                         reloadTexture();
+                    } else if ("precompose".equals(op)) {
+                        String src = i.getStringExtra("src");
+                        if (src != null && !videoPath()) {
+                            precompose(src, i.getBooleanExtra("cardmode", false));
+                        }
                     } else if ("art".equals(op)) {
                         sCardMode = i.getBooleanExtra("cardmode", false);
                         final Context cc = c;
@@ -2225,6 +2234,7 @@ public class WallpaperProbe {
                                 videoWindowTakeover(true);
                                 return;
                             }
+                            composedLater();
                             Bitmap from = fittedArt();
                             Bitmap to = sOrig;
                             // The look this fade belongs to, read before it starts. Anything
@@ -2769,6 +2779,7 @@ public class WallpaperProbe {
                 if (seq != sSrcSeq) return;
                 final Bitmap b;
                 final long read, composed;
+                final boolean kept;
                 try {
                     CoverCompose.Source s = CoverCompose.readSource(new File(path));
                     if (s == null) {
@@ -2778,8 +2789,11 @@ public class WallpaperProbe {
                     read = SystemClock.uptimeMillis();
                     sTmRead = read;
                     if (seq != sSrcSeq) return;
-                    b = cardMode ? CoverCompose.cardBackground(s.src, s.w, s.h)
-                            : CoverCompose.composeWallpaper(s.src, s.w, s.h, s.bias);
+                    long key = CoverCompose.sourceKey(s, cardMode);
+                    Composed hit = composedFor(key);
+                    kept = hit != null;
+                    Composed made = kept ? hit : compose(s, cardMode, key);
+                    b = made.sharp;
                     composed = SystemClock.uptimeMillis();
                     sTmComposed = composed;
                     // Under the lyrics the picture that actually goes up is the frosted copy, and
@@ -2788,14 +2802,16 @@ public class WallpaperProbe {
                     // on. Made here it is already in the cache by the time that asks - keyed on
                     // this very bitmap, so it only hits when the composition is texture-sized,
                     // which is the normal case (the texture is composed to the screen).
-                    if (sLyricBlurWant && b.getWidth() == sReportedW && b.getHeight() == sReportedH) {
+                    if (sLyricBlurWant && b.getWidth() == sReportedW && b.getHeight() == sReportedH
+                            && !frostedHas(b)) {
                         // Built from the source and the layout, not from `b` - see
                         // CoverCompose.frostedFor() - but cached under `b`, which is what every
-                        // reader asks with once this becomes the art.
-                        cacheFrosted(b, CoverCompose.frostedFor(s.src, s.w, s.h,
-                                cardMode ? 0.5f : s.bias));
+                        // reader asks with once this becomes the art. The kept small copy makes
+                        // it a stretch rather than a blur.
+                        cacheFrosted(b, frostOf(made, s.w, s.h));
                     }
                     sTmFrosted = SystemClock.uptimeMillis();
+                    keepComposed(made, 0L);
                     saveSourceLater(c, s, cardMode);
                 } catch (Throwable t) {
                     Xp.w(TAG + "composing from the source failed: " + t);
@@ -2809,13 +2825,127 @@ public class WallpaperProbe {
                             return;
                         }
                         Xp.log(TAG + "composed from the source: read " + (read - t0)
-                                + "ms, compose " + (composed - read) + "ms, to the main thread "
+                                + "ms, compose " + (composed - read) + "ms"
+                                + (kept ? " (kept)" : "") + ", to the main thread "
                                 + (SystemClock.uptimeMillis() - composed) + "ms");
                         applyArt(b, reload, fade);
                         // The JPEG from the old path is now older than what is on screen.
                         new File(c.getFilesDir(), ART_FILE).delete();
                     }
                 });
+            }
+        });
+    }
+
+    /**
+     * One composition and the frosting for it before its stretch, under the key of the source
+     * they came from (CoverCompose.sourceKey).
+     */
+    private static final class Composed {
+        final long key;
+        final Bitmap sharp;
+        final Bitmap frostSmall;
+        /** frostSmall stretched to the texture, made the first time the lyrics want it. */
+        volatile Bitmap frost;
+
+        Composed(long key, Bitmap sharp, Bitmap frostSmall) {
+            this.key = key;
+            this.sharp = sharp;
+            this.frostSmall = frostSmall;
+        }
+    }
+
+    /**
+     * The last composition, kept past the cover that showed it. Composer thread only.
+     *
+     * Every way into cover mode composed from scratch - 55-76ms here, and the frosting for the
+     * lyrics after it - and all of it stood between the tap and the first frame of the fade, so
+     * the blurred background came up behind the clock that was already moving. Kept, the same
+     * song's way back in is a read of the source and nothing else; and SystemUI hands over the
+     * source ahead of a likely entry (op precompose) so the first way in can find it too.
+     *
+     * One screen-sized bitmap and a ~0.3MB small frosting. Let go COMPOSED_KEEP_MS after the cover
+     * stops showing it, PRECOMPOSED_KEEP_MS after a precompose nothing used.
+     */
+    private static volatile Composed sComposed;
+
+    private static final long COMPOSED_KEEP_MS = 30_000L;
+    private static final long PRECOMPOSED_KEEP_MS = 60_000L;
+
+    /** [c]'s frosted cover at the texture's size, stretched once and kept with it. */
+    private static Bitmap frostOf(Composed c, int w, int h) {
+        Bitmap f = c.frost;
+        if (f == null || f.isRecycled() || f.getWidth() != w || f.getHeight() != h) {
+            f = CoverCompose.stretchFrosted(c.frostSmall, w, h);
+            c.frost = f;
+        }
+        return f;
+    }
+
+    private static Composed composedFor(long key) {
+        Composed c = sComposed;
+        return c != null && c.key == key && !c.sharp.isRecycled() ? c : null;
+    }
+
+    private static Composed compose(CoverCompose.Source s, boolean cardMode, long key) {
+        Bitmap sharp = cardMode ? CoverCompose.cardBackground(s.src, s.w, s.h)
+                : CoverCompose.composeWallpaper(s.src, s.w, s.h, s.bias);
+        Bitmap frost = CoverCompose.frostedSmallFor(s.src, s.w, s.h, cardMode ? 0.5f : s.bias);
+        return new Composed(key, sharp, frost);
+    }
+
+    /** Keeps [c]; with [dropAfterMs] above 0, lets it go then unless a cover is showing it. */
+    private static void keepComposed(Composed c, long dropAfterMs) {
+        sComposed = c;
+        composer().removeCallbacks(DROP_COMPOSED);
+        if (dropAfterMs > 0L) composer().postDelayed(DROP_COMPOSED, dropAfterMs);
+    }
+
+    /** The cover has gone: what it showed is kept a while for the way back in. */
+    private static void composedLater() {
+        composer().removeCallbacks(DROP_COMPOSED);
+        composer().postDelayed(DROP_COMPOSED, COMPOSED_KEEP_MS);
+    }
+
+    private static final Runnable DROP_COMPOSED = new Runnable() {
+        @Override
+        public void run() {
+            Composed c = sComposed;
+            // On screen again: the cover going off says when to start counting.
+            if (c == null || sArt == c.sharp) return;
+            sComposed = null;
+            Xp.log(TAG + "kept composition let go");
+        }
+    };
+
+    private static synchronized boolean frostedHas(Bitmap sharp) {
+        return sFrosted != null && sFrostedOf == sharp && !sFrosted.isRecycled()
+                || sFrosted2 != null && sFrostedOf2 == sharp && !sFrosted2.isRecycled();
+    }
+
+    /**
+     * Composes a source SystemUI expects to be asked for soon - the lock screen is up with a
+     * media card on it - and keeps it without showing it, so entering cover mode finds it done.
+     * Never touches sSrcSeq: a real cover arriving meanwhile is not overtaken by this.
+     */
+    private static void precompose(final String path, final boolean cardMode) {
+        composer().post(new Runnable() {
+            @Override
+            public void run() {
+                if (sArt != null) return;
+                try {
+                    long t0 = SystemClock.uptimeMillis();
+                    CoverCompose.Source s = CoverCompose.readSource(new File(path));
+                    if (s == null) return;
+                    long key = CoverCompose.sourceKey(s, cardMode);
+                    Composed have = composedFor(key);
+                    keepComposed(have != null ? have : compose(s, cardMode, key),
+                            PRECOMPOSED_KEEP_MS);
+                    Xp.log(TAG + "precomposed" + (have != null ? " (already kept)" : "") + " in "
+                            + (SystemClock.uptimeMillis() - t0) + "ms");
+                } catch (Throwable t) {
+                    Xp.w(TAG + "precompose failed: " + t);
+                }
             }
         });
     }

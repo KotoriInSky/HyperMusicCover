@@ -1297,6 +1297,69 @@ public final class CoverPush {
         return f.getAbsolutePath();
     }
 
+    /** Where a precompose's source goes: its own file, so a real push's is never written over. */
+    static final String SHARE_PRE_SOURCE = "mc_src_pre.raw";
+    /** The last precompose's inputs and when it went. Worker thread only. */
+    private static String sPreKey = "";
+    private static long sPreAt;
+    private static volatile boolean sPrePending;
+    /** Shorter than the wallpaper process keeps it (PRECOMPOSED_KEEP_MS), so it is never gone. */
+    private static final long PRE_RESEND_MS = 50_000L;
+
+    /**
+     * The lock screen is up with a media card and no cover: hand the wallpaper process this
+     * song's source ahead of a tap, so entering cover mode finds the composition made
+     * (WallpaperProbe.precompose) instead of composing between the tap and the fade - that wait
+     * is the blurred background coming up late behind the clock, and on a slower phone the
+     * compose is most of it. The wake and every media update ask; the same art is sent once.
+     *
+     * [delayMs] keeps it off the frames that asked: a wake's first ones are the busiest there are.
+     */
+    static void precomposeAsync(final long delayMs) {
+        final Context ctx = Main.sAppCtx;
+        if (ctx == null || sPrePending || !precomposeWanted()) return;
+        sPrePending = true;
+        Main.worker().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                sPrePending = false;
+                if (!precomposeWanted() || !Main.keyguardShowing()) return;
+                android.os.Trace.beginSection("MC push.precompose");
+                try {
+                    // The session's own bitmap only: the card lags a track change and can still
+                    // be the last album, and a guess that misses is work for nothing.
+                    Bitmap art = AlbumArt.albumArt(ctx, false);
+                    if (art == null) return;
+                    int w = Main.sScreenW, h = Main.sScreenH;
+                    boolean card = Main.sCoverCardStyle.mode == CoverCardStyle.CARD;
+                    String key = artPrint(art) + ":" + art.getWidth() + "x" + art.getHeight()
+                            + ":" + w + "x" + h + ":" + Main.sBias + ":" + card;
+                    long now = android.os.SystemClock.uptimeMillis();
+                    if (key.equals(sPreKey) && now - sPreAt < PRE_RESEND_MS) return;
+                    Bitmap src = CoverCompose.prepareSource(art, w);
+                    java.io.File f = new java.io.File(SHARE_DIR, SHARE_PRE_SOURCE);
+                    CoverCompose.writeSource(f, src, w, h, Main.sBias);
+                    Intent out = wallpaperIntent("precompose");
+                    out.putExtra("src", f.getAbsolutePath());
+                    out.putExtra("cardmode", card);
+                    ProbeGuard.send(ctx, out);
+                    sPreKey = key;
+                    sPreAt = now;
+                } catch (Throwable t) {
+                    Xp.w(Main.TAG + "precompose failed: " + t);
+                } finally {
+                    android.os.Trace.endSection();
+                }
+            }
+        }, delayMs);
+    }
+
+    /** Only where a cover would be composed from the source by the wallpaper process. */
+    private static boolean precomposeWanted() {
+        return !Main.sCoverMode && Main.sCoverFeatureOn && Main.sWpComposes && Main.sScreenOn
+                && !Main.sVideoWallpaper && !Main.keepsWallpaper() && MediaCard.sCardPresent;
+    }
+
     static void pushArtAsync(final boolean on, final boolean fresh) {
         final Context ctx = Main.sAppCtx;
         if (ctx == null) return;

@@ -1662,6 +1662,8 @@ public class Main extends XposedModule {
                     // The doze had the wallpaper dim released; ask for it again if the
                     // lyric page is still what the lock screen shows.
                     KeepDim.resume();
+                    // A tap into the cover is likely from here: have its picture made first.
+                    if (!sCoverMode) CoverPush.precomposeAsync(PRECOMPOSE_WAKE_MS);
                     return;
                 }
                 // Cover mode outlives the display going off and the phone being unlocked; its
@@ -4073,9 +4075,16 @@ public class Main extends XposedModule {
         onMediaUpdate(false);
     }
 
+    /** After a wake's busiest frames; after a media update, once a burst of them has settled. */
+    private static final long PRECOMPOSE_WAKE_MS = 400L;
+    private static final long PRECOMPOSE_MEDIA_MS = 600L;
+
     /** A tap or pull can enter the cover even when new media defaults to a collapsed island. */
     private static void onMediaUpdate(boolean explicitEntry) {
         MiniPlayerRuntime.refresh();
+        // A new song on the lock screen, or its card just come up: the cover's picture is made
+        // ahead of a tap (CoverPush.precomposeAsync sends each picture once).
+        if (!sCoverMode) CoverPush.precomposeAsync(PRECOMPOSE_MEDIA_MS);
         // The cover is pushed off the media card's key, and the session's metadata can still be
         // the last song's at that moment - so the motion cover follows the metadata itself. It
         // keys on the song, so a player singing into TITLE does not look it up per line.
