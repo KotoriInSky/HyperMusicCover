@@ -396,9 +396,13 @@ internal object LockIslands {
                 "listbuilder.pluggable.Pluggable", classLoader)
             Xp.hookAll(pluggable, "onCleanup") { chain ->
                 val result = chain.proceed()
-                if (chain.thisObject === filter?.get()) runCatching { commit() }
+                if (chain.thisObject === filter?.get()) {
+                    endRun()
+                    runCatching { commit() }
+                }
                 result
             }
+            runEndHooked = true
         }.onFailure { Xp.w("MCIsland: run end unavailable: $it") }
         // The countdown reads its timer from locked runs only, and a countdown stopped with the
         // phone unlocked is gone before the next one: locked straight into the doze, every row
@@ -744,8 +748,27 @@ internal object LockIslands {
     private var unlockWatch = false
     private const val UNLOCK_WATCH_MS = 3000L
 
+    /**
+     * Per pipeline run: neither whether the keyguard is locked nor whether a user's lock screen
+     * is in public mode changes in the middle of one, and both were asked for every notification.
+     * Cleared at the run's end (commit) - so only kept when that end is hooked.
+     */
+    private var runEndHooked = false
+    private var runLocked: Boolean? = null
+    private val runPublic = HashMap<Int, Boolean>()
+
+    private fun endRun() {
+        runLocked = null
+        runPublic.clear()
+    }
+
+    private fun lockedOrLocking(filterObject: Any): Boolean {
+        if (runEndHooked) runLocked?.let { return it }
+        return readLockedOrLocking(filterObject).also { runLocked = it }
+    }
+
     /** The provider's own reading of the keyguard: showing, or about to be. */
-    private fun lockedOrLocking(filterObject: Any): Boolean = runCatching {
+    private fun readLockedOrLocking(filterObject: Any): Boolean = runCatching {
         val found = provider?.get() ?: Xp.getObjectField(
             Xp.getObjectField(filterObject, "this\$0"), "keyguardNotificationVisibilityProvider")
             .also { provider = WeakReference(it) }
@@ -784,8 +807,12 @@ internal object LockIslands {
             val owner = (Xp.getObjectField(entry, "mSbn") as StatusBarNotification).userId
             val current = runCatching { Xp.getObjectField(manager, "mCurrentUserId") as Int }
                 .getOrDefault(owner)
-            val public = Xp.callMethod(manager, "isLockscreenPublicMode", current) == true ||
-                Xp.callMethod(manager, "isLockscreenPublicMode", owner) == true
+            fun publicMode(user: Int): Boolean {
+                if (runEndHooked) runPublic[user]?.let { return it }
+                return (Xp.callMethod(manager, "isLockscreenPublicMode", user) == true)
+                    .also { runPublic[user] = it }
+            }
+            val public = publicMode(current) || publicMode(owner)
             public && (Xp.callMethod(manager, "getRedactionType", entry) as Number).toInt() != 0
         }.getOrElse {
             if (!redactionUnreadable) {
@@ -805,17 +832,40 @@ internal object LockIslands {
         Xp.getObjectField(injector, "focusNotificationWithinInflatedView") == true
     }.getOrDefault(false)
 
+    /**
+     * Asked for every notification on every pipeline run, so nothing in it is looked up twice:
+     * a build without getInjector() threw for each one and then walked the row's whole class
+     * chain for its fields - inside the list rebuild that an island switch sets off, on the
+     * frames of its morph. Whether the method is there, the Injector-typed fields of each row
+     * class, and which classes carry the flag are each found once.
+     */
+    private var injectorCall: Boolean? = null
+    private val injectorFields = HashMap<Class<*>, List<java.lang.reflect.Field>>()
+    private val focusFlagClasses = HashMap<Class<*>, Boolean>()
+
     private fun rowInjector(row: Any): Any? {
-        runCatching { return Xp.callMethod(row, "getInjector") }
-        var c: Class<*>? = row.javaClass
-        while (c != null && c != Any::class.java) {
-            for (f in c.declaredFields) {
-                if (!f.type.name.endsWith("Injector")) continue
-                f.isAccessible = true
-                val v = f.get(row) ?: continue
-                if (hasField(v.javaClass, "focusNotificationWithinInflatedView")) return v
+        if (injectorCall != false) {
+            runCatching { return Xp.callMethod(row, "getInjector").also { injectorCall = true } }
+            if (injectorCall == null) injectorCall = false
+        }
+        val fields = injectorFields.getOrPut(row.javaClass) {
+            val found = ArrayList<java.lang.reflect.Field>()
+            var c: Class<*>? = row.javaClass
+            while (c != null && c != Any::class.java) {
+                for (f in c.declaredFields) {
+                    if (!f.type.name.endsWith("Injector")) continue
+                    f.isAccessible = true
+                    found.add(f)
+                }
+                c = c.superclass
             }
-            c = c.superclass
+            found
+        }
+        for (f in fields) {
+            val v = f.get(row) ?: continue
+            if (focusFlagClasses.getOrPut(v.javaClass) {
+                    hasField(v.javaClass, "focusNotificationWithinInflatedView")
+                }) return v
         }
         return null
     }
