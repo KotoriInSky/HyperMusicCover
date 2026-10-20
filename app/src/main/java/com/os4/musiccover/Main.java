@@ -757,6 +757,8 @@ public class Main extends XposedModule {
             Xp.hookAll(owner, method, chain -> {
                 LockLyrics.lockScreenLeaving(tag);
                 main().post(ImmersiveHost::onLockScreenLeaving);
+                // At once rather than on the window's next pre-draw (coverCardVisible says why).
+                main().post(CoverCardLayer::hideNow);
                 main().post(kickLyrics);
                 main().postDelayed(kickLyrics, 160L);
                 return chain.proceed();
@@ -2811,9 +2813,15 @@ public class Main extends XposedModule {
         // The PIN pad is not a reason to hide it: taken away there, the square cut out as the pad
         // came up and popped back as it went. It stays and blurs under the pad instead, the way
         // the lyrics do - see CoverCardLayer.followBouncer.
+        //
+        // Gone with the lock screen's exit, not with the keyguard reading unlocked: the square is
+        // in the background layer, which the OEM's exit animation does not take, and the reading
+        // is cached for 150ms and still says locked early in that animation - so it outstayed the
+        // clock and the media card by anything up to ~0.2s, depending on where the cache stood
+        // (user, 2026-10-20). The leaving hooks are the moment the lyrics are cut on too.
         return (sCoverMode || LockHold.exitingFor(LockHold.Owner.COVER)
                         && ClockCollapse.phase() == ClockCollapse.Phase.EXIT)
-                && keyguardShowing() && c != null && c.isShown()
+                && keyguardShowing() && !LockLyrics.lockScreenGone() && c != null && c.isShown()
                 && (sScreenOn || coverCardInAod() || coverCardFallingAsleep());
     }
 
@@ -2844,7 +2852,7 @@ public class Main extends XposedModule {
         return sCoverMode && sCoverCardStyle.mode == CoverCardStyle.CARD && !sScreenOn
                 && ClockCollapse.phase() == ClockCollapse.Phase.AOD
                 && ClockCollapse.aodFullScreen() && keyguardShowing()
-                && c != null && c.isShown();
+                && !LockLyrics.lockScreenGone() && c != null && c.isShown();
     }
 
     static int screenWidth() {

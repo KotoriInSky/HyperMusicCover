@@ -405,9 +405,10 @@ public final class LockLyrics {
      * The lock screen has gone, or has said it is going: the keyguard reads unlocked, or one of
      * the leaving hooks fired within the last LEAVING_MAX_MS. This is what the window's page is
      * cut on (LyricView.step's `gone`) - both halves, because the hook fires while the keyguard
-     * still reads locked, and that stretch is exactly the residue the cut is for.
+     * still reads locked, and that stretch is exactly the residue the cut is for. The square
+     * cover is cut on it too (Main.coverCardVisible).
      */
-    static boolean lockScreenGone() {
+    public static boolean lockScreenGone() {
         if (!Main.keyguardLocked()) {
             // The keyguard's own answer has caught up: whatever "leaving" was for is spent.
             sLeaving = false;
