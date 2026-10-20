@@ -112,9 +112,25 @@ final class MotionCover {
         Main.main().post(() -> {
             sGen++;
             sWantKey = "";
+            // The square's video is only paused - the card stops wanting it - and kept for a
+            // while: torn down on every exit and rebuilt on every entry, it cost a decoder, a GL
+            // context and 700ms before the video moved again. Back to the same album in time,
+            // track() finds it still loaded and carries on from where it stopped.
+            if (sPlayingFile != null && sPlayingCard) {
+                final int park = ++sPark;
+                Main.main().postDelayed(() -> {
+                    if (park == sPark) stopVideo("parked " + PARK_MS / 1000 + "s");
+                }, PARK_MS);
+                return;
+            }
             stopVideo("cover off");
         });
     }
+
+    /** How long the square's video stays loaded after the cover goes. */
+    private static final long PARK_MS = 30_000L;
+    /** Main thread: bumped by anything that ends or reclaims a parked video. */
+    private static int sPark;
 
     private static void track(Context ctx, String title, String artist, String album, long dur,
                               boolean card) {
@@ -162,7 +178,10 @@ final class MotionCover {
                 && sPlayingFile.equals(cachedFile(ctx, key));
         sWantKey = key;
         sWantCard = card;
-        if (sameVideo) return;
+        if (sameVideo) {
+            sPark++;   // a parked video is the cover's again
+            return;
+        }
         stopVideo("track");
         final int gen = ++sGen;
         // A video already on disk plays now, not after whatever lookups are still queued.
@@ -226,6 +245,7 @@ final class MotionCover {
     }
 
     private static void stopVideo(String why) {
+        sPark++;
         if (sPlayingFile == null) return;
         boolean card = sPlayingCard;
         sPlayingFile = null;

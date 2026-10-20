@@ -43,8 +43,10 @@ import java.nio.FloatBuffer;
  *
  * A decoder's output cannot be wrapped directly: it is YUV, and Bitmap only wraps RGB buffers.
  *
- * Main thread for control; the GL work runs on its own thread so a slow frame never lands on
- * SystemUI's UI thread. Nothing here runs unless something calls start().
+ * Main thread for control; the GL work and every MediaPlayer call run on its own thread. Those
+ * calls are binder round trips to mediaserver: on the UI thread release() alone took 11-35ms at
+ * the start of every exit from the cover, and the load 15ms (2026-10-20 trace). Nothing here
+ * runs unless something calls load().
  */
 final class CardVideo {
 
@@ -60,19 +62,25 @@ final class CardVideo {
     // ---------------------------------------------------------------- main thread
 
     private static String sPath;
-    private static MediaPlayer sPlayer;
     private static boolean sWanted;     // CoverCardLayer wants it playing
-    private static boolean sPrepared;
+    /** What the player should be doing, for the GL thread to carry out. */
+    private static volatile boolean sRun;
     private static HandlerThread sThread;
     private static Handler sGl;
+    /** The GL thread's reader once it is made; only compared against here, never closed. */
     private static ImageReader sReader;
     private static Image sShown, sBefore;
     private static Bitmap sFrame;
     private static BroadcastReceiver sScreen;
-    private static int sSession;
+    private static volatile int sSession;
 
     // ---------------------------------------------------------------- GL thread
 
+    private static volatile MediaPlayer sPlayer;
+    private static boolean sPrepared;
+    /** For the probe: what the GL thread last told the player. */
+    private static volatile String sPlayerState = "none";
+    private static ImageReader sGlReader;
     private static EGLDisplay sDisplay = EGL14.EGL_NO_DISPLAY;
     private static EGLContext sContext = EGL14.EGL_NO_CONTEXT;
     private static EGLSurface sSurface = EGL14.EGL_NO_SURFACE;
@@ -101,38 +109,14 @@ final class CardVideo {
 
     static void load(Context ctx, String path) {
         unload("reload");
-        int w, h;
-        try {
-            android.media.MediaMetadataRetriever r = new android.media.MediaMetadataRetriever();
-            try {
-                r.setDataSource(path);
-                w = Integer.parseInt(r.extractMetadata(
-                        android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
-                h = Integer.parseInt(r.extractMetadata(
-                        android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
-            } finally {
-                r.release();
-            }
-        } catch (Throwable t) {
-            Xp.w(TAG + "cannot read " + path + ": " + t);
-            return;
-        }
-        float down = Math.min(1f, MAX_SIDE / (float) Math.max(w, h));
-        sW = Math.max(1, Math.round(w * down));
-        sH = Math.max(1, Math.round(h * down));
         sPath = path;
         final int session = ++sSession;
         resetStats();
-        sReader = ImageReader.newInstance(sW, sH, PixelFormat.RGBA_8888, MAX_IMAGES,
-                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE | HardwareBuffer.USAGE_GPU_COLOR_OUTPUT);
-        sReader.setOnImageAvailableListener(r -> onImage(r, session), Main.main());
         sThread = new HandlerThread("MCCardVideo");
         sThread.start();
         sGl = new Handler(sThread.getLooper());
-        final Surface out = sReader.getSurface();
-        sGl.post(() -> glSetUp(out, session));
+        sGl.post(() -> glLoad(path, session));
         registerScreen(ctx);
-        Xp.log(TAG + "loaded " + path + " " + w + "x" + h + " -> " + sW + "x" + sH);
         CoverCardLayer.refresh();
     }
 
@@ -140,36 +124,32 @@ final class CardVideo {
         if (sPath == null) return;
         sSession++;
         sPath = null;
-        sPrepared = false;
-        MediaPlayer p = sPlayer;
-        sPlayer = null;
-        if (p != null) {
-            try {
-                p.release();
-            } catch (Throwable ignored) {
-            }
-        }
         final Handler gl = sGl;
         final HandlerThread th = sThread;
         sGl = null;
         sThread = null;
-        if (gl != null) {
-            gl.post(CardVideo::glRelease);
-            gl.post(th::quitSafely);
-        }
-        // The card may be mid-draw with sFrame; drop the reference here and close the images a
-        // frame later, after the render thread is done with them.
+        // The card may be mid-draw with sFrame; drop the reference here, and close the images
+        // once the player has let go of the reader and a frame after that, when the render
+        // thread is done with them.
         final Image a = sShown, b = sBefore;
-        final ImageReader reader = sReader;
         sShown = sBefore = null;
         sFrame = null;
         sReader = null;
-        Main.main().postDelayed(() -> {
-            if (a != null) a.close();
-            if (b != null) b.close();
-            if (reader != null) reader.close();
-        }, 100L);
         Xp.log(TAG + "unloaded (" + why + ") " + stats());
+        if (gl != null) {
+            gl.post(() -> {
+                glReleasePlayer();
+                glRelease();
+                final ImageReader reader = sGlReader;
+                sGlReader = null;
+                Main.main().postDelayed(() -> {
+                    if (a != null) a.close();
+                    if (b != null) b.close();
+                    if (reader != null) reader.close();
+                }, 100L);
+            });
+            gl.post(th::quitSafely);
+        }
         CoverCardLayer.refresh();
     }
 
@@ -184,15 +164,9 @@ final class CardVideo {
     }
 
     private static void apply() {
-        MediaPlayer p = sPlayer;
-        if (p == null || !sPrepared) return;
-        try {
-            boolean run = sWanted && Main.screenOn();
-            if (run && !p.isPlaying()) p.start();
-            else if (!run && p.isPlaying()) p.pause();
-        } catch (Throwable t) {
-            Xp.w(TAG + "play/pause: " + t);
-        }
+        sRun = sWanted && Main.screenOn();
+        Handler gl = sGl;
+        if (gl != null) gl.post(CardVideo::glApply);
     }
 
     private static void registerScreen(Context ctx) {
@@ -206,38 +180,6 @@ final class CardVideo {
         IntentFilter f = new IntentFilter(Intent.ACTION_SCREEN_OFF);
         f.addAction(Intent.ACTION_SCREEN_ON);
         ctx.registerReceiver(sScreen, f);
-    }
-
-    /** Main thread: the GL side has a SurfaceTexture; start decoding into it. */
-    private static void attachPlayer(SurfaceTexture st, int session) {
-        if (session != sSession || sPath == null) return;
-        Surface surface = new Surface(st);
-        try {
-            final MediaPlayer p = new MediaPlayer();
-            sPlayer = p;
-            p.setDataSource(sPath);
-            p.setSurface(surface);
-            p.setLooping(true);
-            p.setVolume(0f, 0f);
-            p.setOnErrorListener((mp, what, extra) -> {
-                Xp.w(TAG + "player error " + what + "/" + extra);
-                unload("player error");
-                return true;
-            });
-            p.setOnPreparedListener(mp -> {
-                if (sPlayer != mp) return;
-                sPrepared = true;
-                // Shows the first frame even while paused, so the card has something to fade in.
-                mp.seekTo(0);
-                apply();
-            });
-            p.prepareAsync();
-        } catch (Throwable t) {
-            Xp.w(TAG + "player: " + t);
-            unload("player failed");
-        } finally {
-            surface.release();
-        }
     }
 
     /** Main thread: a frame has been drawn into the reader. */
@@ -270,7 +212,108 @@ final class CardVideo {
 
     // ================================================================ GL thread
 
-    private static void glSetUp(Surface out, int session) {
+    /** Reads the size, makes the reader the frames go into, then the GL side and the player. */
+    private static void glLoad(String path, int session) {
+        if (session != sSession) return;
+        int w, h;
+        try {
+            android.media.MediaMetadataRetriever r = new android.media.MediaMetadataRetriever();
+            try {
+                r.setDataSource(path);
+                w = Integer.parseInt(r.extractMetadata(
+                        android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+                h = Integer.parseInt(r.extractMetadata(
+                        android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+            } finally {
+                r.release();
+            }
+        } catch (Throwable t) {
+            Xp.w(TAG + "cannot read " + path + ": " + t);
+            Main.main().post(() -> {
+                if (session == sSession) unload("unreadable");
+            });
+            return;
+        }
+        float down = Math.min(1f, MAX_SIDE / (float) Math.max(w, h));
+        sW = Math.max(1, Math.round(w * down));
+        sH = Math.max(1, Math.round(h * down));
+        final ImageReader reader = ImageReader.newInstance(sW, sH, PixelFormat.RGBA_8888,
+                MAX_IMAGES,
+                HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE | HardwareBuffer.USAGE_GPU_COLOR_OUTPUT);
+        // Closed by unload's release on this thread, whether or not main ever took it.
+        sGlReader = reader;
+        reader.setOnImageAvailableListener(r -> onImage(r, session), Main.main());
+        Main.main().post(() -> {
+            if (session == sSession) sReader = reader;
+        });
+        Xp.log(TAG + "loaded " + path + " " + w + "x" + h + " -> " + sW + "x" + sH);
+        glSetUp(reader.getSurface(), path, session);
+    }
+
+    /** The GL side has a SurfaceTexture; start decoding into it. */
+    private static void glPlayer(SurfaceTexture st, String path, int session) {
+        if (session != sSession) return;
+        Surface surface = new Surface(st);
+        try {
+            // Made on this thread, so its callbacks come back on this thread too.
+            final MediaPlayer p = new MediaPlayer();
+            sPlayer = p;
+            sPlayerState = "preparing";
+            p.setDataSource(path);
+            p.setSurface(surface);
+            p.setLooping(true);
+            p.setVolume(0f, 0f);
+            p.setOnErrorListener((mp, what, extra) -> {
+                Xp.w(TAG + "player error " + what + "/" + extra);
+                Main.main().post(() -> {
+                    if (session == sSession) unload("player error");
+                });
+                return true;
+            });
+            p.setOnPreparedListener(mp -> {
+                if (sPlayer != mp) return;
+                sPrepared = true;
+                // Shows the first frame even while paused, so the card has something to fade in.
+                mp.seekTo(0);
+                glApply();
+            });
+            p.prepareAsync();
+        } catch (Throwable t) {
+            Xp.w(TAG + "player: " + t);
+            Main.main().post(() -> {
+                if (session == sSession) unload("player failed");
+            });
+        } finally {
+            surface.release();
+        }
+    }
+
+    private static void glApply() {
+        MediaPlayer p = sPlayer;
+        if (p == null || !sPrepared) return;
+        try {
+            boolean run = sRun;
+            if (run && !p.isPlaying()) p.start();
+            else if (!run && p.isPlaying()) p.pause();
+            sPlayerState = run ? "playing" : "paused";
+        } catch (Throwable t) {
+            Xp.w(TAG + "play/pause: " + t);
+        }
+    }
+
+    private static void glReleasePlayer() {
+        MediaPlayer p = sPlayer;
+        sPlayer = null;
+        sPrepared = false;
+        sPlayerState = "none";
+        if (p == null) return;
+        try {
+            p.release();
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static void glSetUp(Surface out, String path, int session) {
         try {
             sDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
             int[] v = new int[2];
@@ -310,7 +353,7 @@ final class CardVideo {
             st.setDefaultBufferSize(sW, sH);
             sTexture = st;
             st.setOnFrameAvailableListener(s -> glFrame(s), sGl);
-            Main.main().post(() -> attachPlayer(st, session));
+            glPlayer(st, path, session);
         } catch (Throwable t) {
             Xp.w(TAG + "GL set-up failed: " + android.util.Log.getStackTraceString(t));
             glRelease();
@@ -411,15 +454,9 @@ final class CardVideo {
     static String stats() {
         long el = Math.max(1L, SystemClock.uptimeMillis() - sSince);
         int d = sDecoded;
-        String pos;
-        try {
-            MediaPlayer p = sPlayer;
-            pos = p == null ? "none" : (p.isPlaying() ? "playing" : "paused")
-                    + " @" + p.getCurrentPosition() + "ms";
-        } catch (Throwable t) {
-            pos = "?";
-        }
-        return "path=" + sPath + " wanted=" + sWanted + " player=" + pos + " over " + el
+        // Not asked of the player: each question is a binder call, and this runs on the UI
+        // thread as the cover goes.
+        return "path=" + sPath + " wanted=" + sWanted + " player=" + sPlayerState + " over " + el
                 + "ms: rendered=" + d + " (" + Math.round(d * 10000.0 / el) / 10.0 + "/s)"
                 + " delivered=" + sDelivered
                 + " gl avg=" + (d == 0 ? 0 : Math.round(sGlNs / (double) d / 1000.0))
