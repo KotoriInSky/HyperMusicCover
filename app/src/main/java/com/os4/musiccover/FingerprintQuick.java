@@ -148,6 +148,22 @@ final class FingerprintQuick {
     static volatile boolean sMoveShows;
 
     /**
+     * 人脸解锁后按住指纹也弹出. With face unlock set to stay on the lock screen, a finger on the
+     * sensor after the face has passed dismisses the keyguard there and then - the fingerprint is
+     * never read - and dismissGxzwView arms the menu only when the unlock was the fingerprint's
+     * (2026-10-21, from the user's log: onTouchDown, onKeyguardHide, 已取消指纹操作). On, the
+     * finger still on the sensor at that moment is enough. On when absent.
+     */
+    static volatile boolean sFaceToo = true;
+
+    /**
+     * Set just around dismissGxzwView, for its first isUnlockByGxzw only: that one is the menu's
+     * condition. The second, further down, decides whether the fingerprint's bright spot is
+     * taken off the screen, and must keep its real answer.
+     */
+    private static boolean sForceGxzwOnce;
+
+    /**
      * Either half set on its own, -1 for its share of the total. For tuning the two apart
      * (2026-10-21: the user wanted the circle at 50ms with the wait left alone).
      */
@@ -201,6 +217,7 @@ final class FingerprintQuick {
             sOn = false;
             sTotalMs = DEFAULT_TOTAL_MS;
             sMoveShows = false;
+            sFaceToo = true;
             sWaitMs = -1;
             sLoadingMs = -1;
             sItems = null;
@@ -210,6 +227,7 @@ final class FingerprintQuick {
         sOn = o.optBoolean("on", true);
         sTotalMs = Math.max(0, Math.min(MAX_TOTAL_MS, o.optInt("total", DEFAULT_TOTAL_MS)));
         sMoveShows = o.optBoolean("move", false);
+        sFaceToo = o.optBoolean("face", true);
         sWaitMs = o.has("wait") ? Math.max(0, Math.min(MAX_TOTAL_MS, o.optInt("wait"))) : -1;
         sLoadingMs = o.has("loading") ? Math.max(0, Math.min(MAX_TOTAL_MS, o.optInt("loading"))) : -1;
         JSONArray a = o.optJSONArray("items");
@@ -236,6 +254,7 @@ final class FingerprintQuick {
             o.put("on", sOn);
             o.put("total", sTotalMs);
             o.put("move", sMoveShows);
+            o.put("face", sFaceToo);
             if (sWaitMs >= 0) o.put("wait", sWaitMs);
             if (sLoadingMs >= 0) o.put("loading", sLoadingMs);
             List<JSONObject> items = sItems;
@@ -409,13 +428,35 @@ final class FingerprintQuick {
                 Object icon = null;
                 Object qv = null;
                 boolean before = false;
+                boolean forced = false;
                 try {
                     icon = Xp.getObjectField(chain.getThisObject(), "mMiuiGxzwIconView");
                     qv = icon == null ? null : Xp.getObjectField(icon, "mMiuiGxzwQuickOpenView");
                     before = qv != null && bool(qv, "mShowed");
+                    if (icon != null) {
+                        ensureLoaded(((View) icon).getContext());
+                        forced = sOn && sFaceToo && !before
+                                && bool(icon, "isCatchDownEvent") && bool(icon, "mTouchDown")
+                                && !Boolean.TRUE.equals(Xp.callMethod(chain.getThisObject(), "isUnlockByGxzw"));
+                    }
                 } catch (Throwable ignored) {
                 }
-                Object r = chain.proceed();
+                sForceGxzwOnce = forced;
+                Object r;
+                try {
+                    r = chain.proceed();
+                } finally {
+                    sForceGxzwOnce = false;
+                }
+                if (forced && qv != null && bool(qv, "mShowed")) {
+                    // The finger that unlocked is the face, not one of the prints: no print id
+                    // for the OEM to wave an app lock through with, so a locked app still asks.
+                    try {
+                        Xp.setObjectField(qv, "mFingerID", 0);
+                    } catch (Throwable ignored) {
+                    }
+                    Xp.log(Main.TAG + "fpquick: menu armed after a non-fingerprint unlock");
+                }
                 if (qv != null && !before) {
                     try {
                         if (bool(qv, "mShowed")) retime(qv, icon);
@@ -424,6 +465,15 @@ final class FingerprintQuick {
                     }
                 }
                 return r;
+            });
+            // The menu's own check, answered yes once while dismissGxzwView runs for a finger
+            // held on the sensor through a face unlock; see sForceGxzwOnce.
+            Xp.hookAll(manager, "isUnlockByGxzw", chain -> {
+                if (sForceGxzwOnce) {
+                    sForceGxzwOnce = false;
+                    return true;
+                }
+                return chain.proceed();
             });
             Xp.log(Main.TAG + "fpquick timing hooked");
         } catch (Throwable t) {

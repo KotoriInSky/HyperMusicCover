@@ -276,6 +276,7 @@
     <string name="fpquick_unsupported">This phone has no fingerprint shortcut menu</string>
     <string name="fpquick_time">Pop-up time</string>
     <string name="fpquick_move">Open as soon as the finger moves</string>
+    <string name="fpquick_face">Also after a face unlock</string>
     <string name="fpquick_items">Menu items</string>
     <string name="fpquick_add">Add item</string>
     <string name="fpquick_reset">Restore defaults</string>

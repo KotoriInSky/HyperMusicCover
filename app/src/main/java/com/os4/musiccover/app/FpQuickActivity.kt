@@ -205,7 +205,14 @@ private fun actionLabel(a: String): Int = when (a) {
  * the OEM's menu as it ships. [items] holds one entry per honeycomb place, in the module's
  * CELLS order, `{"t":"empty"}` for a place left open; null is the OEM's own list.
  */
-private data class FpConfig(val on: Boolean, val total: Int, val move: Boolean, val items: List<JSONObject>?) {
+private data class FpConfig(
+    val on: Boolean,
+    val total: Int,
+    val move: Boolean,
+    val items: List<JSONObject>?,
+    /** 人脸解锁后按住指纹也弹出; FingerprintQuick.sFaceToo. */
+    val face: Boolean = true,
+) {
     /** Every place up to the last one used, empty ones included. */
     val slots: List<JSONObject> get() = items ?: DEFAULT_NATIVE.map { native(it) }
 
@@ -229,6 +236,7 @@ private data class FpConfig(val on: Boolean, val total: Int, val move: Boolean, 
         put("on", on)
         put("total", total)
         put("move", move)
+        put("face", face)
         items?.let { put("items", JSONArray(it)) }
     }.toString()
 
@@ -237,7 +245,8 @@ private data class FpConfig(val on: Boolean, val total: Int, val move: Boolean, 
             val o = JSONObject(raw)
             val a = o.optJSONArray("items")
             FpConfig(o.optBoolean("on", true), o.optInt("total", DEFAULT_TOTAL), o.optBoolean("move", false),
-                a?.let { (0 until it.length()).mapNotNull { i -> it.optJSONObject(i) } })
+                a?.let { (0 until it.length()).mapNotNull { i -> it.optJSONObject(i) } },
+                o.optBoolean("face", true))
         }.getOrDefault(FpConfig(false, DEFAULT_TOTAL, false, null))
     }
 }
@@ -364,6 +373,9 @@ private fun FpQuickPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
                                 SwitchPreference(title = stringResource(R.string.fpquick_move),
                                     checked = config.move,
                                     onCheckedChange = { save(config.copy(move = it)) })
+                                SwitchPreference(title = stringResource(R.string.fpquick_face),
+                                    checked = config.face,
+                                    onCheckedChange = { save(config.copy(face = it)) })
                             }
                         }
                     }

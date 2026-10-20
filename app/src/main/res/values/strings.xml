@@ -289,6 +289,7 @@
     <string name="fpquick_unsupported">这台手机上没有找到指纹快捷功能</string>
     <string name="fpquick_time">弹出时间</string>
     <string name="fpquick_move">手指一动立刻弹出</string>
+    <string name="fpquick_face">人脸解锁后按住指纹也弹出</string>
     <string name="fpquick_items">菜单项目</string>
     <string name="fpquick_add">添加项目</string>
     <string name="fpquick_reset">恢复默认</string>
