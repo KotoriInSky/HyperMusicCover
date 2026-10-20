@@ -14,6 +14,9 @@
   travel card draws, the trip's bus for a bus leg, and none for a walk. The big line is set smaller
   by TransitRear when it would not fit.
 
+  The sizes here are in dp, which is the template on a panel 336dp wide; TransitRear sets every one
+  again in the panel's width / 336, as the template itself scales (see RearPanel).
+
   Framework widgets only, and pictures set with setImageViewIcon alone - the back screen inflates
   this with an AppCompat factory, and setImageBitmap on AppCompatImageView takes that app down
   (see PickupCard).

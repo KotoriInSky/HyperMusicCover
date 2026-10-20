@@ -14,6 +14,10 @@
   (`scene_style_*_rear_bg`) under a 336x213dp black gradient of theirs; [PickupCard.rear] builds the
   same shape out of the brand's own colour instead of shipping their art.
 
+  These are the sizes on a panel 213dp tall. [PickupCard.rear] sets every one of them again in
+  units of the panel's own height / 213, the way the back screen's MAML templates scale - see
+  [RearPanel]: the 17 Pro's panel is about 203dp, and in dp the capsule ran off its bottom.
+
   Framework widgets only, and no method an AppCompat inflater overrides - the back screen inflates
   this, and `setImageBitmap` on `androidx.appcompat.widget.AppCompatImageView` is an ActionException
   that takes the whole app down. See [PickupCard].
@@ -32,6 +36,7 @@
         android:scaleType="fitXY" />
 
     <LinearLayout
+        android:id="@+id/mc_pickup_rear_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
@@ -41,6 +46,7 @@
         android:paddingBottom="20dp">
 
         <LinearLayout
+            android:id="@+id/mc_pickup_rear_row"
             android:layout_width="match_parent"
             android:layout_height="84dp"
             android:gravity="center_vertical"
@@ -50,6 +56,7 @@
                  and the brand's mark over it, which the module fades in once the drink has filled
                  (see PickupCodeIsland's picture hook). -->
             <FrameLayout
+                android:id="@+id/mc_pickup_rear_picture"
                 android:layout_width="72dp"
                 android:layout_height="84dp">
 

@@ -8,12 +8,16 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.drawable.Icon
-import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import com.os4.musiccover.BuildConfig
 import com.os4.musiccover.R
 import com.os4.musiccover.Xp
+import com.os4.musiccover.pickup.RearPanel
+import com.os4.musiccover.pickup.height
+import com.os4.musiccover.pickup.margin
+import com.os4.musiccover.pickup.textPx
+import com.os4.musiccover.pickup.width
 
 /**
  * The trip's card on the back screen (`miui.rear.rv` / `miui.rear.rvAOD` on [AmapTransitIsland]'s
@@ -75,14 +79,18 @@ internal object TransitRear {
         // choice (the capsule's left word over the title) said 「步行至」 over 「步行至大学城南」.
         val line2 = c.lockTitle.ifEmpty { title }
         val line3 = c.lockSubtitle.takeIf { it.isNotEmpty() && it != line2 } ?: ""
-        return card(picture, logo, line1, line2, line3, open, false) to
-            card(picture, logo, line1, line2, line3, open, true)
+        // The template's own scale, `#view_width / 336`, on the panel the card is going to (see
+        // [RearPanel]): in dp the card sat higher and smaller on the 17 Pro Max than the template
+        // it stands in for, and shorter panels would cut its last line.
+        val u = RearPanel.of(ctx).byWidth()
+        return card(picture, logo, line1, line2, line3, open, false, u) to
+            card(picture, logo, line1, line2, line3, open, true, u)
     }
 
     /**
-     * The big line's size: the template's 32sp while it fits its 193dp, and smaller for a longer
-     * one rather than cut off - 「步行至大学城南」 is seven characters, and a CJK character is about
-     * as wide as the type is tall. Not under 22sp, past which ellipsizing is the better loss.
+     * The big line's size, in the template's units: its 32 while it fits its 193, and smaller for a
+     * longer one rather than cut off - 「步行至大学城南」 is seven characters, and a CJK character is
+     * about as wide as the type is tall. Not under 22, past which ellipsizing is the better loss.
      */
     private fun bigSize(text: String): Float {
         val ems = text.sumOf { if (it.code > 127) 1.0 else 0.55 }
@@ -92,8 +100,9 @@ internal object TransitRear {
     private const val BIG = 32f
 
     private fun card(picture: Icon?, logo: Bitmap, line1: String, line2: String, line3: String,
-                     open: PendingIntent, aod: Boolean): RemoteViews {
+                     open: PendingIntent, aod: Boolean, u: Float): RemoteViews {
         val v = RemoteViews(BuildConfig.APPLICATION_ID, R.layout.mc_transit_rear)
+        scale(v, u)
         v.setImageViewIcon(R.id.mc_transit_rear_floor, Icon.createWithBitmap(floor(if (aod) NIGHT else DAY)))
         if (picture != null) {
             v.setImageViewIcon(R.id.mc_transit_rear_picture, picture)
@@ -105,11 +114,36 @@ internal object TransitRear {
         v.setTextColor(R.id.mc_transit_rear_line1, if (aod) LIGHT_SOFT else INK_SOFT)
         v.setTextViewText(R.id.mc_transit_rear_line2, line2)
         v.setTextColor(R.id.mc_transit_rear_line2, if (aod) LIGHT else INK)
-        v.setTextViewTextSize(R.id.mc_transit_rear_line2, TypedValue.COMPLEX_UNIT_SP, bigSize(line2))
+        v.textPx(R.id.mc_transit_rear_line2, bigSize(line2) * u)
         v.setTextViewText(R.id.mc_transit_rear_line3, line3)
         v.setTextColor(R.id.mc_transit_rear_line3, BLUE)
         v.setOnClickPendingIntent(R.id.mc_transit_rear_root, open)
         return v
+    }
+
+    /**
+     * [R.layout.mc_transit_rear]'s geometry - the template's, which the layout holds in dp - again
+     * in [u], one 336th of the panel's width.
+     */
+    private fun scale(v: RemoteViews, u: Float) {
+        v.width(R.id.mc_transit_rear_picture, 233 * u)
+        v.height(R.id.mc_transit_rear_picture, 112 * u)
+        v.margin(R.id.mc_transit_rear_picture, RemoteViews.MARGIN_START, 103 * u)
+        v.width(R.id.mc_transit_rear_logo, 14 * u)
+        v.height(R.id.mc_transit_rear_logo, 14 * u)
+        v.margin(R.id.mc_transit_rear_logo, RemoteViews.MARGIN_START, 123 * u)
+        v.margin(R.id.mc_transit_rear_logo, RemoteViews.MARGIN_TOP, 113 * u)
+        v.width(R.id.mc_transit_rear_line1, 175 * u)
+        v.margin(R.id.mc_transit_rear_line1, RemoteViews.MARGIN_START, 141 * u)
+        v.margin(R.id.mc_transit_rear_line1, RemoteViews.MARGIN_TOP, 112 * u)
+        v.textPx(R.id.mc_transit_rear_line1, 12 * u)
+        for (id in intArrayOf(R.id.mc_transit_rear_line2, R.id.mc_transit_rear_line3)) {
+            v.width(id, 193 * u)
+            v.margin(id, RemoteViews.MARGIN_START, 123 * u)
+        }
+        v.margin(R.id.mc_transit_rear_line2, RemoteViews.MARGIN_TOP, 134 * u)
+        v.margin(R.id.mc_transit_rear_line3, RemoteViews.MARGIN_TOP, 174 * u)
+        v.textPx(R.id.mc_transit_rear_line3, 14 * u)
     }
 
     /**

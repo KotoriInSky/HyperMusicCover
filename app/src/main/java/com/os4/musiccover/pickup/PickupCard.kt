@@ -11,8 +11,6 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.drawable.Icon
-import android.hardware.display.DisplayManager
-import android.util.DisplayMetrics
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -38,17 +36,14 @@ internal object PickupCard {
     private const val DEFAULT_CODE = "#3482FF"
     private const val DEFAULT_BUTTON = "#3482FF"
 
-    /** The back screen: the display the panel's launcher runs on. */
-    private const val REAR_DISPLAY = 1
-
     /**
      * What the back screen's card keeps clear of: the rear layout's own start and end padding
-     * (113dp of camera, 20dp of edge) plus the 10dp its button sits in from the words.
+     * (113 of camera, 20 of edge) plus the 10 its button sits in from the words.
      */
-    private const val REAR_TEXT_INSET_DP = 143f
+    private const val REAR_TEXT_INSET = 143f
 
     /** The official rear button's corner radius, `memory_scene_rear_action_corner_radius`. */
-    private const val REAR_BUTTON_RADIUS_DP = 30.94f
+    private const val REAR_BUTTON_RADIUS = 30.94f
 
     /** The rear card's two whites: the product and the button are one, the shop is 50%. */
     private const val WHITE = 0xFFFFFFFF.toInt()
@@ -205,17 +200,19 @@ internal object PickupCard {
     ): RemoteViews {
         val views = RemoteViews(BuildConfig.APPLICATION_ID, R.layout.mc_pickup_rear)
         // The panel's own screen, not this process's: this card is built in SystemUI, and the back
-        // screen is a different size. The capsule below is drawn at the size it will be shown at,
-        // so it has to be measured where it is going.
-        val screen = rearScreen(c)
-        val density = screen.density
+        // screen is a different size. Every size below is in units of its height / 213, as the
+        // back screen's own templates are (see [RearPanel]), so the card fills a 17 Pro's shorter
+        // panel the way it fills a Pro Max's instead of running off the bottom of it.
+        val panel = RearPanel.of(c)
+        val u = panel.byHeight()
+        scaleRear(views, u)
         val accent = colour(rule?.pickupColor, DEFAULT_CODE) ?: 0xFF3482FF.toInt()
         views.setImageViewIcon(R.id.mc_pickup_rear_backdrop, Icon.createWithBitmap(backdrop(accent)))
 
         val file = PickupArt.model(rule, brand, product, temperature)
         val model = file?.let { PickupArt.drawable(c, it) } ?: 0
         Xp.log("MCPickupRear: brand=$brand rule=${rule?.brandName ?: "-"} model=$file" +
-            " id=$model code=$code store=${store ?: "-"} screen=${screen.widthPixels}x${screen.heightPixels}")
+            " id=$model code=$code store=${store ?: "-"} panel=${panel.width}x${panel.height}")
         if (model != 0) {
             views.setImageViewIcon(R.id.mc_pickup_rear_icon,
                 Icon.createWithResource(BuildConfig.APPLICATION_ID, model))
@@ -225,7 +222,7 @@ internal object PickupCard {
         // No fade here, unlike the front card: the drink is started by the back screen's own copy
         // of this module (see [RearScreen]), and nothing there knows how long it runs for.
         val sticker = PickupArt.sticker(rule)
-            ?.let { PickupArt.bitmap(it, (30 * density).toInt()) }
+            ?.let { PickupArt.bitmap(it, (30 * u).toInt()) }
         if (sticker != null) {
             views.setImageViewIcon(R.id.mc_pickup_rear_logo, Icon.createWithBitmap(sticker))
         } else {
@@ -236,20 +233,20 @@ internal object PickupCard {
         views.setTextColor(R.id.mc_pickup_rear_title, accent)
         // The same rule the front card's title follows: the official card sets its code at 28sp
         // whatever it says, and one long enough to be cut off steps down instead.
-        views.setTextViewTextSize(R.id.mc_pickup_rear_title, TypedValue.COMPLEX_UNIT_SP,
-            if (code.any { it.code > 127 } || code.length > 6) 24f else 28f)
+        views.textPx(R.id.mc_pickup_rear_title,
+            (if (code.any { it.code > 127 } || code.length > 6) 24f else 28f) * u)
         views.setTextViewText(R.id.mc_pickup_rear_product, product?.ifEmpty { null } ?: brand)
         views.setTextColor(R.id.mc_pickup_rear_product, WHITE)
         views.setTextViewText(R.id.mc_pickup_rear_store, store.orEmpty())
         views.setTextColor(R.id.mc_pickup_rear_store, HALF_WHITE)
 
-        // The capsule, at the width it will be drawn at: the words start 113dp in and the row ends
-        // 20dp off the right - the rear layout's own paddings - and the official button is another
-        // 10dp inside that. Drawn rather than stretched, so its ends stay round.
-        val width = screen.widthPixels - (REAR_TEXT_INSET_DP * density).toInt()
+        // The capsule, at the width it will be drawn at: the words start 113 in and the row ends
+        // 20 off the right - the rear layout's own paddings - and the official button is another
+        // 10 inside that. Drawn rather than stretched, so its ends stay round.
+        val width = panel.width - (REAR_TEXT_INSET * u).toInt()
         views.setImageViewIcon(R.id.mc_pickup_rear_action_bg,
-            Icon.createWithBitmap(capsule(width, (42 * density).toInt(), CAPSULE,
-                REAR_BUTTON_RADIUS_DP * density)))
+            Icon.createWithBitmap(capsule(width, (42 * u).toInt(), CAPSULE,
+                REAR_BUTTON_RADIUS * u)))
         views.setTextViewText(R.id.mc_pickup_rear_action, action)
         views.setTextColor(R.id.mc_pickup_rear_action, WHITE)
         views.setOnClickPendingIntent(R.id.mc_pickup_rear_action_container, actionTap)
@@ -258,20 +255,27 @@ internal object PickupCard {
     }
 
     /**
-     * The back screen: the second display when there is one, this one otherwise.
-     *
-     * The id is the one the panel's launcher runs on (`displayId=1` in `dumpsys activity top`). A
-     * phone without a back screen never gets this far - [PickupCodeIsland] asks the same question
-     * before it builds this card at all - so the fallback is only here so the arithmetic below
-     * cannot divide by a null.
+     * [R.layout.mc_pickup_rear]'s sizes, which are 小爱's dp, again in [u] - one 213th of the
+     * panel's height. On a 213dp panel this is the layout as written.
      */
-    private fun rearScreen(c: Context): DisplayMetrics {
-        val display = c.getSystemService(DisplayManager::class.java)?.getDisplay(REAR_DISPLAY)
-        return if (display == null) {
-            c.resources.displayMetrics
-        } else {
-            DisplayMetrics().also { display.getRealMetrics(it) }
-        }
+    private fun scaleRear(v: RemoteViews, u: Float) {
+        v.setViewPadding(R.id.mc_pickup_rear_content,
+            (113 * u).toInt(), (47 * u).toInt(), (20 * u).toInt(), (20 * u).toInt())
+        v.height(R.id.mc_pickup_rear_row, 84 * u)
+        v.width(R.id.mc_pickup_rear_picture, 72 * u)
+        v.height(R.id.mc_pickup_rear_picture, 84 * u)
+        v.width(R.id.mc_pickup_rear_logo, 30 * u)
+        v.height(R.id.mc_pickup_rear_logo, 30 * u)
+        v.margin(R.id.mc_pickup_rear_logo, RemoteViews.MARGIN_BOTTOM, 30 * u)
+        v.margin(R.id.mc_pickup_rear_text, RemoteViews.MARGIN_START, 6 * u)
+        v.margin(R.id.mc_pickup_rear_product, RemoteViews.MARGIN_TOP, 8 * u)
+        v.textPx(R.id.mc_pickup_rear_product, 14 * u)
+        v.margin(R.id.mc_pickup_rear_store, RemoteViews.MARGIN_TOP, 2 * u)
+        v.textPx(R.id.mc_pickup_rear_store, 12 * u)
+        v.height(R.id.mc_pickup_rear_action_container, 42 * u)
+        v.margin(R.id.mc_pickup_rear_action_container, RemoteViews.MARGIN_START, 10 * u)
+        v.margin(R.id.mc_pickup_rear_action_container, RemoteViews.MARGIN_TOP, 20 * u)
+        v.textPx(R.id.mc_pickup_rear_action, 14 * u)
     }
 
     /**
