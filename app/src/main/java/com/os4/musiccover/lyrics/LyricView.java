@@ -391,7 +391,11 @@ final class LyricView extends View {
         public void run() {
             noteFrameGap(now());
             looping = false;
-            if (step()) invalidate();
+            if (step()) {
+                invalidate();
+                // In its own window: synced now, ahead of the lock screen's. See drawFirst.
+                if (LyricWindow.owns(LyricView.this)) LyricWindow.drawFirst(LyricView.this);
+            }
             if (needsFrames()) {
                 looping = true;
                 postOnAnimation(this);
@@ -454,6 +458,16 @@ final class LyricView extends View {
         transPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
         bgPaint.setTextSize(textPx * BG_SP / TEXT_SP);
         bgPaint.setTypeface(Typeface.create(Typeface.DEFAULT, BG_WEIGHT, false));
+    }
+
+    /**
+     * Back from parking (LyricWindow.park): what attaching to a window does for a view that never
+     * left one - the next step starts afresh rather than integrating the whole time parked.
+     */
+    void rejoin() {
+        lastStep = 0L;
+        lastLoopFrame = 0L;
+        LockLyrics.startTick();
     }
 
     /** Something outside changed - a line start, the song, the setting. Wakes the loop. */
@@ -520,6 +534,9 @@ final class LyricView extends View {
      * time to integrate.
      */
     private boolean step() {
+        // Parked (LyricWindow.park): see-through until an entry brings it back. A loop still
+        // running would put its alpha back.
+        if (LyricWindow.parked(this)) return false;
         // The frame's own vsync time, not the clock at the moment this runs: how late the main
         // thread gets to a frame varies by a few ms with whatever else the keyguard is doing, and
         // stepping on the wall clock put that jitter straight into the scroll and the word fill.

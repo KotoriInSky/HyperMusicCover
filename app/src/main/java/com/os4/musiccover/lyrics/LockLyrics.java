@@ -1228,6 +1228,8 @@ public final class LockLyrics {
     private static LyricView inLayer(View anchor) {
         LyricView old = sView;
         if (old != null && LyricWindow.owns(old)) unhost(old);
+        // The switch is off: a window parked for the next entry has none coming.
+        LyricWindow.remove();
         int id = anchor.getResources().getIdentifier(
                 "keyguard_foreground_layer", "id", "com.android.systemui");
         View layer = id == 0 ? null : anchor.getRootView().findViewById(id);
@@ -1262,8 +1264,8 @@ public final class LockLyrics {
         // With no view the tick stops and would never let the sensor go.
         watchProximity(false);
         if (LyricWindow.owns(v)) {
-            // The window's view is the window's: a new one comes with the next window.
-            LyricWindow.remove();
+            // Parked, not removed: the next entry takes the same window back without adding one.
+            LyricWindow.park();
             if (sView == v) sView = null;
         } else if (v.getParent() instanceof ViewGroup) {
             // The layer's view is kept and put back by the next attach, as it always was.

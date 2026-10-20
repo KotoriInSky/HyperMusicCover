@@ -174,6 +174,10 @@ dependencies {
     // here for a caller nothing on our own classpath can see; see proguard-rules.pro, which has to
     // keep it for the same reason.
     implementation("com.google.code.gson:gson:2.11.0")
+    // One hidden framework method, ViewRootImpl.doTraversal (LyricWindow.drawFirst), which the
+    // hidden-API filter keeps out of reflection in SystemUI. Looked up through this rather than
+    // exempting the process, so nothing else in SystemUI sees a different policy. Apache-2.0.
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
 
     testImplementation("junit:junit:4.13.2")
     // The real org.json for the JVM tests: android.jar's is a stub (AmapTransitCardTest).
