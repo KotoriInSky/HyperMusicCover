@@ -161,31 +161,30 @@ public final class CoverPush {
                 // both need the picture, and neither of them is what the user is waiting on.
                 // Same source, size and bias as the wallpaper process got, so the same pixels.
                 //
-                // The tint is all this copy is for, and it only depends on what is in the key:
-                // a run of taps in and out of cover mode on one song composed the same full-screen
-                // picture every time (trace 2026-09-30), so the same key takes the last answer.
+                // The tint is all this copy is for: the average of the band behind the clock,
+                // which a quarter-size composition gives as well as a full one. Composed at full
+                // size it cost 0.1-1.8s a push on a busy phone (13s over 18 entries, trace
+                // 2026-10-20), on the worker the next push waits for - and the key it was kept
+                // under held the clock's band, which moves with every entry, so it was never
+                // kept at all. Now the picture is kept per song and the band measured on it.
                 String tintKey = artPrint(src) + ":" + src.getWidth() + "x" + src.getHeight()
-                        + ":" + w + "x" + h + ":" + Main.sBias + ":" + AodColour.bandKey() + ":"
-                        + Main.sCoverCardStyle.mode;
-                boolean reused = tintKey.equals(sTintKey);
-                if (reused) {
-                    Main.sCoverTint = sTintValue;
-                } else {
-                    Bitmap full;
+                        + ":" + w + "x" + h + ":" + Main.sBias + ":" + Main.sCoverCardStyle.mode;
+                boolean reused = tintKey.equals(sTintKey) && sTintPic != null;
+                if (!reused) {
                     android.os.Trace.beginSection("MC push.compose");
                     try {
-                        full = composeWallpaper(src, w, h, Main.sBias);
+                        sTintPic = composeWallpaper(src, Math.max(1, w / TINT_SCALE),
+                                Math.max(1, h / TINT_SCALE), Main.sBias);
+                        sTintKey = tintKey;
                     } catch (Throwable t) {
                         Xp.w(Main.TAG + "composeWallpaper failed after the hand-over: " + t);
+                        sTintPic = null;
                         return;
                     } finally {
                         android.os.Trace.endSection();
                     }
-                    AodColour.measureCover(full);
-                    full.recycle();
-                    sTintKey = tintKey;
-                    sTintValue = Main.sCoverTint;
                 }
+                AodColour.measureCover(sTintPic, w / (float) sTintPic.getWidth());
                 if (Main.sCoverMode) AodColour.recolorClock();
                 // The shade builds its background from the square source and keeps nothing.
                 android.os.Trace.beginSection("MC push.shade");
@@ -1223,7 +1222,9 @@ public final class CoverPush {
     private static volatile int sArtPrint;
     /** The last composed cover's inputs and the clock tint measured off it. Worker thread only. */
     private static String sTintKey = "";
-    private static int sTintValue;
+    /** The composition the tint is read from, at 1/TINT_SCALE of the screen. Worker only. */
+    private static Bitmap sTintPic;
+    private static final int TINT_SCALE = 4;
     /**
      * The size of that push, and the track it belonged to, so a WORSE source for the same track
      * can be refused.

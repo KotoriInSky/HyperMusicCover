@@ -122,12 +122,16 @@ final class AodColour {
      * that blur is light. Costs 24 rows of getPixels on the worker that is already encoding the
      * same bitmap.
      */
-    /** What measureCover() reads besides the picture, for a caller that caches its answer. */
-    static String bandKey() {
-        return Main.sBandTopPx + ":" + Main.sBandBotPx;
+    static void measureCover(Bitmap full) {
+        measureCover(full, 1f);
     }
 
-    static void measureCover(Bitmap full) {
+    /**
+     * The same, on a composition drawn at 1/[scale] of the screen: the band is read where it
+     * falls in that smaller picture. Its average is the band's average either way - the mirror
+     * blur has nothing left at that scale that a quarter-size copy would lose.
+     */
+    static void measureCover(Bitmap full, float scale) {
         try {
             float d = Main.sAppCtx.getResources().getDisplayMetrics().density;
             float topPx = Main.sBandTopPx, botPx = Main.sBandBotPx;
@@ -138,16 +142,17 @@ final class AodColour {
                 topPx -= Main.BAND_PAD_DP * d;
                 botPx += Main.BAND_PAD_DP * d;
             }
-            int top = Math.max(0, Math.round(topPx));
-            int bottom = Math.min(full.getHeight(), Math.round(botPx));
-            if (bottom - top < 8) { Main.sCoverTint = 0; return; }
+            int top = Math.max(0, Math.round(topPx / scale));
+            int bottom = Math.min(full.getHeight(), Math.round(botPx / scale));
+            if (bottom - top < 8f / scale) { Main.sCoverTint = 0; return; }
             int stride = Math.max(1, (bottom - top) / 24);
             int[] row = new int[full.getWidth()];
             long sr = 0, sg = 0, sb = 0;
             int n = 0;
+            int step = Math.max(1, Math.round(8f / scale));
             for (int y = top; y < bottom; y += stride) {
                 full.getPixels(row, 0, row.length, 0, y, row.length, 1);
-                for (int x = 0; x < row.length; x += 8) {
+                for (int x = 0; x < row.length; x += step) {
                     int c = row[x];
                     sr += (c >> 16) & 0xff;
                     sg += (c >> 8) & 0xff;
