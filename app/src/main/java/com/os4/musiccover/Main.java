@@ -759,6 +759,7 @@ public class Main extends XposedModule {
                 main().post(ImmersiveHost::onLockScreenLeaving);
                 // At once rather than on the window's next pre-draw (coverCardVisible says why).
                 main().post(CoverCardLayer::hideNow);
+                CoverMorphLayer.cancel();
                 main().post(kickLyrics);
                 main().postDelayed(kickLyrics, 160L);
                 return chain.proceed();
@@ -2944,8 +2945,10 @@ public class Main extends XposedModule {
     /** Cheap per-frame guard; the expensive overlay lookups are only needed at gesture start. */
     static boolean coverMorphStillEligible() {
         View c = sContainer;
+        // The leaving hooks as well as the keyguard reading, for the reason coverCardVisible gives:
+        // unlocked mid-flight, the copy outstayed the square by ~0.2s, until ACTION_USER_PRESENT.
         return c != null && c.isAttachedToWindow() && c.isShown() && sScreenOn
-                && keyguardShowing();
+                && keyguardShowing() && !LockLyrics.lockScreenGone();
     }
 
     static boolean coverMorphCardMode() {

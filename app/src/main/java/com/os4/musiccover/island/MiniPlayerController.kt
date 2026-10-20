@@ -2272,6 +2272,16 @@ internal class MiniPlayerController(
             // The view is the small island from here, in its very place.
             g.smallView = lead
             smallIsland?.visibility = View.GONE
+        } else {
+            // followShortcuts leaves the pill's fade alone while this morph draws it, so it kept
+            // whatever was last written before the cover - once 0, and the card came down into
+            // nothing and the pill turned up only once the morph had ended (2026-10-20). Set here,
+            // from the binding refresh() has just made.
+            val want = if (pillUnbound) 0f else 1f
+            if (kotlin.math.abs(view.transitionAlpha - want) > 0.002f) {
+                trace("group pill fade ${"%.2f".format(view.transitionAlpha)} -> $want")
+                view.transitionAlpha = want
+            }
         }
         val next = MiniCardMorph(lead, native, toNative, morphListener,
             restBox = if (g.musicSmall) { { smallBoxOnScreen() } } else null,
