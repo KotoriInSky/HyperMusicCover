@@ -18,6 +18,10 @@ import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
+import top.yukonga.miuix.kmp.icon.extended.Link
+import androidx.compose.ui.graphics.vector.ImageVector
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalView
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalDensity
@@ -483,6 +487,18 @@ private fun HiveEditor(slots: List<JSONObject>, onTap: (Int) -> Unit) {
         val oy = rubber(ay.value)
         val placed = CELLS.map { lens(it, ox, oy) }
         val chosen = placed.indices.filter { placed[it][3] < catchR }.minByOrNull { placed[it][3] }
+        // A tick as each new icon is chosen, the phone's own tick on the menu (the user,
+        // 2026-10-21). Not for the first one, which is chosen just by the page opening.
+        val view = LocalView.current
+        var lastChosen by remember { mutableStateOf<Int?>(-1) }
+        LaunchedEffect(chosen) {
+            if (lastChosen != -1 && chosen != null && chosen != lastChosen) {
+                view.performHapticFeedback(
+                    if (android.os.Build.VERSION.SDK_INT >= 34) HapticFeedbackConstants.SEGMENT_TICK
+                    else HapticFeedbackConstants.CLOCK_TICK)
+            }
+            lastChosen = chosen
+        }
 
         val tracker = remember { VelocityTracker() }
         Box(
@@ -539,16 +555,28 @@ private fun HiveEditor(slots: List<JSONObject>, onTap: (Int) -> Unit) {
         ) {
             // The watch face.
             Canvas(Modifier.fillMaxSize()) { drawCircle(face, radius = size.minDimension / 2f) }
-            if (chosen != null) {
-                val l = placed[chosen]
-                Canvas(Modifier.fillMaxSize()) {
-                    drawCircle(discColor, radius = discPx / 2f, center = Offset(half + l[0], half + l[1]))
+            // Each icon's grow, sprung rather than switched (the user, 2026-10-21: it was
+            // abrupt): the chosen one eases up to 1.15 with a little overshoot, the one it took
+            // over from eases back, and the disc behind fades with the grow.
+            val grows = CELLS.indices.map { i ->
+                animateFloatAsState(if (i == chosen) 1f else 0f,
+                    spring(dampingRatio = 0.55f, stiffness = 420f), label = "grow$i")
+            }
+            Canvas(Modifier.fillMaxSize()) {
+                grows.forEachIndexed { i, g ->
+                    val t = g.value.coerceIn(0f, 1f)
+                    if (t > 0.01f) {
+                        val l = placed[i]
+                        drawCircle(discColor.copy(alpha = discColor.alpha * t),
+                            radius = discPx / 2f * (0.85f + 0.15f * g.value),
+                            center = Offset(half + l[0], half + l[1]))
+                    }
                 }
             }
             CELLS.indices.forEach { i ->
                 val l = placed[i]
                 val e = slots.getOrNull(i)?.takeIf { !isEmpty(it) }
-                val scale = l[2] * if (i == chosen) 1.15f else 1f
+                val scale = l[2] * (1f + 0.15f * grows[i].value)
                 val fade = ((l[2] - 0.08f) / 0.17f).coerceIn(0f, 1f)
                 val sizeDp = with(density) { iconPx.toDp() }
                 Box(
@@ -563,9 +591,11 @@ private fun HiveEditor(slots: List<JSONObject>, onTap: (Int) -> Unit) {
                         .clip(CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    val bmp = e?.let { itemInfo(it).icon }
-                    if (bmp != null) {
-                        Image(bmp.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize())
+                    val info = e?.let { itemInfo(it) }
+                    if (info?.icon != null) {
+                        Image(info.icon.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize())
+                    } else if (info?.vector != null) {
+                        GlyphChip(info.vector, Modifier.fillMaxSize())
                     } else {
                         Canvas(Modifier.fillMaxSize()) {
                             val stroke = 1.5.dp.toPx() / maxOf(scale, 0.3f)
@@ -580,7 +610,13 @@ private fun HiveEditor(slots: List<JSONObject>, onTap: (Int) -> Unit) {
 }
 
 /** What one item shows: its name, what kind of thing it is, and its picture. */
-private class ItemInfo(val title: String, val summary: String, val icon: Bitmap?)
+private class ItemInfo(
+    val title: String,
+    val summary: String,
+    val icon: Bitmap?,
+    /** For a kind with no picture of its own (a link): a miuix glyph on a chip. */
+    val vector: ImageVector? = null,
+)
 
 @Composable
 private fun itemInfo(e: JSONObject): ItemInfo {
@@ -589,9 +625,8 @@ private fun itemInfo(e: JSONObject): ItemInfo {
     return when (e.optString("t")) {
         "native" -> {
             val id = e.optInt("id")
-            val pkg = nativePackage(id)
             ItemInfo(stringResource(nativeLabel(id)), stringResource(R.string.fpquick_type_native),
-                remember(key) { pkg?.let { appIcon(context, it) } })
+                remember(key) { nativeIcon(context, id) })
         }
         "app" -> {
             val pkg = e.optString("pkg")
@@ -603,7 +638,8 @@ private fun itemInfo(e: JSONObject): ItemInfo {
             ItemInfo(e.optString("label").ifEmpty { e.optString("id") }, e.optString("app").ifEmpty { pkg },
                 remember(key) { appIcon(context, pkg) })
         }
-        "url" -> ItemInfo(e.optString("label").ifEmpty { e.optString("url") }, e.optString("url"), null)
+        "url" -> ItemInfo(e.optString("label").ifEmpty { e.optString("url") }, e.optString("url"), null,
+            MiuixIcons.Link)
         else -> {
             val a = e.optString("a")
             ItemInfo(stringResource(actionLabel(a)), stringResource(R.string.fpquick_type_action),
@@ -709,7 +745,7 @@ private fun ItemList(items: List<JSONObject>, onMove: (List<JSONObject>) -> Unit
                     BasicComponent(
                         title = info.title,
                         summary = info.summary,
-                        startAction = { ItemIcon(info.icon) },
+                        startAction = { ItemIcon(info.icon, info.vector) },
                         endActions = { Pill(stringResource(R.string.fpquick_delete)) { confirm = index } })
                 }
             }
@@ -757,11 +793,46 @@ private fun Pill(text: String, enabled: Boolean = true, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ItemIcon(icon: Bitmap?) {
+private fun ItemIcon(icon: Bitmap?, vector: ImageVector? = null) {
     val mod = Modifier.padding(end = 12.dp).size(40.dp)
-    if (icon != null) Image(icon.asImageBitmap(), contentDescription = null, modifier = mod)
-    else Box(mod)
+    when {
+        icon != null -> Image(icon.asImageBitmap(), contentDescription = null, modifier = mod)
+        vector != null -> GlyphChip(vector, mod)
+        else -> Box(mod)
+    }
 }
+
+/** A miuix glyph on the same dark chip FingerprintQuick.Chip puts SystemUI's glyphs on. */
+@Composable
+private fun GlyphChip(vector: ImageVector, modifier: Modifier) {
+    Box(modifier.clip(CircleShape).background(Color(0xFF48484A)), contentAlignment = Alignment.Center) {
+        Icon(vector, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize(0.55f))
+    }
+}
+
+/**
+ * The OEM's own picture for each of its items, out of SystemUI - the one the menu shows -
+ * rather than the app it opens, which 扫一扫, 搜索 and 添加日程 do not have.
+ */
+private fun nativeIcon(context: Context, id: Int): Bitmap? = runCatching {
+    val name = when (id) {
+        1001 -> "gxzw_quick_open_wechat_pay"
+        1002 -> "gxzw_quick_open_wechat_scan"
+        1003 -> if (runCatching {
+                context.packageManager.getApplicationInfo("com.miui.voiceassist",
+                    android.content.pm.PackageManager.GET_META_DATA).metaData?.getBoolean("is_super_ai")
+            }.getOrNull() == true) "gxzw_quick_open_xiaoai_super" else "gxzw_quick_open_xiaoai"
+        1004 -> "gxzw_quick_open_alipay_pay"
+        1005 -> "gxzw_quick_open_alipay_scan"
+        1006 -> "gxzw_quick_open_qr_code"
+        1007 -> "gxzw_quick_open_search"
+        else -> "gxzw_quick_open_add_event"
+    }
+    val res = context.packageManager.getResourcesForApplication(SYSUI)
+    val rid = res.getIdentifier(name, "drawable", SYSUI)
+    if (rid == 0) return null
+    res.getDrawable(rid, null).toBitmap(120, 120)
+}.getOrNull() ?: nativePackage(id)?.let { appIcon(context, it) }
 
 /** The same pictures FingerprintQuick puts on the menu for each action. */
 private fun actionIcon(context: Context, a: String): Bitmap? = when (a) {
@@ -841,7 +912,7 @@ private fun AddDialogs(
         Column {
             for (id in left) {
                 BasicComponent(title = stringResource(nativeLabel(id)),
-                    startAction = { ItemIcon(remember(id) { nativePackage(id)?.let { appIcon(context, it) } }) },
+                    startAction = { ItemIcon(remember(id) { nativeIcon(context, id) }) },
                     onClick = { onDismiss(); onAdd(native(id)) })
             }
         }
