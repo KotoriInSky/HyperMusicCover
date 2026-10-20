@@ -606,11 +606,16 @@ private fun LyricsGroup(
                         ModuleBridge.setLyricsRoma(context, it)
                     },
                 )
+                // A screen with no HDR headroom gets nothing from the highlight and would still pay
+                // for its window; SystemUI ignores the switch there, and it is shown off here.
+                val hdrScreen = remember { com.os4.musiccover.lyrics.HdrDisplay.supported(context) }
                 SwitchPreference(
                     title = stringResource(R.string.lyrics_hdr),
-                    summary = stringResource(R.string.lyrics_hdr_summary),
-                    checked = module.lyricsHdr,
-                    enabled = enabled,
+                    summary = stringResource(
+                        if (hdrScreen) R.string.lyrics_hdr_summary else R.string.lyrics_hdr_unsupported
+                    ),
+                    checked = module.lyricsHdr && hdrScreen,
+                    enabled = enabled && hdrScreen,
                     onCheckedChange = {
                         onChange(module.copy(lyricsHdr = it))
                         ModuleBridge.setLyricsHdr(context, it)

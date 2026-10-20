@@ -95,6 +95,16 @@ public final class LockLyrics {
      * lived with.
      */
     public static volatile boolean sHdr = false;
+
+    /**
+     * The switch, on a screen that can show it. Everything the highlight changes - the window,
+     * the colour mode, the gain - asks this rather than the switch: on a panel with no HDR
+     * headroom the window is all cost (HdrDisplay), so the lyrics stay in the keyguard's layer
+     * there whatever the switch says.
+     */
+    static boolean hdr() {
+        return sHdr && HdrDisplay.supported(Main.sAppCtx);
+    }
     /**
      * The fourth switch: whether a line's translation is drawn under it.
      *
@@ -387,7 +397,7 @@ public final class LockLyrics {
         if (!wantsAttached()) return false;
         // In the keyguard's own layer the lock screen going takes the view with it, as it always
         // did; only the window needs telling.
-        if (!sHdr) return true;
+        if (!hdr()) return true;
         return !lockScreenGone();
     }
 
@@ -473,7 +483,7 @@ public final class LockLyrics {
     /** (Re)starts the heartbeat - only the window needs one; see WATCH. */
     private static void watch() {
         Main.main().removeCallbacks(WATCH);
-        if (sHdr && LyricWindow.owns(sView)) Main.main().postDelayed(WATCH, WATCH_MS);
+        if (hdr() && LyricWindow.owns(sView)) Main.main().postDelayed(WATCH, WATCH_MS);
     }
 
     /** The screen went off or on: the lock screen may be back, so the heartbeat is too. */
@@ -1196,7 +1206,7 @@ public final class LockLyrics {
         final View anchor = Main.sContainer;
         if (anchor == null) return;
         try {
-            LyricView v = sHdr ? inWindow(anchor) : inLayer(anchor);
+            LyricView v = hdr() ? inWindow(anchor) : inLayer(anchor);
             if (v == null) return;
             sView = v;
             v.kick();
@@ -1966,7 +1976,7 @@ public final class LockLyrics {
         // Never in a doze: the window would go bright and ask the display for headroom, which is
         // the opposite of what a display that has just dimmed itself wants. The glow that arms
         // this needs the lyrics on screen, so without this the AOD would ask for HDR too.
-        return sHdr && sGlowing && wantsShown() && !inHeldAod() && !sLines.isEmpty();
+        return hdr() && sGlowing && wantsShown() && !inHeldAod() && !sLines.isEmpty();
     }
 
     private static boolean sGlowing;

@@ -1416,7 +1416,7 @@ final class LyricView extends View {
 
     /** A held note is glowing now, or is about to - the window's HDR mode follows this. */
     private boolean glowSoon() {
-        if (!LockLyrics.sHdr || focus < 0 || show == 0f || !LockLyrics.playing()) return false;
+        if (!LockLyrics.hdr() || focus < 0 || show == 0f || !LockLyrics.playing()) return false;
         for (int i = Math.max(0, focus - 1); i <= focus; i++) {
             LyricLine l = lines.get(i);
             if (!l.hasWords() || emph[i] <= 0f) continue;
@@ -2365,7 +2365,7 @@ final class LyricView extends View {
      * drawn above white - the highlight is the end of a long note lighting up, not the line.
      */
     private static float glowGain(float glow) {
-        return LockLyrics.sHdr ? 1f + (HDR_GAIN - 1f) * glow : 1f;
+        return LockLyrics.hdr() ? 1f + (HDR_GAIN - 1f) * glow : 1f;
     }
 
     private void drawTranslation(Canvas c, int i, float a) {
