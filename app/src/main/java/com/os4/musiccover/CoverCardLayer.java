@@ -6,7 +6,6 @@ import android.graphics.Bitmap;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Looper;
@@ -51,7 +50,6 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final RectF square = new RectF();
     /** Per-frame scratch, kept rather than allocated on every draw. */
-    private final Path clipPath = new Path();
     private final int[] tmpLoc = new int[2];
     private ViewTreeObserver geometryObserver;
     private ViewTreeObserver.OnPreDrawListener geometryListener;
@@ -397,10 +395,18 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         bouncerP += (want - bouncerP) * k;
         if (Math.abs(want - bouncerP) < 0.01f) bouncerP = want;
         float r = bouncerP * BOUNCER_BLUR_DP * getResources().getDisplayMetrics().density;
-        setRenderEffect(r < 0.5f ? null : android.graphics.RenderEffect.createBlurEffect(
-                r, r, android.graphics.Shader.TileMode.DECAL));
+        if (r < 0.5f) r = 0f;
+        // A new effect is a new blur node for the render thread; only when the radius moved.
+        if (r != blurSet) {
+            blurSet = r;
+            setRenderEffect(r == 0f ? null : android.graphics.RenderEffect.createBlurEffect(
+                    r, r, android.graphics.Shader.TileMode.DECAL));
+        }
         return bouncerP != want;
     }
+
+    /** The radius the view's blur was last set to; 0 is none. */
+    private float blurSet = -1f;
 
     /**
      * The swipe's fade, taken from the media card's.
@@ -882,10 +888,11 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         // The shadow is keyed on the corner at the RESTING side, not the moving one - see
         // CoverCardStyle.cornerShare, and the note on shadowTile below.
         drawShadow(canvas, square, style.cornerShare(drawSide), opacity, paint);
-        int save = canvas.save();
-        clipPath.reset();
-        clipPath.addRoundRect(square, radius, radius, Path.Direction.CW);
-        canvas.clipPath(clipPath);
+        // Each picture is its own rounded rect, not drawn inside a clip to one: an antialiased
+        // path clip has the GPU build a coverage mask for the card every frame it draws, and
+        // this one draws every frame of the morph and of a motion cover. A rounded rect is
+        // drawn with its edge worked out in the shader.
+        artRadius = radius;
         drawArt(canvas, previous, 1f);
         drawArt(canvas, current, fadeFraction());
         Bitmap frame = CardVideo.frame();
@@ -894,7 +901,6 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         if (frame != null) lastVideo = frame;
         else if (videoAlpha <= 0f) lastVideo = null;
         if (videoAlpha > 0f && lastVideo != null) drawBitmap(canvas, lastVideo, videoAlpha);
-        canvas.restoreToCount(save);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(density);
         paint.setColor(0x40FFFFFF);
@@ -1125,7 +1131,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         return from + (to - from) * fadeFraction();
     }
 
-    private final Rect artSrc = new Rect();
+    private final RectF artSrc = new RectF();
 
     private void drawArt(Canvas canvas, Prepared p, float fraction) {
         if (p == null || fraction <= 0f) return;
@@ -1133,7 +1139,6 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
     }
 
     private void drawBitmap(Canvas canvas, Bitmap art, float fraction) {
-        paint.setShader(null);
         paint.setColor(0xFFFFFFFF);
         paint.setAlpha(Math.round(255f * opacity * fraction));
         // Centre-cropped to the card's shape, which is only ever off this art's own through a
@@ -1143,7 +1148,36 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         int cw = Math.min(w, Math.round(h * box));
         int ch = Math.min(h, Math.round(w / box));
         artSrc.set((w - cw) / 2, (h - ch) / 2, (w + cw) / 2, (h + ch) / 2);
-        canvas.drawBitmap(art, artSrc, square, paint);
+        artMatrix.setRectToRect(artSrc, square, android.graphics.Matrix.ScaleToFit.FILL);
+        android.graphics.BitmapShader shader = shaderFor(art);
+        shader.setLocalMatrix(artMatrix);
+        paint.setShader(shader);
+        canvas.drawRoundRect(square, artRadius, artRadius, paint);
+        paint.setShader(null);
+    }
+
+    /** The corner the pictures are drawn with this frame; see onDraw. */
+    private float artRadius;
+    private final android.graphics.Matrix artMatrix = new android.graphics.Matrix();
+    /**
+     * Shaders for the last two stills - the one fading in and the one under it - so a still
+     * drawn every frame does not make a new one every frame. A video frame is a new Bitmap each
+     * time and gets a new shader each time anyway.
+     */
+    private Bitmap shaderArtA, shaderArtB;
+    private android.graphics.BitmapShader shaderA, shaderB;
+
+    private android.graphics.BitmapShader shaderFor(Bitmap art) {
+        if (art == shaderArtA && shaderA != null) return shaderA;
+        if (art == shaderArtB && shaderB != null) return shaderB;
+        android.graphics.BitmapShader s = new android.graphics.BitmapShader(art,
+                android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
+        if (art == lastVideo) return s;
+        shaderArtB = shaderArtA;
+        shaderB = shaderA;
+        shaderArtA = art;
+        shaderA = s;
+        return s;
     }
 
     // ---------------------------------------------------------------- the motion cover

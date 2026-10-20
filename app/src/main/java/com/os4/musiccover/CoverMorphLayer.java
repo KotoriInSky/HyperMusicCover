@@ -6,8 +6,6 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -22,10 +20,13 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     private final CoverMorphMotion motion = new CoverMorphMotion();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final RectF drawn = new RectF();
-    private final Path clip = new Path();
     /** Per-frame scratch, kept rather than allocated on every draw. */
     private final int[] tmpLoc = new int[2];
-    private final Rect srcRect = new Rect();
+    private final RectF srcRect = new RectF();
+    private final android.graphics.Matrix artMatrix = new android.graphics.Matrix();
+    /** The shader drawing `art`, made once per flight rather than once per frame. */
+    private android.graphics.BitmapShader artShader;
+    private Bitmap shaderArt;
     private Bitmap art;
     private boolean cardMode;
     private CoverMorphMotion.Box thumb, cover;
@@ -178,6 +179,8 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     /** Leaves nothing held and the kept view idle; for a keyguard that is going away. */
     private void release() {
         art = null;
+        artShader = null;
+        shaderArt = null;
         thumb = cover = null;
     }
 
@@ -292,10 +295,6 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         float alpha = cardMode ? 1f : fullAlpha;
         paint.setAlpha(Math.round(255f * alpha));
         if (paint.getAlpha() == 0) return;
-        clip.reset();
-        clip.addRoundRect(drawn, radius, radius, Path.Direction.CW);
-        int saved = canvas.save();
-        canvas.clipPath(clip);
         int side = Math.min(art.getWidth(), art.getHeight());
         int cropW = Math.round(side + (art.getWidth() - side) * p);
         int cropH = Math.round(side + (art.getHeight() - side) * p);
@@ -306,11 +305,21 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
             cropW = Math.min(art.getWidth(), Math.round(art.getHeight() * shape));
             cropH = Math.min(art.getHeight(), Math.round(art.getWidth() / shape));
         }
-        Rect source = srcRect;
+        RectF source = srcRect;
         source.set((art.getWidth() - cropW) / 2, (art.getHeight() - cropH) / 2,
                 (art.getWidth() + cropW) / 2, (art.getHeight() + cropH) / 2);
-        canvas.drawBitmap(art, source, drawn, paint);
-        canvas.restoreToCount(saved);
+        // A rounded rect with the art as its shader, not the art inside a clip to one: the
+        // antialiased path clip had the GPU build a coverage mask every frame of the flight.
+        if (art != shaderArt || artShader == null) {
+            artShader = new android.graphics.BitmapShader(art,
+                    android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
+            shaderArt = art;
+        }
+        artMatrix.setRectToRect(source, drawn, android.graphics.Matrix.ScaleToFit.FILL);
+        artShader.setLocalMatrix(artMatrix);
+        paint.setShader(artShader);
+        canvas.drawRoundRect(drawn, radius, radius, paint);
+        paint.setShader(null);
         if (decoration > 0f) {
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(density);
