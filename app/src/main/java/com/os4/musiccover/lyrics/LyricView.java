@@ -251,10 +251,13 @@ final class LyricView extends View {
     private final TextPaint bgPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int tintSrc = -1;
+    private LyricPalette.Colors coverPalette;
+    private Runnable paletteWork;
+    private int paletteRequest;
     private float tintR = 1f, tintG = 1f, tintB = 1f;
     private LyricAppearance appearance;
     private int mainDim = -1, mainLit = -1, bgDim = -1, bgLit = -1;
-    private int blurGeneration;
+    private volatile int blurGeneration;
     private final Matrix gradMatrix = new Matrix();
     private final LinearGradient[] grads = new LinearGradient[3];
     private final long[] gradHi = {-1L, -1L, -1L}, gradLo = {-1L, -1L, -1L};
@@ -298,7 +301,7 @@ final class LyricView extends View {
     /** Pictures asked of the blur thread and not back yet, as line * 8 + distance. */
     private final java.util.HashSet<Integer> blurPending = new java.util.HashSet<>();
     /** Bumped by every rebuild, so a picture made for the previous layout is thrown away. */
-    private int buildGen;
+    private volatile int buildGen;
     /** The lines and width a layout is on its way for, or -1 with none in the air. */
     private int wantVersion = -1, wantWidth = -1;
     /** The translation and romanisation switches the layout in the air is for (LockLyrics.below()). */
@@ -512,6 +515,10 @@ final class LyricView extends View {
 
     @Override
     protected void onDetachedFromWindow() {
+        paletteRequest++;
+        if (paletteWork != null) blurHandler().removeCallbacks(paletteWork);
+        paletteWork = null;
+        appearance = null;
         getViewTreeObserver().removeOnPreDrawListener(preDraw);
         removeCallbacks(frame);
         looping = false;
@@ -2197,6 +2204,13 @@ final class LyricView extends View {
         if (src == tintSrc && appearance == next) return;
         tintSrc = src;
         appearance = next;
+        boolean needsCover = next.mainMode == LyricAppearance.COVER || next.bgMode == LyricAppearance.COVER;
+        if (needsCover && (coverPalette == null || coverPalette.seed != src)) requestPalette(src);
+        else if (paletteWork != null) {
+            paletteRequest++;
+            blurHandler().removeCallbacks(paletteWork);
+            paletteWork = null;
+        }
         if (src == 0) {
             tintR = tintG = tintB = 1f;
         } else {
@@ -2211,22 +2225,57 @@ final class LyricView extends View {
         }
         int ti = android.graphics.Color.rgb(Math.round(tintR * 255f), Math.round(tintG * 255f),
                 Math.round(tintB * 255f));
-        mainDim = resolveColor(next.mainMode, next.mainColor, src, ti, false, false);
-        mainLit = resolveColor(next.mainMode, next.mainColor, src, -1, false, true);
-        bgDim = resolveColor(next.bgMode, next.bgColor, src, ti, true, false);
-        bgLit = resolveColor(next.bgMode, next.bgColor, src, -1, true, true);
+        int oldMainDim = mainDim, oldBgDim = bgDim;
+        // While a new cover is being processed, retain the last palette (or official colors).
+        // HCT solving and cache locking never run in this drawing path.
+        mainDim = resolveColor(next.mainMode, next.mainColor, ti, false, false);
+        mainLit = resolveColor(next.mainMode, next.mainColor, -1, false, true);
+        bgDim = resolveColor(next.bgMode, next.bgColor, ti, true, false);
+        bgLit = resolveColor(next.bgMode, next.bgColor, -1, true, true);
         // Each text role has its own color and alpha baked into the blur. Tinting the whole
         // bitmap would overwrite the backing vocal's settings and multiply its alpha twice.
         bmpPaint.setColorFilter(null);
-        blurGeneration++;
-        blurBmp = new Bitmap[lines.size()][BLUR_MAX_ROWS];
-        blurPending.clear();
+        if (oldMainDim != mainDim || oldBgDim != bgDim ||
+                builtMainOpacity != next.mainOpacity || builtBgOpacity != next.bgOpacity ||
+                builtTranslationTint != ti) {
+            builtMainOpacity = next.mainOpacity;
+            builtBgOpacity = next.bgOpacity;
+            builtTranslationTint = ti;
+            blurGeneration++;
+            blurBmp = new Bitmap[lines.size()][BLUR_MAX_ROWS];
+            blurPending.clear();
+        }
     }
 
-    private static int resolveColor(int mode, int custom, int seed, int official,
+    private float builtMainOpacity = -1f, builtBgOpacity = -1f;
+    private int builtTranslationTint;
+
+    private void requestPalette(final int seed) {
+        if (paletteWork != null) blurHandler().removeCallbacks(paletteWork);
+        final int request = ++paletteRequest;
+        paletteWork = () -> {
+            final LyricPalette.Colors result = LyricPalette.colors(seed);
+            post(() -> {
+                if (request != paletteRequest) return;
+                paletteWork = null;
+                if (seed != Main.coverTint()) return;
+                coverPalette = result;
+                appearance = null;
+                invalidate();
+                kick();
+            });
+        };
+        // Coalesce queued cover changes ahead of blur jobs, keeping only the newest request.
+        blurHandler().postAtFrontOfQueue(paletteWork);
+    }
+
+    private int resolveColor(int mode, int custom, int official,
                                     boolean backing, boolean active) {
         if (mode == LyricAppearance.CUSTOM) return custom;
-        if (mode == LyricAppearance.COVER) return LyricPalette.coverColor(seed, backing, active);
+        if (mode == LyricAppearance.COVER && coverPalette != null) {
+            return backing ? (active ? coverPalette.bgLit : coverPalette.bgDim)
+                    : (active ? coverPalette.mainLit : coverPalette.mainDim);
+        }
         return official;
     }
 
@@ -2323,12 +2372,18 @@ final class LyricView extends View {
         blurHandler().post(new Runnable() {
             @Override
             public void run() {
+                // A queued blur from an earlier cover/layout must not delay the new palette
+                // or allocate bitmaps that will be discarded as soon as they reach the UI.
+                if (gen != buildGen || colorsGen != blurGeneration) return;
                 final Bitmap b = makeBlurred(l, width, fullW, fullH, pad, radius, p, tp, bp,
                         transGap, bgGap, down, alignOn);
                 post(new Runnable() {
                     @Override
                     public void run() {
-                        if (gen != buildGen || colorsGen != blurGeneration || i >= blurBmp.length) return;
+                        if (gen != buildGen || colorsGen != blurGeneration || i >= blurBmp.length) {
+                            if (b != null) b.recycle();
+                            return;
+                        }
                         blurPending.remove(i * 8 + rows);
                         if (b == null) return;
                         blurBmp[i][rows - 1] = b;

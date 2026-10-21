@@ -4806,6 +4806,7 @@ internal class MiniPlayerController(
         /** Pulled open by a finger still on the island: it scrolls the stack (followFinger). */
         var finger: SpreadFinger? = null
         var collapseFinger: SpreadCollapseFinger? = null
+        var releaseSpring: MiniPlayerSpreadSpring? = null
     }
 
     private class SpreadCollapseFinger(val startY: Float, val startProgress: Float, val range: Float) {
@@ -4830,6 +4831,7 @@ internal class MiniPlayerController(
         var range = 1f
         var ended = false
         var toList = false
+        var velocityY = 0f
         fun pulled() = startY - y
     }
 
@@ -4857,6 +4859,7 @@ internal class MiniPlayerController(
             s.phase = SPREAD_CLOSING
         }
         s.collapseFinger = SpreadCollapseFinger(startY, s.progress, collapseRange(s))
+        s.releaseSpring = null
         s.since = android.os.SystemClock.uptimeMillis()
         s.visualAt = s.since
         s.still = 0
@@ -4896,6 +4899,8 @@ internal class MiniPlayerController(
         finger.target = if (MiniPlayerStackGesture.commits(
                 finger.y - finger.startY, velocityY, density(), cancelled)) 0f else 1f
         finger.ended = true
+        releaseSpread(s, finger.target == 1f,
+            if (cancelled) 0f else -velocityY / finger.range.coerceAtLeast(1f))
         s.still = 0
         NumState.goTo(if (finger.target == 0f) "NUMBER" else "LIST", why = "island collapse released")
     }
@@ -5103,16 +5108,18 @@ internal class MiniPlayerController(
         s.lastY = Int.MIN_VALUE
         // Under a finger the stack goes where it takes it (followFinger), from where it is now.
         LockIslands.openStack("spread", scroll = held == null)
+        val travel = if (s.stacked) dp(220f).toFloat() else
+            (s.items.firstOrNull { it.lead } ?: s.items.firstOrNull { it.morph != null })
+                ?.morph?.openingTravel() ?: dp(220f).toFloat()
         if (held != null) {
             held.base = held.pulled()
-            held.range = if (s.stacked) dp(220f).toFloat() else
-                (s.items.firstOrNull { it.lead } ?: s.items.firstOrNull { it.morph != null })
-                    ?.morph?.openingTravel() ?: dp(220f).toFloat()
+            held.range = travel
         }
         // A short or unavailable scroll range can read as fully open on this first frame.
         // The visible islands still begin at their folded pose and catch up over real frames.
         s.rawProgress = spreadProgress(s, NumState.position() ?: s.islandsY)
-        applySpread(s, if (s.stacked) 0f else s.rawProgress)
+        applySpread(s, if (s.stacked || finger != null) 0f else s.rawProgress)
+        if (finger?.ended == true) releaseSpread(s, true, -finger.velocityY / travel.coerceAtLeast(1f))
         spreadTrace("spread out after ${waited}ms ready=$ready measured=$measured: " + describeSpread())
     }
 
@@ -5196,11 +5203,12 @@ internal class MiniPlayerController(
 
     /** Bound abrupt list-scroll updates while leaving a held finger directly in control. */
     private fun visibleSpreadProgress(s: Spread, target: Float): Float {
-        if (!s.stacked) return target
         val now = android.os.SystemClock.uptimeMillis()
         val elapsed = (now - s.visualAt).coerceIn(0L, 50L).toFloat()
         s.visualAt = now
         if (s.finger?.ended == false || s.collapseFinger?.ended == false) return target
+        s.releaseSpring?.let { return it.step(elapsed / 1000f) }
+        if (!s.stacked) return target
         if (elapsed <= 0f) return s.progress
         val eased = (target - s.progress) * (1f - kotlin.math.exp(-elapsed / 80f))
         val maxStep = elapsed / 220f
@@ -5232,7 +5240,7 @@ internal class MiniPlayerController(
             // No morph: its card fades in with the list, its place fades out, and back.
             item.native?.takeIf { it.isAttachedToWindow }?.let {
                 if (kotlin.math.abs(it.transitionAlpha - itemProgress) > 0.002f)
-                    it.transitionAlpha = itemProgress
+                    it.transitionAlpha = itemProgress.coerceIn(0f, 1f)
             }
             fadeSeat(item.seat, 1f - itemProgress)
         }
@@ -5283,8 +5291,8 @@ internal class MiniPlayerController(
             SEAT_SMALL -> smallIsland
             else -> null
         } ?: return
-        val alpha = if (seat == SEAT_SMALL && stackedStyle())
-            a * MiniPlayerGeometry.STACK_BACK_ALPHA else a
+        val alpha = (if (seat == SEAT_SMALL && stackedStyle())
+            a * MiniPlayerGeometry.STACK_BACK_ALPHA else a).coerceIn(0f, 1f)
         if (alpha > 0f && v.visibility != View.VISIBLE) v.visibility = View.VISIBLE
         if (kotlin.math.abs(v.alpha - alpha) > 0.002f) v.alpha = alpha
     }
@@ -5304,6 +5312,13 @@ internal class MiniPlayerController(
         if (y != s.lastY) spreadFrameLog(s, y, p)
         // Held by the finger, it rests where the finger does; the let-go sends it to an end.
         if (s.finger?.ended == false || s.collapseFinger?.ended == false) {
+            s.lastY = y
+            s.still = 0
+            return
+        }
+        // Even if SystemUI already snapped its scroll to an end, keep the visible release
+        // alive through its small overshoot and return before handing the rows back.
+        if (s.releaseSpring?.atRest == false) {
             s.lastY = y
             s.still = 0
             return
@@ -5341,7 +5356,7 @@ internal class MiniPlayerController(
         s.lastY = y
         // The native scroll can finish in one frame. Keep drawing the morph until its visible
         // progress reaches that end instead of handing all cards to SystemUI at once.
-        if (s.stacked && kotlin.math.abs(s.progress - p) > 0.005f) {
+        if (s.releaseSpring == null && s.stacked && kotlin.math.abs(s.progress - p) > 0.005f) {
             s.still = 0
             return
         }
@@ -5422,6 +5437,7 @@ internal class MiniPlayerController(
         val s = spread ?: return false
         val f = s.finger?.takeIf { !it.ended } ?: return false
         f.ended = true
+        f.velocityY = if (cancelled) 0f else velocityY
         val fling = SPREAD_FLING_DP * density()
         f.toList = !cancelled && when {
             velocityY < -fling -> true
@@ -5429,6 +5445,8 @@ internal class MiniPlayerController(
             s.phase == SPREAD_WAIT -> true
             else -> s.progress >= SPREAD_OPEN_AT
         }
+        if (s.phase == SPREAD_OPENING) releaseSpread(s, f.toList,
+            if (cancelled) 0f else -velocityY / f.range.coerceAtLeast(1f))
         spreadTrace("spread let go p=${"%.2f".format(s.progress)} v=${velocityY.toInt()} list=${f.toList}")
         // Still waiting for the rows: waitSpread takes the decision when they are in.
         if (s.phase != SPREAD_OPENING) return true
@@ -5437,6 +5455,11 @@ internal class MiniPlayerController(
         s.nudged = false
         NumState.goTo(if (f.toList) "LIST" else "NUMBER", why = "spread let go")
         return true
+    }
+
+    private fun releaseSpread(s: Spread, toList: Boolean, speed: Float) {
+        s.releaseSpring = MiniPlayerSpreadSpring(s.progress, speed, toList)
+        s.visualAt = android.os.SystemClock.uptimeMillis()
     }
 
     /** The list is open: the cards are the lock screen's own, the row's views put away. */

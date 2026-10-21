@@ -1,5 +1,20 @@
 package com.os4.musiccover.island
 import kotlin.math.abs
+import com.os4.musiccover.CoverMorphMotion
+
+/** The spread's release keeps the finger's speed, independent of OEM scroll jumps. */
+internal class MiniPlayerSpreadSpring(progress: Float, speed: Float, toList: Boolean) {
+    private val motion = CoverMorphMotion().apply {
+        value = progress
+        velocity = speed.coerceIn(-4f, 4f)
+        aim(toList)
+    }
+    val atRest: Boolean get() = motion.atRest()
+    fun step(seconds: Float): Float {
+        motion.step(seconds.coerceIn(0f, 0.05f), 0.38f)
+        return motion.value.coerceIn(-0.025f, 1.025f)
+    }
+}
 
 /** Downward browsing has its own direction, so reversing a pull never opens the cards. */
 internal object MiniPlayerStackGesture {
