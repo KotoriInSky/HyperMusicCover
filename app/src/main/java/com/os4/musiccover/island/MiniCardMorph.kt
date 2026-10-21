@@ -670,6 +670,12 @@ internal class MiniCardMorph(
      * Where the stack has the card this frame, on screen: its slot plus the stack's own
      * transform, read live, so a stack that moves mid-morph simply moves the far end.
      */
+    fun openingTravel(): Float? {
+        val start = restBox?.invoke() ?: mini.restBoxOnScreen() ?: return null
+        val end = headerRestBox() ?: return null
+        return abs(start.y - end.y).takeIf { it >= 1f }
+    }
+
     private fun headerRestBox(): CoverMorphMotion.Box? {
         if (!header.isAttachedToWindow || header.width <= 0 || header.height <= 0) return null
         val origin = headerOrigin() ?: return null

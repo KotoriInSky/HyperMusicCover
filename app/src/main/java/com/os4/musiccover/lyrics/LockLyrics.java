@@ -139,6 +139,18 @@ public final class LockLyrics {
     public static volatile int sAlign = ALIGN_LEFT;
     /** Immutable snapshot: the UI, renderer and state loader all use the same validated values. */
     public static volatile LyricStyle sStyle = LyricStyle.DEFAULT;
+    public static volatile LyricAppearance sAppearance = LyricAppearance.DEFAULT;
+
+    public static void setAppearance(String json) {
+        LyricAppearance next = LyricAppearance.parse(json);
+        if (sAppearance.toJson().equals(next.toJson())) return;
+        sAppearance = next;
+        LyricView view = sView;
+        if (view != null) {
+            view.invalidate();
+            view.kick();
+        }
+    }
     public static volatile int sMaxLines = LyricFocus.DEFAULT_LIMIT;
 
     public static void setSourcePolicy(boolean custom, boolean network, String sources, String formats) {

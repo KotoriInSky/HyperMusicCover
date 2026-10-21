@@ -1106,7 +1106,8 @@ internal object LockIslands {
     private fun read(entry: Any, redacted: Boolean): Note? {
         val sbn = Xp.getObjectField(entry, "mSbn") as? StatusBarNotification ?: return null
         val n = sbn.notification ?: return null
-        val stamp = (sbn.postTime * 31 + n.`when`) * 2 + if (redacted) 1 else 0
+        val stamp = ((sbn.postTime * 31 + n.`when`) * 2 + (if (redacted) 1 else 0)) * 2 +
+            (if (darkCapsule()) 1 else 0)
         readCache[sbn.key]?.let { (at, note) -> if (at == stamp) return note }
         return readFresh(sbn, n, redacted, createdAt(entry, sbn), entry)?.also {
             if (readCache.size > 200) readCache.clear()
@@ -1310,6 +1311,19 @@ internal object LockIslands {
      * notification with no param_v2. One that draws its own row (miui.focus.rv) is read from
      * miui.focus.param.custom ([customTemplate]).
      */
+    private fun darkCapsule(): Boolean {
+        val ctx = Main.sAppCtx ?: return true
+        val frost = runCatching {
+            android.provider.Settings.Secure.getInt(ctx.contentResolver, "material_style", 1) == 0
+        }.getOrDefault(false)
+        val night = (ctx.resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        return !frost || night
+    }
+
+    private fun pictureKeys(keys: List<String>): List<String> =
+        if (darkCapsule()) keys else keys.sortedBy { if (it.endsWith("Dark")) 1 else 0 }
+
     private fun focusTemplate(n: Notification): Template? = runCatching {
         val raw = n.extras.getString("miui.focus.param") ?: return customTemplate(n)
         val root = org.json.JSONObject(raw)
@@ -1321,9 +1335,9 @@ internal object LockIslands {
                 it.optLong("timerSystemCurrent", System.currentTimeMillis()),
                 it.optLong("timerTotal", 0L))
         }
-        // The notification's own pictures by these names, dark first as the lock screen draws.
+        // Match the capsule material without recoloring the app's multicolor artwork.
         fun named(o: org.json.JSONObject, vararg keys: String) =
-            keys.map { str(o, it) }.filter { it.isNotEmpty() }.map { Pic(Pic.BUNDLE, it) }
+            pictureKeys(keys.toList()).map { str(o, it) }.filter { it.isNotEmpty() }.map { Pic(Pic.BUNDLE, it) }
         // What it gives the status bar and the AOD: a last resort before the row's picture.
         fun ticker(o: org.json.JSONObject) = named(o, "tickerPicDark", "tickerPic", "aodPic")
         // The flat template, the first protocol's and a param_v2 with no first-area module
@@ -1394,7 +1408,7 @@ internal object LockIslands {
         lines.removeAll { it.isBlank() }
         if (lines.isEmpty()) str(root, "aodTitle").takeIf { it.isNotEmpty() }?.let { lines += it }
         if (lines.isEmpty()) return null
-        val pics = listOf("tickerPicDark", "tickerPic", "aodPic").map { str(root, it) }
+        val pics = pictureKeys(listOf("tickerPicDark", "tickerPic", "aodPic")).map { str(root, it) }
             .filter { it.isNotEmpty() }.map { Pic(Pic.BUNDLE, it) }
         Template(html(lines[0]), html(lines.drop(1).joinToString(" ")), null, islandPics(island) + pics)
     }.getOrNull()

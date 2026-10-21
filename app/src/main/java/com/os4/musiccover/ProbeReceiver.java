@@ -167,6 +167,11 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             if (LockLyrics.setStyle(key, i.getFloatExtra("v", Float.NaN))) {
                 ModuleState.saveStateSoon();
             }
+        } else if ("lyricappearance".equals(op)) {
+            if (i.hasExtra("json")) {
+                LockLyrics.setAppearance(i.getStringExtra("json"));
+                ModuleState.saveStateSoon();
+            }
         } else if ("lyricsourcepolicy".equals(op)) {
             LyricSourcePolicy.Config current = LyricSourcePolicy.current;
             LockLyrics.setSourcePolicy(i.getBooleanExtra("custom", current.custom),
@@ -422,6 +427,8 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             out.putBoolean("lyricroma", LockLyrics.sRoma);
             out.putInt("lyricalign", LockLyrics.sAlign);
             out.putInt("lyricmaxlines", LockLyrics.sMaxLines);
+            out.putFloat("lyricbgsize", LockLyrics.sStyle.bgSizeSp);
+            out.putString("lyricappearance", LockLyrics.sAppearance.toJson());
             out.putBoolean("lyricsourcecustom", LyricSourcePolicy.current.custom);
             out.putBoolean("lyricnetwork", LyricSourcePolicy.current.allowNetwork);
             out.putString("lyricsourceorder", LyricSourcePolicy.current.sourceOrder);

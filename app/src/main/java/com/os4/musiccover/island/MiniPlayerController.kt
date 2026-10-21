@@ -4827,6 +4827,7 @@ internal class MiniPlayerController(
         var y = startY
         /** The pull at the moment the stack started to follow: its scroll's zero. */
         var base = Float.NaN
+        var range = 1f
         var ended = false
         var toList = false
         fun pulled() = startY - y
@@ -5102,7 +5103,12 @@ internal class MiniPlayerController(
         s.lastY = Int.MIN_VALUE
         // Under a finger the stack goes where it takes it (followFinger), from where it is now.
         LockIslands.openStack("spread", scroll = held == null)
-        if (held != null) held.base = held.pulled()
+        if (held != null) {
+            held.base = held.pulled()
+            held.range = if (s.stacked) dp(220f).toFloat() else
+                (s.items.firstOrNull { it.lead } ?: s.items.firstOrNull { it.morph != null })
+                    ?.morph?.openingTravel() ?: dp(220f).toFloat()
+        }
         // A short or unavailable scroll range can read as fully open on this first frame.
         // The visible islands still begin at their folded pose and catch up over real frames.
         s.rawProgress = spreadProgress(s, NumState.position() ?: s.islandsY)
@@ -5175,6 +5181,9 @@ internal class MiniPlayerController(
 
     /** 0 at the islands' end, 1 at the cards'. */
     private fun spreadProgress(s: Spread, y: Int): Float {
+        s.finger?.takeIf { !it.ended && !it.base.isNaN() }?.let {
+            return MiniPlayerStackGesture.openingProgress(it.pulled() - it.base, it.range)
+        }
         val span = (s.cardsY - s.islandsY).toFloat()
         if (s.stacked && kotlin.math.abs(span) < dp(72f)) {
             s.finger?.takeIf { !it.ended && !it.base.isNaN() }?.let { finger ->
@@ -5393,8 +5402,8 @@ internal class MiniPlayerController(
     private fun followFinger(s: Spread, f: SpreadFinger) {
         if (f.base.isNaN()) return
         val span = s.cardsY - s.islandsY
-        val d = (f.pulled() - f.base).coerceAtLeast(0f).coerceAtMost(kotlin.math.abs(span).toFloat())
-        NumState.setScroll(s.islandsY + (if (span >= 0) d else -d).toInt())
+        val progress = MiniPlayerStackGesture.openingProgress(f.pulled() - f.base, f.range)
+        NumState.setScroll(s.islandsY + (span * progress).roundToInt())
     }
 
     /** The finger on a pulled-open spread moved (the pill's route, as noteDragMove). */

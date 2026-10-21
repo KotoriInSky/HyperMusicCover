@@ -91,6 +91,8 @@ public final class ModuleState {
                     + "\nlyricalign=" + LockLyrics.sAlign
                     + "\nlyricmaxlines=" + LockLyrics.sMaxLines
                     + "\nlyricsize=" + LockLyrics.sStyle.sizeSp
+                    + "\nlyricbgsize=" + LockLyrics.sStyle.bgSizeSp
+                    + "\nlyricappearance=" + LockLyrics.sAppearance.toJson()
                     + "\nlyricsourcecustom=" + (LyricSourcePolicy.current.custom ? 1 : 0)
                     + "\nlyricnetwork=" + (LyricSourcePolicy.current.allowNetwork ? 1 : 0)
                     + "\nlyricsourceorder=" + LyricSourcePolicy.current.sourceOrder
@@ -214,6 +216,8 @@ public final class ModuleState {
                         else if ("lyricalign".equals(k)) LockLyrics.setAlign(Integer.parseInt(v));
                         else if ("lyricmaxlines".equals(k)) LockLyrics.setMaxLines(Integer.parseInt(v));
                         else if ("lyricsize".equals(k)) LockLyrics.setStyle("size", Float.parseFloat(v));
+                        else if ("lyricbgsize".equals(k)) LockLyrics.setStyle("bgsize", Float.parseFloat(v));
+                        else if ("lyricappearance".equals(k)) LockLyrics.setAppearance(v);
                         else if ("lyricsourcecustom".equals(k)) {
                             LyricSourcePolicy.Config old = LyricSourcePolicy.current;
                             LyricSourcePolicy.current = new LyricSourcePolicy.Config("1".equals(v), old.allowNetwork, old.sourceOrder, old.formatOrder);

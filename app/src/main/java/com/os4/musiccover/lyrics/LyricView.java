@@ -63,7 +63,6 @@ final class LyricView extends View {
     private static final float BG_SP = 17f;
     private static final int BG_WEIGHT = 500;
     private static final float BG_GAP_DP = 3f;
-    private static final float BG_ALPHA = 0.72f;
     private static final float BG_LIFT = 0.6f;
     private static final int TRANS_WEIGHT = 500;
     /** Between one line's last row (or its translation) and the next line. */
@@ -253,6 +252,9 @@ final class LyricView extends View {
     private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private int tintSrc = -1;
     private float tintR = 1f, tintG = 1f, tintB = 1f;
+    private LyricAppearance appearance;
+    private int mainDim = -1, mainLit = -1, bgDim = -1, bgLit = -1;
+    private int blurGeneration;
     private final Matrix gradMatrix = new Matrix();
     private final LinearGradient[] grads = new LinearGradient[3];
     private final long[] gradHi = {-1L, -1L, -1L}, gradLo = {-1L, -1L, -1L};
@@ -435,7 +437,8 @@ final class LyricView extends View {
         paint.setTypeface(Typeface.create(Typeface.DEFAULT, style.weight, false));
         transPaint.setTextSize(textPx * TRANS_SP / TEXT_SP);
         transPaint.setTypeface(Typeface.create(Typeface.DEFAULT, TRANS_WEIGHT, false));
-        bgPaint.setTextSize(textPx * BG_SP / TEXT_SP);
+        bgPaint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
+                style.bgSizeSp, getResources().getDisplayMetrics()));
         bgPaint.setTypeface(Typeface.create(Typeface.DEFAULT, BG_WEIGHT, false));
     }
 
@@ -450,6 +453,8 @@ final class LyricView extends View {
     }
 
     private float lyricGap(float gapDp) {
+        // Backing vocals retain the official spacing, independently of the lead's size.
+        if (gapDp == BG_GAP_DP) return gapDp * density;
         return gapDp * textPx / TEXT_SP;
     }
 
@@ -1529,7 +1534,8 @@ final class LyricView extends View {
         p.setTextSize(buildTextPx);
         p.setTypeface(Typeface.create(Typeface.DEFAULT, style.weight, false));
         final TextPaint bp = new TextPaint(bgPaint);
-        bp.setTextSize(buildTextPx * BG_SP / TEXT_SP);
+        bp.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
+                style.bgSizeSp, getResources().getDisplayMetrics()));
         final TextPaint tp = new TextPaint(transPaint);
         tp.setTextSize(buildTextPx * TRANS_SP / TEXT_SP);
         if (ls.isEmpty()) {
@@ -1658,7 +1664,7 @@ final class LyricView extends View {
                         .setIncludePad(false)
                         .setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_BALANCED)
                         .build();
-                h += BG_GAP_DP * buildTextPx / TEXT_SP + b.bgLay[i].getHeight();
+                h += BG_GAP_DP * density + b.bgLay[i].getHeight();
                 if (l.bg.hasWords()) b.charXBg[i] = charXOf(b.bgLay[i], l.bg);
             }
             // Left out of the layout entirely when the switch is off, rather than laid out and
@@ -2187,8 +2193,10 @@ final class LyricView extends View {
      */
     private void updateTint() {
         int src = Main.coverTint();
-        if (src == tintSrc) return;
+        LyricAppearance next = LockLyrics.sAppearance;
+        if (src == tintSrc && appearance == next) return;
         tintSrc = src;
+        appearance = next;
         if (src == 0) {
             tintR = tintG = tintB = 1f;
         } else {
@@ -2203,12 +2211,45 @@ final class LyricView extends View {
         }
         int ti = android.graphics.Color.rgb(Math.round(tintR * 255f), Math.round(tintG * 255f),
                 Math.round(tintB * 255f));
-        bmpPaint.setColorFilter(new android.graphics.PorterDuffColorFilter(ti,
-                android.graphics.PorterDuff.Mode.SRC_IN));
+        mainDim = resolveColor(next.mainMode, next.mainColor, src, ti, false, false);
+        mainLit = resolveColor(next.mainMode, next.mainColor, src, -1, false, true);
+        bgDim = resolveColor(next.bgMode, next.bgColor, src, ti, true, false);
+        bgLit = resolveColor(next.bgMode, next.bgColor, src, -1, true, true);
+        // Each text role has its own color and alpha baked into the blur. Tinting the whole
+        // bitmap would overwrite the backing vocal's settings and multiply its alpha twice.
+        bmpPaint.setColorFilter(null);
+        blurGeneration++;
+        blurBmp = new Bitmap[lines.size()][BLUR_MAX_ROWS];
+        blurPending.clear();
     }
 
-    /** Text colour: the tint at whiteness 0, white at 1, with an alpha. */
+    private static int resolveColor(int mode, int custom, int seed, int official,
+                                    boolean backing, boolean active) {
+        if (mode == LyricAppearance.CUSTOM) return custom;
+        if (mode == LyricAppearance.COVER) return LyricPalette.coverColor(seed, backing, active);
+        return official;
+    }
+
     private long ink(float alpha, float whiteness) {
+        return ink(alpha, whiteness, false);
+    }
+
+    /** Colors are blended in SDR; only the held-note highlight requests HDR headroom. */
+    private long ink(float alpha, float whiteness, boolean backing) {
+        LyricAppearance a = appearance == null ? LyricAppearance.DEFAULT : appearance;
+        return blendInk(backing ? bgDim : mainDim, backing ? bgLit : mainLit,
+                whiteness, alpha * (backing ? a.bgOpacity : a.mainOpacity), 1f);
+    }
+
+    private static long blendInk(int low, int high, float amount, float alpha, float gain) {
+        float w = clamp01(amount);
+        float r = (((low >> 16) & 255) * (1f - w) + ((high >> 16) & 255) * w) / 255f;
+        float g = (((low >> 8) & 255) * (1f - w) + ((high >> 8) & 255) * w) / 255f;
+        float b = ((low & 255) * (1f - w) + (high & 255) * w) / 255f;
+        return android.graphics.Color.pack(r * gain, g * gain, b * gain, clamp01(alpha), EXTENDED);
+    }
+
+    private long translationInk(float alpha, float whiteness) {
         float w = clamp01(whiteness);
         float r = tintR + (1f - tintR) * w, g = tintG + (1f - tintG) * w, b = tintB + (1f - tintB) * w;
         return android.graphics.Color.pack(r, g, b, clamp01(alpha), EXTENDED);
@@ -2263,6 +2304,7 @@ final class LyricView extends View {
         // Everything the other thread needs, taken here: the paints are this view's and change on
         // every frame, so it gets copies, and it lays the text out again for itself.
         final int gen = buildGen;
+        final int colorsGen = blurGeneration;
         final LyricLine l = lines.get(i);
         final int alignOn = builtAlign;
         final int width = main[i].getWidth();
@@ -2271,6 +2313,9 @@ final class LyricView extends View {
         final TextPaint p = new TextPaint(paint);
         final TextPaint tp = new TextPaint(transPaint);
         final TextPaint bp = new TextPaint(bgPaint);
+        p.setColor(android.graphics.Color.toArgb(ink(1f, 0f)));
+        bp.setColor(android.graphics.Color.toArgb(ink(1f, 0f, true)));
+        tp.setColor(android.graphics.Color.toArgb(translationInk(TRANS_ALPHA, 0f)));
         final int pad = blurPad;
         final float transGap = lyricGap(TRANS_GAP_DP);
         final float bgGap = lyricGap(BG_GAP_DP);
@@ -2283,8 +2328,9 @@ final class LyricView extends View {
                 post(new Runnable() {
                     @Override
                     public void run() {
+                        if (gen != buildGen || colorsGen != blurGeneration || i >= blurBmp.length) return;
                         blurPending.remove(i * 8 + rows);
-                        if (b == null || gen != buildGen || i >= blurBmp.length) return;
+                        if (b == null) return;
                         blurBmp[i][rows - 1] = b;
                         // While the loop runs its next frame draws it anyway.
                         if (!looping) invalidate();
@@ -2311,7 +2357,6 @@ final class LyricView extends View {
             Layout.Alignment align = alignFor(l.opposite, alignOn);
             p.setShader(null);
             p.clearShadowLayer();
-            p.setAlpha(255);
             p.setMaskFilter(mf);
             StaticLayout lay = StaticLayout.Builder.obtain(l.text, 0, l.text.length(), p, width)
                     .setAlignment(align)
@@ -2322,8 +2367,6 @@ final class LyricView extends View {
             float below = lay.getHeight();
             if (l.bg != null) {
                 bp.setShader(null);
-                bp.setColor(0xFFFFFFFF);
-                bp.setAlpha(Math.round(255f * BG_ALPHA));
                 bp.setMaskFilter(mf);
                 StaticLayout bl = StaticLayout.Builder.obtain(l.bg.text, 0, l.bg.text.length(),
                                 bp, width)
@@ -2339,7 +2382,6 @@ final class LyricView extends View {
             }
             String under = l.under(LockLyrics.below());
             if (under != null) {
-                tp.setAlpha(Math.round(255f * TRANS_ALPHA));
                 tp.setMaskFilter(mf);
                 StaticLayout t = StaticLayout.Builder.obtain(under, 0, under.length(), tp, width)
                         .setAlignment(align)
@@ -2392,7 +2434,7 @@ final class LyricView extends View {
         if (b != null) {
             int save = c.save();
             c.translate(0f, lay.getHeight() + lyricGap(BG_GAP_DP));
-            b.getPaint().setColor(ink(a * BG_ALPHA, whiteness));
+            b.getPaint().setColor(ink(a, whiteness, true));
             b.draw(c);
             b.getPaint().setColor(0xFFFFFFFF);
             c.restoreToCount(save);
@@ -2407,9 +2449,10 @@ final class LyricView extends View {
         return y + lyricGap(TRANS_GAP_DP);
     }
 
-    /** White at a brightness in SDR units - 1 is ordinary white, more is HDR - and an alpha. */
-    private static long white(float alpha, float gain) {
-        return android.graphics.Color.pack(gain, gain, gain, clamp01(alpha), EXTENDED);
+    /** The lead's selected color, retaining its opacity even in the HDR halo. */
+    private long white(float alpha, float gain) {
+        LyricAppearance a = appearance == null ? LyricAppearance.DEFAULT : appearance;
+        return blendInk(mainLit, mainLit, 1f, alpha * a.mainOpacity, gain);
     }
 
     /**
@@ -2425,7 +2468,7 @@ final class LyricView extends View {
         if (t == null) return;
         int save = c.save();
         c.translate(0f, transTop(i));
-        t.getPaint().setColor(ink(a * TRANS_ALPHA * transReveal(), 0f));
+        t.getPaint().setColor(translationInk(a * TRANS_ALPHA * transReveal(), 0f));
         t.draw(c);
         t.getPaint().setColor(0xFFFFFFFF);
         c.restoreToCount(save);
@@ -2458,15 +2501,15 @@ final class LyricView extends View {
             c.translate(0f, lay.getHeight() + lyricGap(BG_GAP_DP));
             if (l.bg.hasWords()) {
                 drawWordRows(c, l.bg, bl, bgPaint, charXFor(i, bl, l.bg, charXBg), e,
-                        a * level * BG_ALPHA,
-                        a * (INACTIVE + (1f - INACTIVE) * e * UNSUNG) * BG_ALPHA,
+                        a * level,
+                        a * (INACTIVE + (1f - INACTIVE) * e * UNSUNG),
                         BG_LIFT, false, 1);
             } else {
                 // A backing vocal can arrive without word timing of its own - a provider may
                 // publish its text and nothing else. It used to be handed to the word path
                 // regardless, where the renderer read the missing syllable array and took
                 // SystemUI down (issue #94); whole, at the brightness of its sung lead.
-                bl.getPaint().setColor(ink(a * level * BG_ALPHA, 0f));
+                bl.getPaint().setColor(ink(a * level, 0f, true));
                 bl.draw(c);
                 bl.getPaint().setColor(0xFFFFFFFF);
             }
@@ -2488,15 +2531,16 @@ final class LyricView extends View {
                               float e, float sungA, float unsungA, float liftScale,
                               boolean glowOn, int gradSlot) {
         float sung = l.sungChars(ms);
+        boolean backing = gradSlot == 1;
         float feather = FEATHER_EM * p.getTextSize();
         int rows = lay.getLineCount();
         for (int r = 0; r < rows; r++) {
             int rs = lay.getLineStart(r), re = lay.getLineEnd(r);
             rowAt = Float.NaN;
             if (sung >= re) {
-                p.setColor(ink(sungA, e));
+                p.setColor(ink(sungA, e, backing));
             } else if (sung <= rs) {
-                p.setColor(ink(unsungA, 0f));
+                p.setColor(ink(unsungA, 0f, backing));
             } else {
                 int ch = (int) sung;
                 float f = sung - ch;
@@ -2504,7 +2548,7 @@ final class LyricView extends View {
                 float xb = ch + 1 < re ? xs[ch + 1] : lay.getLineRight(r);
                 p.setColor(0xFFFFFFFF);
                 rowAt = xa + (xb - xa) * f;
-                p.setShader(gradient(ink(sungA, e), ink(unsungA, 0f), rowAt, feather,
+                p.setShader(gradient(ink(sungA, e, backing), ink(unsungA, 0f, backing), rowAt, feather,
                         gradSlot));
             }
             rowFeather = feather;

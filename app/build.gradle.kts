@@ -175,6 +175,8 @@ dependencies {
     implementation(libs.miuix.preference)
     implementation(libs.miuix.icons)
     implementation(libs.miuix.squircle)
+    // Already used by miuix at runtime; expose its HCT API for album-cover lyric colors.
+    implementation("com.materialkolor:material-color-utilities:5.0.0")
     implementation(libs.material.icons.extended)
 
     // ColorOS's pickup plugin (assets/coloros/pcr_plugin.apk) is loaded at runtime into a class

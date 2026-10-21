@@ -601,6 +601,7 @@ private fun LyricsGroup(
                         ModuleBridge.setLyricStyle(context, "size", size)
                     },
                 )
+                LyricAppearanceSettings(enabled, module, onChange)
                 val alignModes = listOf(
                     stringResource(R.string.lyrics_align_left),
                     stringResource(R.string.lyrics_align_center),

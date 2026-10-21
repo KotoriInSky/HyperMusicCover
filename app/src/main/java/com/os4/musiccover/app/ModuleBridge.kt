@@ -144,6 +144,8 @@ object ModuleBridge {
         /** Where the lines settle in their column: 0 left, 1 centre, 2 right. */
         val lyricsAlign: Int = 0,
         val lyricsMaxLines: Int = 3,
+        val lyricBgSizeSp: Float = 17f,
+        val lyricAppearance: String = "{}",
         val lyricSourceCustom: Boolean = false,
         val lyricNetwork: Boolean = true,
         val lyricSourceOrder: String = com.os4.musiccover.lyrics.LyricSourcePolicy.DEFAULT_SOURCES,
@@ -507,6 +509,9 @@ object ModuleBridge {
 
     fun setLyricsMaxLines(context: Context, count: Int) =
         send(context, "lyricmaxlines") { putExtra("v", count.coerceIn(1, 4)) }
+
+    fun setLyricAppearance(context: Context, json: String) =
+        send(context, "lyricappearance") { putExtra("json", json) }
 
     fun setLyricSourcePolicy(context: Context, state: State) =
         send(context, "lyricsourcepolicy") {
@@ -935,6 +940,8 @@ object ModuleBridge {
             lyricsRoma = b.getBoolean("lyricroma", false),
             lyricsAlign = b.getInt("lyricalign", 0),
             lyricsMaxLines = b.getInt("lyricmaxlines", 3).coerceIn(1, 4),
+            lyricBgSizeSp = b.getFloat("lyricbgsize", 17f).coerceIn(10f, 30f),
+            lyricAppearance = b.getString("lyricappearance") ?: "{}",
             lyricSourceCustom = b.getBoolean("lyricsourcecustom", false),
             lyricNetwork = b.getBoolean("lyricnetwork", true),
             lyricSourceOrder = com.os4.musiccover.lyrics.LyricSourcePolicy.normalizeSources(b.getString("lyricsourceorder")),

@@ -3,6 +3,9 @@ import kotlin.math.abs
 
 /** Downward browsing has its own direction, so reversing a pull never opens the cards. */
 internal object MiniPlayerStackGesture {
+    fun openingProgress(pulled: Float, travel: Float): Float =
+        (pulled / travel.coerceAtLeast(1f)).coerceIn(0f, 1f)
+
     fun starts(dx: Float, dy: Float): Boolean = dy > 0f && dy >= abs(dx)
 
     fun commits(dy: Float, velocityY: Float, density: Float, cancelled: Boolean): Boolean =
