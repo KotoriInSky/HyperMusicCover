@@ -1,7 +1,7 @@
 package com.os4.musiccover.ui.screen.features
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +63,7 @@ import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.squircle.squircleSurface
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 internal fun LyricSourceSettings(
@@ -72,6 +73,7 @@ internal fun LyricSourceSettings(
 ) {
     val context = LocalContext.current
     val currentModule by rememberUpdatedState(module)
+    var sourcesOpen by remember { mutableStateOf(false) }
     var formatsOpen by remember { mutableStateOf(false) }
     fun update(next: ModuleBridge.State) {
         onChange(next)
@@ -84,43 +86,75 @@ internal fun LyricSourceSettings(
         enabled = enabled,
         onCheckedChange = { update(currentModule.copy(lyricNetwork = it)) },
     )
-    SwitchPreference(
+    BasicComponent(
         title = stringResource(R.string.lyrics_priority),
         summary = stringResource(R.string.lyrics_priority_summary),
-        checked = module.lyricSourceCustom,
         enabled = enabled,
-        onCheckedChange = { update(currentModule.copy(lyricSourceCustom = it)) },
+        endActions = {
+            IconButton(
+                modifier = Modifier.size(48.dp),
+                enabled = enabled,
+                onClick = { sourcesOpen = true },
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Sort,
+                    contentDescription = stringResource(R.string.lyrics_priority),
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        },
     )
-    if (module.lyricSourceCustom) {
-        PriorityRows(
-            order = module.lyricSourceOrder,
-            enabled = enabled,
-            label = { sourceLabel(it) },
-            dimmed = { !module.lyricNetwork && LyricSourcePolicy.network(it) },
-            onCommit = { update(currentModule.copy(lyricSourceOrder = it)) },
-            trailing = { source ->
-                if (source == "local") {
-                    IconButton(
-                        modifier = Modifier.size(48.dp),
-                        enabled = enabled,
-                        onClick = { formatsOpen = true },
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Settings,
-                            contentDescription = stringResource(R.string.lyrics_format_settings),
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
-            },
-        )
-        TextButton(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            text = stringResource(R.string.lyrics_priority_reset),
-            enabled = enabled,
-            onClick = { update(currentModule.copy(lyricSourceOrder = LyricSourcePolicy.DEFAULT_SOURCES)) },
-        )
+    BasicComponent(
+        title = stringResource(R.string.lyrics_format_priority),
+        summary = stringResource(R.string.lyrics_format_summary),
+        enabled = enabled,
+        endActions = {
+            IconButton(
+                modifier = Modifier.size(48.dp),
+                enabled = enabled,
+                onClick = { formatsOpen = true },
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Settings,
+                    contentDescription = stringResource(R.string.lyrics_format_settings),
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        },
+    )
+    WindowDialog(
+        show = sourcesOpen,
+        title = stringResource(R.string.lyrics_priority),
+        summary = stringResource(R.string.lyrics_priority_summary),
+        onDismissRequest = { sourcesOpen = false },
+    ) {
+        Column {
+            PriorityRows(
+                order = if (module.lyricSourceCustom) module.lyricSourceOrder
+                    else LyricSourcePolicy.DEFAULT_SOURCES,
+                enabled = enabled,
+                label = { sourceLabel(it) },
+                dimmed = { !module.lyricNetwork && LyricSourcePolicy.network(it) },
+                onCommit = { update(currentModule.copy(lyricSourceCustom = true, lyricSourceOrder = it)) },
+            )
+            TextButton(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                text = stringResource(R.string.lyrics_priority_reset),
+                enabled = enabled,
+                onClick = {
+                    update(currentModule.copy(lyricSourceCustom = false,
+                        lyricSourceOrder = LyricSourcePolicy.DEFAULT_SOURCES))
+                },
+            )
+            TextButton(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                text = stringResource(R.string.lyrics_priority_done),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
+                onClick = { sourcesOpen = false },
+            )
+        }
     }
     WindowDialog(
         show = formatsOpen,
@@ -177,7 +211,6 @@ private fun PriorityRows(
     label: @Composable (String) -> String,
     onCommit: (String) -> Unit,
     dimmed: (String) -> Boolean = { false },
-    trailing: @Composable (String) -> Unit = {},
 ) {
     var items by remember { mutableStateOf(order.split(',')) }
     val commit by rememberUpdatedState(onCommit)
@@ -233,7 +266,8 @@ private fun PriorityRows(
     Column(Modifier.heightIn(max = 320.dp).onGloballyPositioned {
         viewportTop = it.positionInWindow().y
         viewportHeight = it.size.height.toFloat()
-    }.verticalScroll(scroll)) {
+    }.overScrollVertical(nestedScrollToParent = false, isEnabled = { active == null })
+        .verticalScroll(scroll, overscrollEffect = null)) {
         items.forEachIndexed { index, source ->
             key(source) {
                 val name = label(source)
@@ -265,7 +299,6 @@ private fun PriorityRows(
                         )
                     },
                     endActions = {
-                        trailing(source)
                         Box(
                             Modifier.size(48.dp).onGloballyPositioned { handle = it }.semantics {
                                 contentDescription = "$name: $dragDescription"
@@ -283,7 +316,7 @@ private fun PriorityRows(
                                 )
                             }.pointerInput(source, enabled, rowHeight) {
                                 if (!enabled) return@pointerInput
-                                detectDragGestures(
+                                detectDragGesturesAfterLongPress(
                                     onDragStart = { position ->
                                         pointerY = handle?.localToWindow(position)?.y ?: viewportTop
                                         grabOffset = pointerY - viewportTop + scroll.value - items.indexOf(source) * rowHeight

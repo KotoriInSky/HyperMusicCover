@@ -31,18 +31,18 @@ jobs:
       - name: Build APK
         run: |
           ./gradlew --no-daemon :app:assembleRelease \
-            -PmcVersionName=0.9.45-Plus -PmcVersionCode=945001
+            -PmcVersionName=0.9.45-Plus.2 -PmcVersionCode=945002
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk dist/HyperMusicCover-0.9.45-Plus.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/HyperMusicCover-0.9.45-Plus.2.apk
           cd dist
-          sha256sum HyperMusicCover-0.9.45-Plus.apk > SHA256SUMS.txt
+          sha256sum HyperMusicCover-0.9.45-Plus.2.apk > SHA256SUMS.txt
       - name: Verify Xposed entry points
         run: |
-          unzip -p dist/HyperMusicCover-0.9.45-Plus.apk META-INF/xposed/java_init.list | grep -qx 'com.os4.musiccover.Main'
-          unzip -p dist/HyperMusicCover-0.9.45-Plus.apk META-INF/xposed/scope.list | grep -qx 'com.android.systemui'
+          unzip -p dist/HyperMusicCover-0.9.45-Plus.2.apk META-INF/xposed/java_init.list | grep -qx 'com.os4.musiccover.Main'
+          unzip -p dist/HyperMusicCover-0.9.45-Plus.2.apk META-INF/xposed/scope.list | grep -qx 'com.android.systemui'
       - uses: actions/upload-artifact@v4
         with:
-          name: HyperMusicCover-0.9.45-Plus
+          name: HyperMusicCover-0.9.45-Plus.2
           path: dist/*
           if-no-files-found: error
           retention-days: 14

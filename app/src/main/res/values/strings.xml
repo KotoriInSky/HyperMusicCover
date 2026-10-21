@@ -20,8 +20,8 @@
     <string name="lyrics_section">锁屏歌词</string>
     <string name="lyrics_network">允许使用网络歌词源</string>
     <string name="lyrics_network_summary">开启后按歌词来源优先级使用网络歌词源；关闭后仅使用歌曲元数据、歌曲目录文件和词幕。词幕提供者自身的联网不受此开关控制。</string>
-    <string name="lyrics_priority">自定义歌词来源优先级</string>
-    <string name="lyrics_priority_summary">拖动右侧三横杠排序。关闭时使用默认顺序：歌曲元数据 → 同目录文件 → 词幕 → 网络。找到可用歌词即停止，不跨源覆盖或补充。</string>
+    <string name="lyrics_priority">歌词来源优先级</string>
+    <string name="lyrics_priority_summary">点按排序按钮打开菜单，长按右侧拖动手柄调整。网络源始终列出；关闭网络歌词时置灰并跳过。找到可用歌词即停止，不跨源覆盖或补充。</string>
     <string name="lyrics_priority_metadata">歌曲元数据</string>
     <string name="lyrics_priority_local">歌曲目录文件</string>
     <string name="lyrics_format_settings">格式设置</string>

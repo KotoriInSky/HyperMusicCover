@@ -33,7 +33,7 @@ internal class PressFeedbackButton(context: Context) : ImageButton(context) {
 
     override fun onDraw(canvas: Canvas) {
         val save = canvas.save()
-        val scale = 1f - 0.1f * press
+        val scale = 1f - 0.22f * press
         canvas.scale(scale, scale, width / 2f, height / 2f)
         super.onDraw(canvas)
         canvas.restoreToCount(save)

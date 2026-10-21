@@ -20,8 +20,8 @@
     <string name="lyrics_section">Lyrics</string>
     <string name="lyrics_network">Allow online lyric sources</string>
     <string name="lyrics_network_summary">When on, use online sources in the configured priority order. When off, use only song metadata, companion files and Lyricon. Networking within Lyricon providers is independent.</string>
-    <string name="lyrics_priority">Custom lyric source priority</string>
-    <string name="lyrics_priority_summary">Drag the handle to reorder. When off: metadata → companion files → Lyricon → online sources. Stop at the first valid lyric; do not merge or overwrite it from another source.</string>
+    <string name="lyrics_priority">Lyric source priority</string>
+    <string name="lyrics_priority_summary">Tap the sort button to open the menu, then long-press and drag a handle to reorder. Online sources remain listed but are dimmed and skipped when online lyrics are off. Stop at the first valid lyric; do not merge or overwrite it from another source.</string>
     <string name="lyrics_priority_metadata">Song metadata</string>
     <string name="lyrics_priority_local">Companion lyric files</string>
     <string name="lyrics_format_settings">Formats</string>
