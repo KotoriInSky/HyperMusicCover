@@ -1478,7 +1478,7 @@ final class LyricView extends View {
         for (int i = Math.max(0, singing.first); i <= focus; i++) {
             if (!singing.contains(i)) continue;
             LyricLine l = lines.get(i);
-            if (l.hasWords() && emph[i] > 0f && ms >= l.start
+            if (wordTimed(l) && emph[i] > 0f && ms >= l.start
                     && ms < l.end + Math.max(LIFT_MIN_MS, GLOW_TAIL_MS)) {
                 return true;
             }
@@ -1488,6 +1488,14 @@ final class LyricView extends View {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether any of the line fills word by word: its own words, or only its background vocal's -
+     * a bridge can time the backing vocal of a line it times by the line alone (issue #102).
+     */
+    private static boolean wordTimed(LyricLine l) {
+        return l.hasWords() || (l.bg != null && l.bg.hasWords());
     }
 
     private static float approach(float v, float to, float dt, float tau) {
@@ -2137,7 +2145,7 @@ final class LyricView extends View {
         // In the AOD's still mode a word-timed line is drawn whole, like a line-timed one: a fill
         // frozen at whatever syllable the one frame caught would be wrong for the whole line.
         boolean still = LockLyrics.still();
-        boolean words = (l.hasWords() || (l.bg != null && l.bg.hasWords())) && e > 0f && !still;
+        boolean words = wordTimed(l) && e > 0f && !still;
         int save = canvas.save();
         canvas.translate(x, y);
         canvas.scale(sc, sc, pivotX, height[i] / 2f);
@@ -2603,7 +2611,10 @@ final class LyricView extends View {
             drawWordRows(c, i, l, lay, paint, charXFor(i, lay, l, charX), e, a * level,
                     a * (INACTIVE + (1f - INACTIVE) * e * UNSUNG), 1f, true, 0);
         } else {
-            lay.getPaint().setColor(ink(a * (INACTIVE + (1f - INACTIVE) * lit[i]), 0f));
+            // Here only for its background vocal's words: the line itself is lit whole while it
+            // is sung, as drawLine draws any line-timed one.
+            float w = lit[i];
+            lay.getPaint().setColor(ink(a * (INACTIVE + (1f - INACTIVE) * w), w));
             lay.draw(c);
             lay.getPaint().setColor(0xFFFFFFFF);
         }

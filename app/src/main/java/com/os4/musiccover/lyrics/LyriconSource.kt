@@ -2,6 +2,7 @@ package com.os4.musiccover.lyrics
 import com.os4.musiccover.Xp
 import android.content.Context
 import android.content.ContextWrapper
+import io.github.proify.lyricon.lyric.model.LyricWord
 import io.github.proify.lyricon.lyric.model.RichLyricLine
 import io.github.proify.lyricon.lyric.model.Song
 import io.github.proify.lyricon.subscriber.ActivePlayerListener

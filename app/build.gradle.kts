@@ -36,8 +36,8 @@ android {
         // CI stamps builds so every one is distinguishable in LSPosed and in the About page:
         // release.yml derives -PmcVersionName / -PmcVersionCode from the tag, nightly.yml adds
         // -PmcVersionSuffix. A plain local build keeps the values below.
-        versionCode = (findProperty("mcVersionCode") as String?)?.toInt() ?: 945003
-        versionName = ((findProperty("mcVersionName") as String?) ?: "0.9.45-Plus.3") +
+        versionCode = (findProperty("mcVersionCode") as String?)?.toInt() ?: 945004
+        versionName = ((findProperty("mcVersionName") as String?) ?: "0.9.45-Plus") +
                 ((findProperty("mcVersionSuffix") as String?) ?: "")
     }
 
