@@ -122,6 +122,8 @@ internal class MiniCardMorph(
     private val corner = FloatArray(2)
     private val oemMatrix = Matrix()
     private val morphMatrix = Matrix()
+    private val inverseMatrix = Matrix()
+    private val originPoint = FloatArray(2)
     private var clipW = 0f
     private var clipH = 0f
     private var clipR = 0f
@@ -142,10 +144,20 @@ internal class MiniCardMorph(
     private var placedBox: CoverMorphMotion.Box? = null
     private var placedScale = 0f
     private val placedOem = Matrix()
+    private var placedOriginX = Float.NaN
+    private var placedOriginY = Float.NaN
     private var observed: View? = null
     private val preDraw = ViewTreeObserver.OnPreDrawListener { android.os.Trace.beginSection("MC cardMorphPreDraw"); try {
         val box = placedBox
-        if (running && box != null && header.matrix != placedOem) placeHeader(box, placedScale)
+        if (running && box != null) {
+            val origin = headerOrigin()
+            // The native container can scroll after our frame without changing row.matrix.
+            // Compensate that parent movement too, before either direction is drawn.
+            if (origin != null && (header.matrix != placedOem ||
+                    origin[0] != placedOriginX || origin[1] != placedOriginY)) {
+                placeHeader(box, placedScale)
+            }
+        }
         true
     } finally { android.os.Trace.endSection() } }
 
@@ -708,8 +720,9 @@ internal class MiniCardMorph(
     private fun headerOrigin(): FloatArray? {
         val parent = header.parent as? View ?: return null
         parent.getLocationOnScreen(xy)
-        return floatArrayOf(xy[0] - parent.scrollX + header.left.toFloat(),
-            xy[1] - parent.scrollY + header.top.toFloat())
+        originPoint[0] = xy[0] - parent.scrollX + header.left.toFloat()
+        originPoint[1] = xy[1] - parent.scrollY + header.top.toFloat()
+        return originPoint
     }
 
     /**
@@ -724,11 +737,12 @@ internal class MiniCardMorph(
         placedBox = box
         placedScale = s
         placedOem.set(oemMatrix)
+        placedOriginX = origin[0]
+        placedOriginY = origin[1]
         morphMatrix.setScale(s, s)
         morphMatrix.postTranslate(box.x - origin[0], box.y - origin[1])
         if (!oemMatrix.isIdentity) {
-            val inverse = Matrix()
-            if (oemMatrix.invert(inverse)) morphMatrix.preConcat(inverse)
+            if (oemMatrix.invert(inverseMatrix)) morphMatrix.preConcat(inverseMatrix)
         }
         header.setAnimationMatrix(morphMatrix)
     }

@@ -2,6 +2,24 @@ package com.os4.musiccover.island
 import kotlin.math.abs
 import com.os4.musiccover.CoverMorphMotion
 
+/** Owns one visible motion; a new drag or a native handoff retires the previous release. */
+internal class MiniPlayerSpreadMotion {
+    var progress = 0f
+    var spring: MiniPlayerSpreadSpring? = null
+        private set
+
+    fun takeOver() { spring = null }
+
+    fun finish(toList: Boolean) {
+        takeOver()
+        progress = if (toList) 1f else 0f
+    }
+
+    fun release(toList: Boolean, speed: Float) {
+        spring = MiniPlayerSpreadSpring(progress, speed, toList)
+    }
+}
+
 /** The spread's release keeps the finger's speed, independent of OEM scroll jumps. */
 internal class MiniPlayerSpreadSpring(progress: Float, speed: Float, toList: Boolean) {
     private val motion = CoverMorphMotion().apply {

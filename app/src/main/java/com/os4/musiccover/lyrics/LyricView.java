@@ -302,6 +302,12 @@ final class LyricView extends View {
     private final java.util.HashSet<Integer> blurPending = new java.util.HashSet<>();
     /** Bumped by every rebuild, so a picture made for the previous layout is thrown away. */
     private volatile int buildGen;
+    private LyricGlowMask[] glowMasks = new LyricGlowMask[0];
+    private final java.util.HashSet<Integer> glowPending = new java.util.HashSet<>();
+    private volatile int glowGeneration;
+    private int glowWarmFocus = Integer.MIN_VALUE, glowWarmFirst = Integer.MIN_VALUE;
+    private volatile int glowFirst, glowLast = -1;
+    private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     /** The lines and width a layout is on its way for, or -1 with none in the air. */
     private int wantVersion = -1, wantWidth = -1;
     /** The translation and romanisation switches the layout in the air is for (LockLyrics.below()). */
@@ -515,6 +521,10 @@ final class LyricView extends View {
 
     @Override
     protected void onDetachedFromWindow() {
+        glowGeneration++;
+        glowWarmFocus = Integer.MIN_VALUE;
+        glowPending.clear();
+        java.util.Arrays.fill(glowMasks, null);
         paletteRequest++;
         if (paletteWork != null) blurHandler().removeCallbacks(paletteWork);
         paletteWork = null;
@@ -883,6 +893,7 @@ final class LyricView extends View {
         }
         if (!still && (wordsLive() || dotsLive())) why |= 256;
         LockLyrics.setGlowing(glowSoon());
+        prewarmGlow();
         noteWhy(why);
         return changed || (why & 256) != 0;
     }
@@ -1451,16 +1462,12 @@ final class LyricView extends View {
     /** A held note is glowing now, or is about to - the window's HDR mode follows this. */
     private boolean glowSoon() {
         if (!LockLyrics.hdr() || focus < 0 || show == 0f || !LockLyrics.playing()) return false;
-        for (int i = Math.max(0, singing.first); i <= focus; i++) {
-            if (!singing.contains(i)) continue;
+        // A line's first syllable needs the same lead time as a held note mid-line.
+        // Waiting for its emphasis/active-line transition switched color mode at glow onset.
+        for (int i = Math.max(0, singing.first); i <= Math.min(lines.size() - 1, focus + 1); i++) {
             LyricLine l = lines.get(i);
-            if (!l.hasWords() || emph[i] <= 0f) continue;
-            for (int k = 0; k < l.sylStart.length; k++) {
-                int s = l.sylStart[k], end = l.sylEnd[k];
-                if (end - s >= GLOW_MIN_MS && ms >= s - HDR_ARM_MS && ms < end + GLOW_TAIL_MS) {
-                    return true;
-                }
-            }
+            if (!singing.contains(i) && l.start <= ms) continue;
+            if (LyricGlow.arm(l, ms, GLOW_MIN_MS, HDR_ARM_MS, GLOW_TAIL_MS)) return true;
         }
         return false;
     }
@@ -1710,8 +1717,12 @@ final class LyricView extends View {
         layoutWidth = b.width;
         layoutMs = b.tookMs;
         buildGen++;
+        glowGeneration++;
+        glowWarmFocus = Integer.MIN_VALUE;
+        glowPending.clear();
         blurPending.clear();
         int n = lines.size();
+        glowMasks = new LyricGlowMask[n];
         main = b.main;
         trans = b.trans;
         bgLay = b.bgLay;
@@ -2463,6 +2474,52 @@ final class LyricView extends View {
 
     private static android.os.Handler sBlurHandler;
 
+    /** Keep only the singing passage and the next two lines, preparing before a held note. */
+    private void prewarmGlow() {
+        if (!isAttachedToWindow() || focus < 0 || glowMasks.length != lines.size()) return;
+        int first = Math.max(0, Math.min(focus - 2, singing.first >= 0 ? singing.first : focus));
+        if (glowWarmFocus == focus && glowWarmFirst == first) return;
+        glowWarmFocus = focus;
+        glowWarmFirst = first;
+        int last = Math.min(lines.size() - 1, focus + 2);
+        glowFirst = first;
+        glowLast = last;
+        for (int i = 0; i < glowMasks.length; i++) {
+            if (i < first || i > last) glowMasks[i] = null;
+        }
+        for (int i = Math.max(first, focus); i <= last; i++) requestGlow(i);
+        for (int i = first; i < focus; i++) requestGlow(i);
+    }
+
+    private void requestGlow(final int i) {
+        if (glowMasks[i] != null || glowPending.contains(i) || !lines.get(i).hasWords()) return;
+        final LyricLine line = lines.get(i);
+        boolean held = false;
+        for (int k = 0; k < line.sylStart.length; k++) {
+            if (line.sylEnd[k] - line.sylStart[k] >= GLOW_MIN_MS) { held = true; break; }
+        }
+        if (!held) return;
+        glowPending.add(i);
+        final int gen = glowGeneration;
+        final StaticLayout layout = main[i];
+        final float[] xs = charXFor(i, layout, line, charX);
+        final TextPaint copy = new TextPaint(paint);
+        blurHandler().post(() -> {
+            if (gen != glowGeneration) return;
+            LyricGlowMask mask = i < glowFirst || i > glowLast ? null :
+                    LyricGlowMask.build(line, layout, xs, copy, glowPx, GLOW_MIN_MS);
+            post(() -> {
+                if (gen != glowGeneration) { if (mask != null) mask.recycle(); return; }
+                glowPending.remove(i);
+                if (mask == null) return;
+                if (i < glowFirst || i > glowLast) { mask.recycle(); return; }
+                glowMasks[i] = mask;
+                invalidate();
+                kick();
+            });
+        });
+    }
+
     private static synchronized android.os.Handler blurHandler() {
         if (sBlurHandler == null) {
             android.os.HandlerThread t = new android.os.HandlerThread("MCLyricBlur",
@@ -2543,7 +2600,7 @@ final class LyricView extends View {
         StaticLayout lay = main[i];
         float level = INACTIVE + (1f - INACTIVE) * e;
         if (l.hasWords()) {
-            drawWordRows(c, l, lay, paint, charXFor(i, lay, l, charX), e, a * level,
+            drawWordRows(c, i, l, lay, paint, charXFor(i, lay, l, charX), e, a * level,
                     a * (INACTIVE + (1f - INACTIVE) * e * UNSUNG), 1f, true, 0);
         } else {
             lay.getPaint().setColor(ink(a * (INACTIVE + (1f - INACTIVE) * lit[i]), 0f));
@@ -2555,7 +2612,7 @@ final class LyricView extends View {
             int save = c.save();
             c.translate(0f, lay.getHeight() + lyricGap(BG_GAP_DP));
             if (l.bg.hasWords()) {
-                drawWordRows(c, l.bg, bl, bgPaint, charXFor(i, bl, l.bg, charXBg), e,
+                drawWordRows(c, i, l.bg, bl, bgPaint, charXFor(i, bl, l.bg, charXBg), e,
                         a * level,
                         a * (INACTIVE + (1f - INACTIVE) * e * UNSUNG),
                         BG_LIFT, false, 1);
@@ -2582,7 +2639,7 @@ final class LyricView extends View {
      * of the whole line - a second full-size pass on the render thread every frame, which was a
      * quarter of a core for as long as a word-timed song played (measured 2026-09-16).
      */
-    private void drawWordRows(Canvas c, LyricLine l, StaticLayout lay, TextPaint p, float[] xs,
+    private void drawWordRows(Canvas c, int i, LyricLine l, StaticLayout lay, TextPaint p, float[] xs,
                               float e, float sungA, float unsungA, float liftScale,
                               boolean glowOn, int gradSlot) {
         float sung = l.sungChars(ms);
@@ -2609,7 +2666,7 @@ final class LyricView extends View {
             rowFeather = feather;
             rowSungA = sungA;
             rowUnsungA = unsungA;
-            drawSyllables(c, l, lay, p, xs, e, r, liftScale, glowOn);
+            drawSyllables(c, i, l, lay, p, xs, e, r, liftScale, glowOn);
             p.setShader(null);
             p.setColor(0xFFFFFFFF);
         }
@@ -2620,7 +2677,7 @@ final class LyricView extends View {
      * held note glowing and swelling while it lasts. Drawn as runs with the whole row as context,
      * so the shaping and the spacing are the ones the layout measured.
      */
-    private void drawSyllables(Canvas c, LyricLine l, StaticLayout lay, TextPaint p, float[] xs,
+    private void drawSyllables(Canvas c, int i, LyricLine l, StaticLayout lay, TextPaint p, float[] xs,
                                float e, int r, float liftScale, boolean glowOn) {
         // Belt and braces: every caller is supposed to have asked hasWords() first.
         if (l.sylStart == null) return;
@@ -2647,7 +2704,16 @@ final class LyricView extends View {
                 float swell = 1f + GLOW_SWELL * glow;
                 c.scale(swell, swell, (x0 + x1) / 2f, baseline);
                 float g = glowGain(glow);
-                p.setShadowLayer(glowPx * glow, 0f, 0f, white(GLOW_ALPHA * glow, g));
+                LyricGlowMask masks = glowMasks[i];
+                LyricGlowMask.Run halo = masks == null ? null : masks.find(cs, ce);
+                if (halo != null) {
+                    for (int layer = 0; layer < LyricGlow.LAYERS; layer++) {
+                        float weight = LyricGlow.weight(glow, layer);
+                        if (weight <= 0f) continue;
+                        glowPaint.setColor(white(GLOW_ALPHA * glow * weight, g));
+                        c.drawBitmap(halo.layers[layer], halo.left, baseline - lift + halo.top, glowPaint);
+                    }
+                }
                 // The glowing syllable itself goes above white with its halo: its sung part
                 // through this row's gradient re-coloured, or all of it once the row is sung.
                 Shader rowShader = p.getShader();
@@ -2665,7 +2731,6 @@ final class LyricView extends View {
                 c.drawTextRun(l.text, cs, ce, rs, re, x0, baseline - lift, false, p);
                 p.setShader(rowShader);
                 p.setColor(rowColor);
-                p.clearShadowLayer();
                 c.restoreToCount(save);
             } else {
                 c.drawTextRun(l.text, cs, ce, rs, re, x0, baseline - lift, false, p);

@@ -4790,7 +4790,10 @@ internal class MiniPlayerController(
         /** Frames the scroll has stood still, nothing moving it. */
         var still = 0
         var lastY = Int.MIN_VALUE
-        var progress = 0f
+        val motion = MiniPlayerSpreadMotion()
+        var progress: Float
+            get() = motion.progress
+            set(value) { motion.progress = value }
         var rawProgress = 0f
         /** The stacked cards may need to catch up when the OEM scroll jumps to its end. */
         var visualAt = 0L
@@ -4806,7 +4809,7 @@ internal class MiniPlayerController(
         /** Pulled open by a finger still on the island: it scrolls the stack (followFinger). */
         var finger: SpreadFinger? = null
         var collapseFinger: SpreadCollapseFinger? = null
-        var releaseSpring: MiniPlayerSpreadSpring? = null
+        val releaseSpring: MiniPlayerSpreadSpring? get() = motion.spring
     }
 
     private class SpreadCollapseFinger(val startY: Float, val startProgress: Float, val range: Float) {
@@ -4859,7 +4862,7 @@ internal class MiniPlayerController(
             s.phase = SPREAD_CLOSING
         }
         s.collapseFinger = SpreadCollapseFinger(startY, s.progress, collapseRange(s))
-        s.releaseSpring = null
+        s.motion.takeOver()
         s.since = android.os.SystemClock.uptimeMillis()
         s.visualAt = s.since
         s.still = 0
@@ -5264,21 +5267,26 @@ internal class MiniPlayerController(
         if (held != null && held.first === row) return
         if (held != null) {
             held.first.viewTreeObserver.takeIf { it.isAlive }?.removeOnPreDrawListener(held.second)
-            setFoldAlpha(held.first, if (NumState.inNumber == true) 0f else 1f)
+            restoreFoldAlpha(held.first)
         }
         leadHeld = null
         if (row == null) return
-        val l = ViewTreeObserver.OnPreDrawListener { setFoldAlpha(row, 1f); true }
+        // Own only the final rendered alpha. Leave SystemUI's fold animator its own state
+        // so it can keep settling independently, ready for the final handoff.
+        val l = ViewTreeObserver.OnPreDrawListener { holdFoldAlpha(row); true }
         row.viewTreeObserver.addOnPreDrawListener(l)
         leadHeld = row to l
-        setFoldAlpha(row, 1f)
+        holdFoldAlpha(row)
     }
 
-    private fun setFoldAlpha(row: View, a: Float) {
+    private fun holdFoldAlpha(row: View) {
+        runCatching { Xp.callMethod(row, "setExtAlpha", 1f) }
+    }
+
+    private fun restoreFoldAlpha(row: View) {
         runCatching {
             val injector = Xp.callMethod(row, "getInjector")
-            if (Xp.getObjectField(injector, "numStateAlpha") as Float == a) return
-            Xp.setObjectField(injector, "numStateAlpha", a)
+            val a = Xp.getObjectField(injector, "numStateAlpha") as Float
             val folme = Xp.getObjectField(Xp.getObjectField(Xp.callMethod(row, "getViewState"),
                 "mInjector"), "folmeAlpha") as Float
             Xp.callMethod(row, "setExtAlpha", folme * a)
@@ -5458,13 +5466,16 @@ internal class MiniPlayerController(
     }
 
     private fun releaseSpread(s: Spread, toList: Boolean, speed: Float) {
-        s.releaseSpring = MiniPlayerSpreadSpring(s.progress, speed, toList)
+        s.motion.release(toList, speed)
         s.visualAt = android.os.SystemClock.uptimeMillis()
     }
 
     /** The list is open: the cards are the lock screen's own, the row's views put away. */
     private fun finishOpen(s: Spread, y: Int) {
+        s.motion.finish(toList = true)
+        s.finger = null
         s.collapseFinger = null
+        applySpread(s, 1f)
         holdLeadThroughFold(null)
         for (item in s.items) {
             item.morph?.cancel()
@@ -5512,6 +5523,9 @@ internal class MiniPlayerController(
         val folded = NumState.inNumber == true
         if (folded || listPulled() && toward > dp(SPREAD_PULL_DP)) {
             s.islandsY = islandsY
+            s.motion.takeOver()
+            s.finger = null
+            s.collapseFinger = null
             startSpreadMorphs(s, toCards = false)
             s.phase = SPREAD_CLOSING
             s.since = android.os.SystemClock.uptimeMillis()
