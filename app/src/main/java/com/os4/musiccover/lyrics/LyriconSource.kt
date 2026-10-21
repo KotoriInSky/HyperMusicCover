@@ -2,6 +2,7 @@ package com.os4.musiccover.lyrics
 import com.os4.musiccover.Xp
 import android.content.Context
 import android.content.ContextWrapper
+import io.github.proify.lyricon.lyric.model.LyricWord
 import io.github.proify.lyricon.lyric.model.RichLyricLine
 import io.github.proify.lyricon.lyric.model.Song
 import io.github.proify.lyricon.subscriber.ActivePlayerListener
@@ -342,65 +343,102 @@ object LyriconSource {
                 line.begin.toInt(), line.end.toInt(), line.isAlignedRight, null, null, null)
         }
         // The background vocal, which the renderer hangs under the line rather than beside it.
-        val second = line.secondary?.trim()
-        if (!second.isNullOrEmpty()) {
-            built.bg = background(second, line, nextStart)
+        // It stretches the line if it outlasts it, as it does from a file (LyricParse.parse).
+        val bg = background(line, nextStart)
+        if (bg != null) {
+            built.bg = bg
+            if (bg.end > built.end) built.end = bg.end
         }
         return built
     }
 
     /**
      * The backing vocal as a line of its own, with the bridge's own word timings when it
-     * published them.
+     * published them, or null when the bridge sent neither text nor words for it.
      *
-     * Its text is kept exactly as published rather than joined from the words: `LyricWord.text`
-     * does not always carry the spaces between words, and a joined copy would read
-     * "Fifty,fiftyfeetupunderground" (issue #29). Each word is found in that text in order and
-     * its syllable covers where it was found. A word that cannot be found - or one that leaves
-     * text after it, which the word path would not draw - makes the whole line line-timed, which
-     * draws correctly and simply does not fill word by word.
+     * Its text is the published secondary string where the words can be found in it:
+     * `LyricWord.text` does not always carry the spaces between words, and a joined copy would
+     * read "Fifty,fiftyfeetupunderground" (issue #29). Each word is found in that text in order
+     * and its syllable covers where it was found; brackets left after the last word are its own,
+     * since Flamingo publishes "(oh yeah)" over words that carry none (issue #102).
+     *
+     * Where the words cannot be found in it - Flamingo can also publish "(和声)和声", the bracketed
+     * copy run into the plain one, over a single copy's words - the words are joined instead:
+     * the timing the bridge has is worth more than the spaces, which only an English line loses.
+     * Words alone, with no text published, are joined the same way. A line without usable words
+     * stays line-timed, which draws correctly and simply does not fill word by word.
      *
      * This is also what keeps a backing vocal without any word timing off the word path: the
      * renderer used to hand every backing vocal to it whenever the lead line was word-timed,
      * and read the missing syllable array as a null (issue #94, SystemUI down).
+     *
+     * The brackets wrapping the whole line come off at the end, as from a file
+     * (LyricParse.unwrapBackground).
      */
-    private fun background(text: String, line: RichLyricLine, nextStart: Int): LyricLine {
-        val words = line.secondaryWords
-        if (!words.isNullOrEmpty()) {
-            val starts = ArrayList<Int>(words.size)
-            val ends = ArrayList<Int>(words.size)
-            val chars = ArrayList<Int>(words.size)
-            var at = 0
-            var usable = true
-            for (w in words) {
-                // Trimmed for the search only: the published line is trimmed too, so a word
-                // carrying a trailing space would otherwise not be found in it. The space then
-                // sits at the start of the next syllable's range and is still drawn.
-                val t = w.text?.trim().orEmpty()
-                if (t.isEmpty()) continue
-                val i = text.indexOf(t, at)
-                if (i < 0) {
-                    usable = false
-                    break
+    private fun background(line: RichLyricLine, nextStart: Int): LyricLine? {
+        val published = line.secondary?.trim().orEmpty()
+        val words = line.secondaryWords.orEmpty().filter { !it.text.isNullOrBlank() }
+        var built: LyricLine? = null
+        if (words.isNotEmpty()) {
+            var text = published
+            var chars = if (published.isEmpty()) null else placed(published, words)
+            if (chars == null) {
+                val sb = StringBuilder()
+                val cut = IntArray(words.size)
+                for ((k, w) in words.withIndex()) {
+                    sb.append(w.text)
+                    cut[k] = sb.length
                 }
-                at = i + t.length
-                starts.add(w.begin.toInt())
-                // A word with no end of its own is left to the tail-closing pass, as on the lead.
-                ends.add(if (w.end > w.begin) w.end.toInt() else w.begin.toInt())
-                chars.add(at)
+                var n = sb.length
+                while (n > 0 && sb[n - 1].isWhitespace()) n--
+                for (k in cut.indices) if (cut[k] > n) cut[k] = n
+                text = sb.substring(0, n)
+                chars = cut
             }
-            // The last word has to reach the line's own end: characters past it would be drawn
-            // by neither the word path nor anything else.
-            if (usable && starts.isNotEmpty() && at == text.length) {
-                val s = starts.toIntArray()
-                val e = ends.toIntArray()
+            if (text.isNotEmpty()) {
+                val s = IntArray(words.size) { words[it].begin.toInt() }
+                // A word with no end of its own is left to the tail-closing pass, as on the lead.
+                val e = IntArray(words.size) {
+                    val w = words[it]
+                    if (w.end > w.begin) w.end.toInt() else w.begin.toInt()
+                }
                 LyricParse.closeUntimedTail(s, e, line.end.toInt(), nextStart)
-                return LyricLine(text, null, line.begin.toInt(), line.end.toInt(),
-                    line.isAlignedRight, s, e, chars.toIntArray())
+                built = LyricLine(text, null, s[0], line.end.toInt(), line.isAlignedRight,
+                    s, e, chars)
             }
         }
-        return LyricLine(text, null, line.begin.toInt(), line.end.toInt(),
-            line.isAlignedRight, null, null, null)
+        if (built == null) {
+            if (published.isEmpty()) return null
+            built = LyricLine(published, null, line.begin.toInt(), line.end.toInt(),
+                line.isAlignedRight, null, null, null)
+        }
+        return LyricParse.unwrapBackground(built)
+    }
+
+    /**
+     * Where each word ends in text, found in order, or null when one is not there or text goes on
+     * past the last one with anything but spaces and closing brackets - characters the word path
+     * would draw with no syllable of their own.
+     */
+    private fun placed(text: String, words: List<LyricWord>): IntArray? {
+        val chars = IntArray(words.size)
+        var at = 0
+        for ((k, w) in words.withIndex()) {
+            // Trimmed for the search only: the published line is trimmed too, so a word carrying
+            // a trailing space would otherwise not be found in it. The space then sits at the
+            // start of the next syllable's range and is still drawn.
+            val t = w.text.orEmpty().trim()
+            val i = text.indexOf(t, at)
+            if (i < 0) return null
+            at = i + t.length
+            chars[k] = at
+        }
+        for (k in at until text.length) {
+            val c = text[k]
+            if (!c.isWhitespace() && c != ')' && c != '）') return null
+        }
+        chars[chars.size - 1] = text.length
+        return chars
     }
 
     /** Diagnostics: what the bridge is doing, for the probe. Never throws. */

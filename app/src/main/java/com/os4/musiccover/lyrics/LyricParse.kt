@@ -365,7 +365,7 @@ object LyricParse {
                 // the focus for the length of an echo. They hang under the main line they belong
                 // to (the last one started by then), and stretch it if they outlast it.
                 is KaraokeLine.AccompanimentKaraokeLine -> {
-                    val b = karaoke(line, nextStart) ?: continue
+                    val b = karaoke(line, nextStart)?.let { unwrapBackground(it) } ?: continue
                     val owner = out.lastOrNull { it.start <= b.start } ?: continue
                     if (owner.bg == null) {
                         owner.bg = b
@@ -384,7 +384,7 @@ object LyricParse {
                         // business, and a version that goes back to separate lines still works.
                         val acc = (line as? KaraokeLine.MainKaraokeLine)
                             ?.accompanimentLines?.firstOrNull()
-                        val b = acc?.let { karaoke(it, nextStart) }
+                        val b = acc?.let { karaoke(it, nextStart) }?.let { unwrapBackground(it) }
                         if (b != null) {
                             main.bg = b
                             if (b.end > main.end) main.end = b.end
@@ -797,6 +797,72 @@ object LyricParse {
         val shown = text.substring(0, n)
         return LyricLine(shown, line.translation, romaOf(line.phonetic, shown), line.start,
             line.end, line.alignment == KaraokeAlignment.End, starts, ends, chars)
+    }
+
+    /**
+     * A background vocal without the one pair of brackets wrapping all of it.
+     *
+     * The line is already drawn smaller and fainter under the one it echoes, which is what the
+     * brackets were saying; files and bridges disagree on whether to send them - TTML's x-bg
+     * usually does, inside its first and last words, and Flamingo's published text does while its
+     * words do not (issue #102) - so they are taken off everywhere and every source reads the
+     * same. Only a pair that opens the line and closes it: "(oh) yeah (oh)" keeps both of its
+     * own, and so does an unpaired one. ASCII and full-width alike.
+     *
+     * The syllables keep their timing and lose the characters taken off; a syllable that was
+     * nothing but a bracket goes with it.
+     */
+    internal fun unwrapBackground(line: LyricLine): LyricLine {
+        val text = line.text
+        var from = 0
+        var until = text.length
+        while (from < until && text[from].isWhitespace()) from++
+        while (until > from && text[until - 1].isWhitespace()) until--
+        if (until - from < 2) return line
+        val open = text[from]
+        val close = when (open) {
+            '(' -> ')'
+            '（' -> '）'
+            else -> return line
+        }
+        if (text[until - 1] != close) return line
+        // The opening bracket has to be the one the last character closes, not one closed earlier.
+        var depth = 0
+        for (k in from until until - 1) {
+            if (text[k] == open) depth++ else if (text[k] == close) depth--
+            if (depth == 0) return line
+        }
+        from++
+        until--
+        while (from < until && text[from].isWhitespace()) from++
+        while (until > from && text[until - 1].isWhitespace()) until--
+        if (until == from) return line
+        val shown = text.substring(from, until)
+        val chars = line.charEnd
+        if (chars == null) {
+            return LyricLine(shown, line.translation, line.roma, line.start, line.end,
+                line.opposite, null, null, null)
+        }
+        val starts = ArrayList<Int>(chars.size)
+        val ends = ArrayList<Int>(chars.size)
+        val cut = ArrayList<Int>(chars.size)
+        var prev = 0
+        for (k in chars.indices) {
+            val c = (chars[k] - from).coerceIn(0, shown.length)
+            if (c <= prev) continue
+            starts.add(line.sylStart[k])
+            ends.add(line.sylEnd[k])
+            cut.add(c)
+            prev = c
+        }
+        if (cut.isEmpty()) {
+            return LyricLine(shown, line.translation, line.roma, line.start, line.end,
+                line.opposite, null, null, null)
+        }
+        // Whatever was left past the last syllable before is drawn by it now.
+        cut[cut.size - 1] = shown.length
+        return LyricLine(shown, line.translation, line.roma, line.start, line.end, line.opposite,
+            starts.toIntArray(), ends.toIntArray(), cut.toIntArray())
     }
 
     /**
