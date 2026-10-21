@@ -79,6 +79,10 @@ object SettingsBackup {
                 json.put(KEY_SHADE, JSONObject(module.shade as Map<*, *>))
             }
             json.put(KEY_MINI, JSONObject(module.miniConfig))
+            json.put("lyricAppearance", JSONObject(module.lyricAppearance))
+            json.put("lyricSizeSp", module.lyricSizeSp.toDouble())
+            json.put("lyricBgSizeSp", module.lyricBgSizeSp.toDouble())
+            json.put("lyricsMaxLines", module.lyricsMaxLines)
         }
         return json.toString(2)
     }
@@ -88,6 +92,12 @@ object SettingsBackup {
         val settings = AppSettings.importFromJson(context, json)
         try {
             val obj = JSONObject(json)
+            if (obj.has("lyricAppearance")) {
+                ModuleBridge.setLyricAppearance(context, obj.getJSONObject("lyricAppearance").toString())
+            }
+            if (obj.has("lyricSizeSp")) ModuleBridge.setLyricStyle(context, "size", obj.getDouble("lyricSizeSp").toFloat())
+            if (obj.has("lyricBgSizeSp")) ModuleBridge.setLyricStyle(context, "bgsize", obj.getDouble("lyricBgSizeSp").toFloat())
+            if (obj.has("lyricsMaxLines")) ModuleBridge.setLyricsMaxLines(context, obj.getInt("lyricsMaxLines"))
             if (obj.has(KEY_BIAS)) ModuleBridge.setBias(context, obj.getDouble(KEY_BIAS).toFloat())
             // Only the mode. The square's size, place and corners are fixed, so a file that still
             // carries coverCardFill, coverCardPos, coverCardCorner or the dp coverCardSizeDp from

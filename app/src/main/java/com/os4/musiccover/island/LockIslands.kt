@@ -1322,7 +1322,7 @@ internal object LockIslands {
     }
 
     private fun pictureKeys(keys: List<String>): List<String> =
-        if (darkCapsule()) keys else keys.sortedBy { if (it.endsWith("Dark")) 1 else 0 }
+        NotificationPictureTheme.keys(keys, darkCapsule())
 
     private fun focusTemplate(n: Notification): Template? = runCatching {
         val raw = n.extras.getString("miui.focus.param") ?: return customTemplate(n)
