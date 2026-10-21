@@ -143,6 +143,11 @@ object ModuleBridge {
         val lyricsRoma: Boolean = false,
         /** Where the lines settle in their column: 0 left, 1 centre, 2 right. */
         val lyricsAlign: Int = 0,
+        val lyricsMaxLines: Int = 3,
+        val lyricSourceCustom: Boolean = false,
+        val lyricNetwork: Boolean = true,
+        val lyricSourceOrder: String = com.os4.musiccover.lyrics.LyricSourcePolicy.DEFAULT_SOURCES,
+        val lyricFormatOrder: String = com.os4.musiccover.lyrics.LyricSourcePolicy.DEFAULT_FORMATS,
         /** The lyric band's height as a share of the room between the clock and the card. */
         val lyricFill: Float = 1f,
         /** Where the band sits in the height it leaves: 0 top, 0.5 centre, 1 bottom. */
@@ -500,10 +505,18 @@ object ModuleBridge {
     fun setLyricsAlign(context: Context, mode: Int) =
         send(context, "lyricalign") { putExtra("v", mode) }
 
+    fun setLyricsMaxLines(context: Context, count: Int) =
+        send(context, "lyricmaxlines") { putExtra("v", count.coerceIn(1, 4)) }
+
+    fun setLyricSourcePolicy(context: Context, state: State) =
+        send(context, "lyricsourcepolicy") {
+            putExtra("custom", state.lyricSourceCustom)
+            putExtra("network", state.lyricNetwork)
+            putExtra("sources", state.lyricSourceOrder)
+            putExtra("formats", state.lyricFormatOrder)
+        }
+
     /**
-     * One of the five values the lyric band and its type are made of. All five are fixed now and
-     * no page offers them; the op still moves any of them for the rest of the session.
-     *
      * The module validates every value, including imported settings and adb broadcasts.
      */
     fun setLyricStyle(context: Context, key: String, value: Float) =
@@ -921,6 +934,11 @@ object ModuleBridge {
             aodBigClock = !b.getBoolean("aodsmall", true),
             lyricsRoma = b.getBoolean("lyricroma", false),
             lyricsAlign = b.getInt("lyricalign", 0),
+            lyricsMaxLines = b.getInt("lyricmaxlines", 3).coerceIn(1, 4),
+            lyricSourceCustom = b.getBoolean("lyricsourcecustom", false),
+            lyricNetwork = b.getBoolean("lyricnetwork", true),
+            lyricSourceOrder = com.os4.musiccover.lyrics.LyricSourcePolicy.normalizeSources(b.getString("lyricsourceorder")),
+            lyricFormatOrder = com.os4.musiccover.lyrics.LyricSourcePolicy.normalizeFormats(b.getString("lyricformatorder")),
             lyricFill = b.getFloat("lyricfill", 1f),
             lyricPos = b.getFloat("lyricpos", 0.5f),
             lyricSideDp = b.getFloat("lyricside", 30f),

@@ -74,6 +74,28 @@ public final class LocalLyrics {
         }
     }
 
+    static Found loadEmbedded(Context ctx, MediaController controller) {
+        if (ctx == null || controller == null) return null;
+        try {
+            String path = pathOf(ctx, controller);
+            return path == null ? null : embedded(path);
+        } catch (Throwable error) {
+            Xp.w("[MCLocal] embedded lookup failed: " + error);
+            return null;
+        }
+    }
+
+    static Found loadSidecar(Context ctx, MediaController controller, String[] formats) {
+        if (ctx == null || controller == null) return null;
+        try {
+            String path = pathOf(ctx, controller);
+            return path == null ? null : sidecar(path, formats);
+        } catch (Throwable error) {
+            Xp.w("[MCLocal] sidecar lookup failed: " + error);
+            return null;
+        }
+    }
+
     /**
      * Every step of the lookup, for `op local`.
      *
@@ -381,17 +403,25 @@ public final class LocalLyrics {
      * the volume is case-insensitive in practice, but asking costs one stat.
      */
     private static Found sidecar(String audio) {
-        int dot = audio.lastIndexOf('.');
-        String stem = dot <= 0 ? audio : audio.substring(0, dot);
-        String[] tries = {stem + ".lrc", stem + ".LRC"};
-        for (String p : tries) {
-            File f = new File(p);
-            if (!f.isFile() || f.length() == 0L || f.length() > MAX_LYRIC_BYTES) {
-                continue;
-            }
-            String body = decode(readAll(f));
-            if (usable(body)) {
-                return new Found(body, "a .lrc beside it", p);
+        return sidecar(audio, LyricSourcePolicy.current.formats());
+    }
+
+    static Found sidecar(String audio, String[] formats) {
+        File track = new File(audio);
+        File directory = track.getParentFile();
+        if (directory == null) return null;
+        String stem = baseName(audio);
+        File[] candidates = directory.listFiles();
+        if (candidates == null) return null;
+        java.util.Arrays.sort(candidates, java.util.Comparator.comparing(File::getName));
+        for (String format : formats) {
+            for (File file : candidates) {
+                if (!file.getName().equalsIgnoreCase(stem + "." + format)
+                        || !file.isFile() || file.length() == 0L || file.length() > MAX_LYRIC_BYTES) continue;
+                String body = decode(readAll(file));
+                if (body != null && !LyricSource.placeholder(body) && !LyricParse.parse(body).isEmpty()) {
+                    return new Found(body, "a ." + format + " beside it", file.getPath());
+                }
             }
         }
         return null;
@@ -423,8 +453,7 @@ public final class LocalLyrics {
      * through to the tag inside the audio.
      */
     private static boolean usable(String body) {
-        return body != null && LyricSource.TIMED.matcher(body).find()
-                && !LyricSource.placeholder(body);
+        return body != null && !LyricSource.placeholder(body) && !LyricParse.parse(body).isEmpty();
     }
 
     // ---------------------------------------------------------------- ID3v2

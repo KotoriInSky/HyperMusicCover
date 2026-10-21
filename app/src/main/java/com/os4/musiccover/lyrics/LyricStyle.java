@@ -12,14 +12,6 @@ public final class LyricStyle {
     /** Least room kept to the clock and the media card. */
     static final float GAP_DP = 16f;
     static final float MIN_FILL = 0.4f;
-    /**
-     * The band the lyrics are always drawn in.
-     *
-     * Every one of these was a slider and none of them is one now: the app has no row for any of
-     * the five and loadState does not read them. They are the values this shipped with, except
-     * the weight, which comes down from 600 to 500 - the one that was worth changing on the way
-     * past. `op lyricstyle` still moves all five for the rest of the session.
-     */
     static final LyricStyle DEFAULT = new LyricStyle(1f, 0.5f, 30f, 25f, 500);
 
     /** The band's height as a share of the room, MIN_FILL..1; never under MIN_ROWS rows. */

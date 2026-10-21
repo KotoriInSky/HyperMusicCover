@@ -1,0 +1,32 @@
+# v0.9.45 锁屏歌词迁移
+
+基线：上游正式版 `v0.9.45`（`3f0eaa4268416e15c3087d402b0f66b197197189`）。
+功能来源：`TIMENEXSakura/HyperMusicCover` 的 `stable-lyrics-fix` 分支（`5440368`）。
+本分支版本：`0.9.45-Plus`，versionCode `945001`。
+
+## 行为
+
+- 同时突出显示 1–4 段未结束歌词，默认 3 段；和声、译文随主段落排版，不另计名额。
+- 歌词字号 18–36 sp；多段整体居中，平滑弹簧移动、淡入淡出，间距随字号变化；AOD 静止模式直接落到目标。
+- 词幕和声保留独立逐字时间轴，隐藏完整外层括号，保留英文空格，并延长仍有和声的主段落。
+- 默认来源：歌曲元数据 → 同目录文件 → 词幕 → AMLL → TTML Hub → QQ → 网易云 → 酷狗 → 酷我 → LRCLIB。开启自定义后可拖动排序，包括将网络源移到前面。
+- “允许使用网络歌词源”控制 Cover 的在线来源与预取。关闭后仍可读取元数据、本地文件、词幕；词幕提供者自己的联网由其自身控制。采用首个可用来源，不跨源补充译文。
+- 同目录文件默认按 TTML → LRC → YRC → KRC → LYS 尝试，支持调整顺序；无效文件跳过。KRC 使用已解密文本。
+- 设置复用现有 miuix 的 SwitchPreference、BasicComponent、WindowDialog、TextButton、图标和主题。
+
+## 与上游合并
+
+保留 v0.9.45 的 HDR 能力判断、窗口停放与恢复、提前绘制、SystemUI 绘制异常保护、行内译文拆分，以及指纹快捷等非歌词功能。
+和声转换统一到 `LyriconBackground`，避免保留两套转换逻辑；渲染时分别检查主唱与和声的逐字数据。
+
+## 验证与构建
+
+GitHub Actions 工作流：`Build lyrics fix APK`（`lyrics-fix.yml`）。执行歌词回归套件后构建 release APK，并检查压缩后 APK 的 Xposed 入口与作用域。产物含 APK、SHA-256 和独立测试报告。
+
+```sh
+./gradlew --no-daemon :app:testDebugUnitTest -PmcLyricTestsOnly=true
+./gradlew --no-daemon :app:assembleRelease
+```
+
+上游部分非歌词测试仍使用迁包前的包名，专用工作流仅编译歌词测试包。原有歌词样式、括号逐字、译文处理测试已移入正确包，另补 v0.9.45 行内译文回归。
+仓库未配置签名密钥时使用项目默认调试签名；不能保证覆盖不同签名的已安装版本。JVM 测试不能验证手机 SystemUI 的视觉表现，仍需真机检查多段重叠、字号调整、拖动进度、翻译、和声和 AOD。

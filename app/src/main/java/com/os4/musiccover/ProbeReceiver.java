@@ -2,6 +2,7 @@ package com.os4.musiccover;
 
 import com.os4.musiccover.lyrics.LocalLyrics;
 import com.os4.musiccover.lyrics.LockLyrics;
+import com.os4.musiccover.lyrics.LyricSourcePolicy;
 import com.os4.musiccover.lyrics.LyricSource;
 import com.os4.musiccover.lyrics.LyriconSource;
 import com.os4.musiccover.lyrics.NcmLyrics;
@@ -164,6 +165,18 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
         } else if ("lyricstyle".equals(op)) {
             String key = i.getStringExtra("key");
             if (LockLyrics.setStyle(key, i.getFloatExtra("v", Float.NaN))) {
+                ModuleState.saveStateSoon();
+            }
+        } else if ("lyricsourcepolicy".equals(op)) {
+            LyricSourcePolicy.Config current = LyricSourcePolicy.current;
+            LockLyrics.setSourcePolicy(i.getBooleanExtra("custom", current.custom),
+                    i.getBooleanExtra("network", current.allowNetwork),
+                    i.hasExtra("sources") ? i.getStringExtra("sources") : current.sourceOrder,
+                    i.hasExtra("formats") ? i.getStringExtra("formats") : current.formatOrder);
+            ModuleState.saveStateSoon();
+        } else if ("lyricmaxlines".equals(op)) {
+            if (LockLyrics.setMaxLines(i.getIntExtra("v", LockLyrics.sMaxLines))) {
+                LockLyrics.refresh();
                 ModuleState.saveStateSoon();
             }
         } else if ("lyricalign".equals(op)) {
@@ -408,6 +421,11 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             out.putBoolean("lyrictrans", LockLyrics.sTrans);
             out.putBoolean("lyricroma", LockLyrics.sRoma);
             out.putInt("lyricalign", LockLyrics.sAlign);
+            out.putInt("lyricmaxlines", LockLyrics.sMaxLines);
+            out.putBoolean("lyricsourcecustom", LyricSourcePolicy.current.custom);
+            out.putBoolean("lyricnetwork", LyricSourcePolicy.current.allowNetwork);
+            out.putString("lyricsourceorder", LyricSourcePolicy.current.sourceOrder);
+            out.putString("lyricformatorder", LyricSourcePolicy.current.formatOrder);
             out.putFloat("lyricfill", LockLyrics.sStyle.fill);
             out.putFloat("lyricpos", LockLyrics.sStyle.pos);
             out.putFloat("lyricside", LockLyrics.sStyle.sideDp);

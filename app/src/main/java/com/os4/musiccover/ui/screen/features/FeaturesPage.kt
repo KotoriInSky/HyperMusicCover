@@ -575,13 +575,32 @@ private fun LyricsGroup(
         FoldUnder(module.lyrics, settled = module.alive) {
             Column {
                 BasicComponent(title = stringResource(R.string.lyrics_two_finger_tap), enabled = enabled)
-                // The lyrics themselves are not a setting any more: they are drawn whenever the track has
-                // a lyric, and the two-finger tap on the lock screen is how the cover is asked for
-                // instead. Neither is the band they are drawn in - its height, its place in the room, the
-                // margin the lines are held inside and the size and weight of the main line are all fixed
-                // now (see LyricStyle). The one thing about where the words go that is still the user's
-                // is where they settle between those margins; the switches below are about the words
-                // themselves, so all three stay.
+                LyricSourceSettings(enabled, module, onChange)
+                ValueSlider(
+                    title = stringResource(R.string.lyrics_max_lines),
+                    summary = stringResource(R.string.lyrics_max_lines_summary),
+                    value = module.lyricsMaxLines.toFloat(),
+                    valueRange = 1f..4f,
+                    enabled = enabled,
+                    label = { it.roundToInt().toString() },
+                    onValueChange = {
+                        val count = it.roundToInt().coerceIn(1, 4)
+                        onChange(module.copy(lyricsMaxLines = count))
+                        ModuleBridge.setLyricsMaxLines(context, count)
+                    },
+                )
+                ValueSlider(
+                    title = stringResource(R.string.lyrics_font_size),
+                    value = module.lyricSizeSp.coerceIn(18f, 36f),
+                    valueRange = 18f..36f,
+                    enabled = enabled,
+                    label = { "${it.roundToInt()} sp" },
+                    onValueChange = {
+                        val size = it.roundToInt().toFloat()
+                        onChange(module.copy(lyricSizeSp = size))
+                        ModuleBridge.setLyricStyle(context, "size", size)
+                    },
+                )
                 val alignModes = listOf(
                     stringResource(R.string.lyrics_align_left),
                     stringResource(R.string.lyrics_align_center),

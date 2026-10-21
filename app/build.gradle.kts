@@ -36,8 +36,8 @@ android {
         // CI stamps builds so every one is distinguishable in LSPosed and in the About page:
         // release.yml derives -PmcVersionName / -PmcVersionCode from the tag, nightly.yml adds
         // -PmcVersionSuffix. A plain local build keeps the values below.
-        versionCode = (findProperty("mcVersionCode") as String?)?.toInt() ?: 2
-        versionName = ((findProperty("mcVersionName") as String?) ?: "0.0.1") +
+        versionCode = (findProperty("mcVersionCode") as String?)?.toInt() ?: 945001
+        versionName = ((findProperty("mcVersionName") as String?) ?: "0.9.45-Plus") +
                 ((findProperty("mcVersionSuffix") as String?) ?: "")
     }
 
@@ -106,6 +106,15 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // The upstream tests outside this package still refer to classes before their package
+    // moves. The lyric workflow compiles and runs the migrated lyric regression suite.
+    if (providers.gradleProperty("mcLyricTestsOnly").orNull == "true") {
+        sourceSets.getByName("test") {
+            java.setSrcDirs(listOf("src/test/java/com/os4/musiccover/lyrics"))
+            kotlin.setSrcDirs(listOf("src/test/java/com/os4/musiccover/lyrics"))
+        }
     }
 
     buildFeatures {
