@@ -151,7 +151,6 @@
          says there is none; only when neither provider module is on the phone does it warn. -->
     <string name="lyrics_provider_title_missing">未安装歌词模块</string>
     <string name="lyrics_provider_missing">显示歌词可能不准或缺失；如未正确安装 LyricInfo 或Lyricon带来的问题请勿向开发者反馈</string>
-    <string name="lyrics_provider_ready">作用域外的应用仍存在匹配失败可能</string>
     <string name="lyrics_source">取词方式：%1$s</string>
     <string name="lyrics_source_none">无歌词来源</string>
     <string name="lyrics_source_session">播放器提供</string>
@@ -169,6 +168,22 @@
     <string name="lyrics_trans">显示翻译</string>
     <string name="lyrics_enabled">启用锁屏歌词</string>
     <string name="lyrics_roma">显示罗马音</string>
+    <string name="lyrics_style_title">歌词外观</string>
+    <string name="lyrics_style_general">通用</string>
+    <string name="lyrics_style_text">文字</string>
+    <string name="lyrics_size">字号</string>
+    <string name="lyrics_style_main">主歌词</string>
+    <string name="lyrics_style_backing">和声</string>
+    <string name="lyrics_color">颜色</string>
+    <string name="lyrics_color_official">官方</string>
+    <string name="lyrics_color_cover">跟随封面</string>
+    <string name="lyrics_color_custom">自定义</string>
+    <string name="lyrics_color_cover_summary">从当前封面取柔和的颜色，取不到时用白色</string>
+    <string name="lyrics_opacity">不透明度</string>
+    <string name="lyrics_style_reset">恢复默认</string>
+    <string name="lyrics_style_reset_summary">本页所有设置都会回到默认值</string>
+    <string name="lyrics_style_done">完成</string>
+    <string name="lyrics_online">在线歌词补充</string>
     <string name="lyrics_align">歌词对齐方式</string>
     <string name="lyrics_align_left">居左</string>
     <string name="lyrics_align_center">居中</string>
@@ -222,7 +237,7 @@
     <string name="commute_title">地铁通勤</string>
     <string name="commute_learn">学习通勤路线</string>
     <string name="commute_learn_summary">存在本机，30天后自动删除</string>
-    <string name="commute_unreached">小爱建议没有运行，打开一次负一屏后再进来</string>
+    <string name="commute_unreached">暂时读不到通勤记录，稍后再进来看看</string>
     <string name="commute_route_direct">直达 · %1$d 次</string>
     <string name="commute_route_via">%1$s 换乘 · %2$d 次</string>
     <string name="commute_forget">清除通勤记录</string>

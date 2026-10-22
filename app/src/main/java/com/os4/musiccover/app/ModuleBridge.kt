@@ -141,6 +141,8 @@ object ModuleBridge {
         val aodBigClock: Boolean = false,
         /** Draw each line's romanisation under it, over the translation. Off by default. */
         val lyricsRoma: Boolean = false,
+        /** Whether lyrics may be looked up on the network. On by default. */
+        val lyricsOnline: Boolean = true,
         /** Where the lines settle in their column: 0 left, 1 centre, 2 right. */
         val lyricsAlign: Int = 0,
         /** The lyric band's height as a share of the room between the clock and the card. */
@@ -150,6 +152,10 @@ object ModuleBridge {
         val lyricSideDp: Float = 30f,
         val lyricSizeSp: Float = 25f,
         val lyricWeight: Int = 500,
+        /** The backing vocal's size, beside lyricSizeSp. */
+        val lyricBgSizeSp: Float = 17f,
+        /** Colours and opacity of the lead and the backing vocal, as LyricAppearance's JSON. */
+        val lyricAppearance: String = "",
         /**
          * A session has actually carried its own lyric since SystemUI started.
          *
@@ -496,13 +502,19 @@ object ModuleBridge {
         send(context, "aodclock") { putExtra("small", !on) }
     fun setLyricsRoma(context: Context, on: Boolean) =
         send(context, "lyricroma") { putExtra("on", on) }
+    fun setLyricsOnline(context: Context, on: Boolean) =
+        send(context, "lyriconline") { putExtra("on", on) }
 
     fun setLyricsAlign(context: Context, mode: Int) =
         send(context, "lyricalign") { putExtra("v", mode) }
 
+    /** LyricAppearance's JSON; the module parses and validates it. */
+    fun setLyricAppearance(context: Context, json: String) =
+        send(context, "lyricappearance") { putExtra("json", json) }
+
     /**
-     * One of the five values the lyric band and its type are made of. All five are fixed now and
-     * no page offers them; the op still moves any of them for the rest of the session.
+     * One of the values the lyric band and its type are made of. "size" and "bgsize" are the
+     * 歌词外观 page's and saved; the rest are fixed and move only for the session.
      *
      * The module validates every value, including imported settings and adb broadcasts.
      */
@@ -920,12 +932,15 @@ object ModuleBridge {
             // is wanted, so the answer is inverted here (see State.aodBigClock).
             aodBigClock = !b.getBoolean("aodsmall", true),
             lyricsRoma = b.getBoolean("lyricroma", false),
+            lyricsOnline = b.getBoolean("lyriconline", true),
             lyricsAlign = b.getInt("lyricalign", 0),
             lyricFill = b.getFloat("lyricfill", 1f),
             lyricPos = b.getFloat("lyricpos", 0.5f),
             lyricSideDp = b.getFloat("lyricside", 30f),
             lyricSizeSp = b.getFloat("lyricsize", 25f),
             lyricWeight = b.getInt("lyricweight", 500),
+            lyricBgSizeSp = b.getFloat("lyricbgsize", 17f),
+            lyricAppearance = b.getString("lyricappearance") ?: "",
             sessionLyric = b.getBoolean("sessionlyric", false),
             lyricSource = b.getString("lyricsrc") ?: "none",
             lyriconInstalled = b.getBoolean("lyricon", false),

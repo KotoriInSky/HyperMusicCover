@@ -34,7 +34,11 @@ object SettingsBackup {
     private const val KEY_LYRICS_TRANS = "lyricsTranslation"
     private const val KEY_AOD_BIG_CLOCK = "aodBigClock"
     private const val KEY_LYRICS_ROMA = "lyricsRomanisation"
+    private const val KEY_LYRICS_ONLINE = "lyricsOnline"
     private const val KEY_LYRICS_ALIGN = "lyricsAlignment"
+    private const val KEY_LYRICS_SIZE = "lyricsSize"
+    private const val KEY_LYRICS_BG_SIZE = "lyricsBackingSize"
+    private const val KEY_LYRICS_APPEARANCE = "lyricsAppearance"
     private const val KEY_FP_AVOID = "fingerprintAvoid"
     private const val KEY_TRANSIT = "amapTransit"
     /** The whole notification-shade page, as one object keyed the way the module names them. */
@@ -50,7 +54,7 @@ object SettingsBackup {
             // The settings that are no longer settings are not written, and not read back on
             // import either: the square's size and place, the clock's offset, the glass
             // end, the spring, the two media card switches, the small AOD clock, the lyrics
-            // switch and the five values the lyric band and its type were. Each is fixed where it
+            // switch and the four values of the lyric band besides its two sizes. Each is fixed where it
             // is used now, so a backup that carries one is a backup of something that can no
             // longer be set - see Main and LyricStyle. The keys are gone from this file rather
             // than kept for compatibility: importing a value nothing can hold is the one outcome
@@ -70,7 +74,13 @@ object SettingsBackup {
             json.put(KEY_LYRICS_TRANS, module.lyricsTrans)
             json.put(KEY_AOD_BIG_CLOCK, module.aodBigClock)
             json.put(KEY_LYRICS_ROMA, module.lyricsRoma)
+            json.put(KEY_LYRICS_ONLINE, module.lyricsOnline)
             json.put(KEY_LYRICS_ALIGN, module.lyricsAlign)
+            json.put(KEY_LYRICS_SIZE, module.lyricSizeSp.toDouble())
+            json.put(KEY_LYRICS_BG_SIZE, module.lyricBgSizeSp.toDouble())
+            if (module.lyricAppearance.isNotEmpty()) {
+                json.put(KEY_LYRICS_APPEARANCE, JSONObject(module.lyricAppearance))
+            }
             json.put(KEY_FP_AVOID, module.fpAvoid)
             json.put(KEY_TRANSIT, module.transit)
             // Written whole rather than key by key, because the map is built from the module's
@@ -136,8 +146,20 @@ object SettingsBackup {
             if (obj.has(KEY_LYRICS_ROMA)) {
                 ModuleBridge.setLyricsRoma(context, obj.getBoolean(KEY_LYRICS_ROMA))
             }
+            if (obj.has(KEY_LYRICS_ONLINE)) {
+                ModuleBridge.setLyricsOnline(context, obj.getBoolean(KEY_LYRICS_ONLINE))
+            }
             if (obj.has(KEY_LYRICS_ALIGN)) {
                 ModuleBridge.setLyricsAlign(context, obj.getInt(KEY_LYRICS_ALIGN))
+            }
+            if (obj.has(KEY_LYRICS_SIZE)) {
+                ModuleBridge.setLyricStyle(context, "size", obj.getDouble(KEY_LYRICS_SIZE).toFloat())
+            }
+            if (obj.has(KEY_LYRICS_BG_SIZE)) {
+                ModuleBridge.setLyricStyle(context, "bgsize", obj.getDouble(KEY_LYRICS_BG_SIZE).toFloat())
+            }
+            if (obj.has(KEY_LYRICS_APPEARANCE)) {
+                ModuleBridge.setLyricAppearance(context, obj.getJSONObject(KEY_LYRICS_APPEARANCE).toString())
             }
             if (obj.has(KEY_FP_AVOID)) {
                 ModuleBridge.setFingerprintAvoid(context, obj.getInt(KEY_FP_AVOID))

@@ -145,7 +145,6 @@
     <!-- Three states rather than two; see the default strings for what they mean. -->
     <string name="lyrics_provider_title_missing">No lyric module installed</string>
     <string name="lyrics_provider_missing">Lyrics may be wrong or missing. Please do not report problems caused by installing LyricInfo or Lyricon incorrectly.</string>
-    <string name="lyrics_provider_ready">Apps outside its scope can still fail to match.</string>
     <string name="lyrics_source">Lyrics from: %1$s</string>
     <string name="lyrics_source_none">No lyric source</string>
     <string name="lyrics_source_session">the player</string>
@@ -163,6 +162,22 @@
     <string name="lyrics_trans">Show translations</string>
     <string name="lyrics_enabled">Enable lock screen lyrics</string>
     <string name="lyrics_roma">Show romanisations</string>
+    <string name="lyrics_style_title">Lyric appearance</string>
+    <string name="lyrics_style_general">General</string>
+    <string name="lyrics_style_text">Text</string>
+    <string name="lyrics_size">Size</string>
+    <string name="lyrics_style_main">Lead</string>
+    <string name="lyrics_style_backing">Backing vocal</string>
+    <string name="lyrics_color">Colour</string>
+    <string name="lyrics_color_official">Official</string>
+    <string name="lyrics_color_cover">From the cover</string>
+    <string name="lyrics_color_custom">Custom</string>
+    <string name="lyrics_color_cover_summary">Soft colours taken from the current cover; white when there are none</string>
+    <string name="lyrics_opacity">Opacity</string>
+    <string name="lyrics_style_reset">Restore defaults</string>
+    <string name="lyrics_style_reset_summary">Everything on this page goes back to its default</string>
+    <string name="lyrics_style_done">Done</string>
+    <string name="lyrics_online">Fill in from online</string>
     <string name="lyrics_align">Lyric alignment</string>
     <string name="lyrics_align_left">Left</string>
     <string name="lyrics_align_center">Center</string>
@@ -212,7 +227,7 @@
     <string name="commute_title">Subway commute</string>
     <string name="commute_learn">Learn commutes</string>
     <string name="commute_learn_summary">Kept on this phone, deleted after 30 days</string>
-    <string name="commute_unreached">XiaoAi Suggestions is not running. Open the minus-one screen once, then come back</string>
+    <string name="commute_unreached">Commute records are not available right now. Check back later</string>
     <string name="commute_route_direct">Direct · %1$d trips</string>
     <string name="commute_route_via">Change at %1$s · %2$d trips</string>
     <string name="commute_forget">Forget commutes</string>

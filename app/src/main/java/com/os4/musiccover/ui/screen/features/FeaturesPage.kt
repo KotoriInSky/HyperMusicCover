@@ -32,6 +32,7 @@ import com.os4.musiccover.app.ShadeActivity
 import com.os4.musiccover.app.MiniPlayerActivity
 import com.os4.musiccover.app.TransitActivity
 import com.os4.musiccover.app.FpQuickActivity
+import com.os4.musiccover.app.LyricStyleActivity
 import com.os4.musiccover.ui.util.PageScaffold
 import kotlinx.coroutines.delay
 import org.json.JSONObject
@@ -306,6 +307,18 @@ internal fun CoverPageView(
                 }
             }
         }
+        // How the lock screen asks for the lyrics: a gesture, not a setting, so it is said under
+        // the card in the small grey type of a note rather than as a row in it (user, 2026-10-23).
+        if (group == 2 && module.lyrics) {
+            item(key = "lyrics-hint") {
+                MiuixText(
+                    text = stringResource(R.string.lyrics_two_finger_tap),
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(start = 28.dp, end = 28.dp, bottom = 12.dp),
+                )
+            }
+        }
     }
 }
 
@@ -496,8 +509,6 @@ private fun LyricsGroup(
         source == null -> stringResource(R.string.lyrics_source_none)
         else -> stringResource(R.string.lyrics_source, source)
     }
-    val summary = if (missingModule) R.string.lyrics_provider_missing
-                  else R.string.lyrics_provider_ready
     // Said twice, because once was not enough. The row standing at the top of the group is
     // always there; this is the interruption, and it is only worth interrupting for the one
     // state that asks for something to be done.
@@ -522,7 +533,7 @@ private fun LyricsGroup(
     WindowDialog(
         show = showNotice,
         title = title,
-        summary = stringResource(summary),
+        summary = stringResource(R.string.lyrics_provider_missing),
         // Held for fifteen seconds, and held means held: an outside tap and the back gesture
         // both come through here, so there is no way out of it before the button unlocks. A
         // notice asking for a module to be installed is read by nobody if it can be flicked
@@ -547,8 +558,17 @@ private fun LyricsGroup(
         )
     }
     Column {
+        // The standing half of the notice, as the master switch's summary: where the words on
+        // the lock screen came from, or - in red - that nothing on the phone reads a player's own
+        // lyric. It never goes away and never asks to be dismissed, which is what makes it useful
+        // on the visit after the notice was flicked away (a row of its own until 2026-10-23).
         SwitchPreference(
             title = stringResource(R.string.lyrics_enabled),
+            summary = title,
+            summaryColor = BasicComponentDefaults.summaryColor(
+                color = if (missingModule) MiuixTheme.colorScheme.error
+                        else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            ),
             checked = module.lyrics,
             enabled = enabled,
             onCheckedChange = {
@@ -556,78 +576,23 @@ private fun LyricsGroup(
                 ModuleBridge.setLyrics(context, it)
             },
         )
-        // The standing half of the same statement. It never goes away and it never asks to be
-        // dismissed, which is what makes it useful on the visit after the notice was flicked
-        // away - or on a phone where the module had not answered yet when the notice was due.
-        BasicComponent(
-            title = title,
-            titleColor = BasicComponentDefaults.titleColor(
-                color = if (missingModule) MiuixTheme.colorScheme.error
-                        else MiuixTheme.colorScheme.onBackground,
-            ),
-            summary = stringResource(summary),
-        )
-        // How the lock screen is asked for the cover instead while the switch above is on. A row
-        // rather than a summary on one of the switches below: none of them is about the cover,
-        // and this is not a description of any of them.
         // Every row under here is about the words the master switch turns off, so they fold
-        // away with it, as miuix's own example does.
+        // away with it, as miuix's own example does. How they look comes first (user, 2026-10-23);
+        // what is left decides whether there are lyrics and where they come from.
         FoldUnder(module.lyrics, settled = module.alive) {
             Column {
-                BasicComponent(title = stringResource(R.string.lyrics_two_finger_tap), enabled = enabled)
-                // The lyrics themselves are not a setting any more: they are drawn whenever the track has
-                // a lyric, and the two-finger tap on the lock screen is how the cover is asked for
-                // instead. Neither is the band they are drawn in - its height, its place in the room, the
-                // margin the lines are held inside and the size and weight of the main line are all fixed
-                // now (see LyricStyle). The one thing about where the words go that is still the user's
-                // is where they settle between those margins; the switches below are about the words
-                // themselves, so all three stay.
-                val alignModes = listOf(
-                    stringResource(R.string.lyrics_align_left),
-                    stringResource(R.string.lyrics_align_center),
-                    stringResource(R.string.lyrics_align_right),
-                )
-                WindowDropdownPreference(
-                    title = stringResource(R.string.lyrics_align),
-                    items = alignModes,
-                    selectedIndex = module.lyricsAlign.coerceIn(0, alignModes.lastIndex),
+                ArrowPreference(
+                    title = stringResource(R.string.lyrics_style_title),
                     enabled = enabled,
-                    onSelectedIndexChange = {
-                        onChange(module.copy(lyricsAlign = it))
-                        ModuleBridge.setLyricsAlign(context, it)
-                    },
+                    onClick = { context.startActivity(Intent(context, LyricStyleActivity::class.java)) },
                 )
                 SwitchPreference(
-                    title = stringResource(R.string.lyrics_trans),
-                    checked = module.lyricsTrans,
+                    title = stringResource(R.string.lyrics_online),
+                    checked = module.lyricsOnline,
                     enabled = enabled,
                     onCheckedChange = {
-                        onChange(module.copy(lyricsTrans = it))
-                        ModuleBridge.setLyricsTrans(context, it)
-                    },
-                )
-                SwitchPreference(
-                    title = stringResource(R.string.lyrics_roma),
-                    checked = module.lyricsRoma,
-                    enabled = enabled,
-                    onCheckedChange = {
-                        onChange(module.copy(lyricsRoma = it))
-                        ModuleBridge.setLyricsRoma(context, it)
-                    },
-                )
-                // A screen with no HDR headroom gets nothing from the highlight and would still pay
-                // for its window; SystemUI ignores the switch there, and it is shown off here.
-                val hdrScreen = remember { com.os4.musiccover.lyrics.HdrDisplay.supported(context) }
-                SwitchPreference(
-                    title = stringResource(R.string.lyrics_hdr),
-                    summary = stringResource(
-                        if (hdrScreen) R.string.lyrics_hdr_summary else R.string.lyrics_hdr_unsupported
-                    ),
-                    checked = module.lyricsHdr && hdrScreen,
-                    enabled = enabled && hdrScreen,
-                    onCheckedChange = {
-                        onChange(module.copy(lyricsHdr = it))
-                        ModuleBridge.setLyricsHdr(context, it)
+                        onChange(module.copy(lyricsOnline = it))
+                        ModuleBridge.setLyricsOnline(context, it)
                     },
                 )
                 SwitchPreference(

@@ -126,6 +126,13 @@
             android:label="@string/features_cover_title"
             android:theme="@style/Theme.HyperMusicCover" />
 
+        <!-- 歌词外观, opened from the cover screen's lyrics tab. -->
+        <activity
+            android:name=".app.LyricStyleActivity"
+            android:exported="false"
+            android:label="@string/lyrics_style_title"
+            android:theme="@style/Theme.HyperMusicCover" />
+
         <activity
             android:name=".app.ShadeActivity"
             android:exported="false"
