@@ -316,108 +316,108 @@ private fun FpQuickPage(blur: Boolean, refreshKey: Int, onBack: () -> Unit) {
 
     val usable = module.alive && module.fpQuickOk
     val editing = usable && config.on
-            PageScaffold(title = stringResource(R.string.features_fpquick_title), isBlurEnabled = blur,
-                onBack = onBack,
-                // 恢复默认 as a page action in the bar, the way miuix's own example puts one there
-                // (PullToRefreshPage's refresh), drawn with the home page's restart glyph.
-                actions = {
-                    if (editing) {
-                        val can = config.items != null
-                        IconButton(enabled = can, onClick = { dialog = AddDialog.RESET }) {
-                            Icon(Icons.Rounded.Refresh, stringResource(R.string.fpquick_reset),
-                                tint = if (can) MiuixTheme.colorScheme.onBackground
-                                       else MiuixTheme.colorScheme.disabledOnSecondaryVariant)
-                        }
-                    }
-                },
-                // 添加 as the page's main action: miuix's docs, FloatingActionButton bound to the
-                // Scaffold. Not greyed when full (the user's call): it says why instead.
-                floatingActionButton = {
-                    if (editing) {
-                        FloatingActionButton(
-                            modifier = Modifier.navigationBarsPadding(),
-                            onClick = {
-                                target = null
-                                dialog = if (config.firstOpen() == null) AddDialog.FULL else AddDialog.TYPE
-                            }) {
-                            Icon(MiuixIcons.Add, stringResource(R.string.fpquick_add_button), tint = Color.White)
-                        }
-                    }
-                }) {
-                item(key = "switch") {
-                    Card(Modifier.firstCard()) {
-                        // Only an answer can put this on (ShadePageView says why).
-                        SwitchPreference(title = stringResource(R.string.fpquick_enabled),
-                            summary = when {
-                                asked && !module.alive -> stringResource(R.string.home_status_inactive_hint)
-                                module.alive && !module.fpQuickOk -> stringResource(R.string.fpquick_unsupported)
-                                else -> null
-                            },
-                            checked = editing, enabled = usable,
-                            onCheckedChange = { save(config.copy(on = it)) })
-                        FoldUnder(editing, settled = module.alive) {
-                            Column {
-                                val shown = if (dragTotal >= 0f) dragTotal else config.total.toFloat()
-                                ValueSlider(
-                                    title = stringResource(R.string.fpquick_time),
-                                    value = shown,
-                                    valueRange = 0f..MAX_TOTAL.toFloat(),
-                                    enabled = true,
-                                    detent = DEFAULT_TOTAL.toFloat(),
-                                    label = { "${it.toInt()} ms" },
-                                    onValueChange = { dragTotal = (Math.round(it / 50f) * 50).toFloat() },
-                                    onValueChangeFinished = {
-                                        if (dragTotal >= 0f) save(config.copy(total = dragTotal.toInt()))
-                                        dragTotal = -1f
-                                    })
-                                SwitchPreference(title = stringResource(R.string.fpquick_move),
-                                    checked = config.move,
-                                    onCheckedChange = { save(config.copy(move = it)) })
-                                SwitchPreference(title = stringResource(R.string.fpquick_face),
-                                    checked = config.face,
-                                    onCheckedChange = { save(config.copy(face = it)) })
-                            }
-                        }
-                    }
+    PageScaffold(title = stringResource(R.string.features_fpquick_title), isBlurEnabled = blur,
+        onBack = onBack,
+        // 恢复默认 as a page action in the bar, the way miuix's own example puts one there
+        // (PullToRefreshPage's refresh), drawn with the home page's restart glyph.
+        actions = {
+            if (editing) {
+                val can = config.items != null
+                IconButton(enabled = can, onClick = { dialog = AddDialog.RESET }) {
+                    Icon(Icons.Rounded.Refresh, stringResource(R.string.fpquick_reset),
+                        tint = if (can) MiuixTheme.colorScheme.onBackground
+                               else MiuixTheme.colorScheme.disabledOnSecondaryVariant)
                 }
-                item(key = "layout") {
-                    FoldUnder(editing, settled = module.alive) {
-                        Column {
-                            SmallTitle(text = stringResource(R.string.fpquick_layout))
-                            Card(Modifier.nextCard()) {
-                                HiveEditor(config.slots, onTap = { i ->
-                                    target = i
-                                    dialog = if (i < config.slots.size && !isEmpty(config.slots[i])) {
-                                        AddDialog.SLOT
-                                    } else {
-                                        AddDialog.TYPE
-                                    }
-                                })
-                            }
-                        }
-                    }
-                }
-                item(key = "items") {
-                    FoldUnder(editing, settled = module.alive) {
-                        Column {
-                            SmallTitle(text = stringResource(R.string.fpquick_items))
-                            Card(Modifier.nextCard()) {
-                                val filled = config.filled
-                                ItemList(filled.map { it.second },
-                                    // A new order of the same items into the same places.
-                                    onMove = { list ->
-                                        var next = config
-                                        filled.forEachIndexed { k, (slot, _) -> next = next.withSlot(slot, list[k]) }
-                                        save(next)
-                                    },
-                                    onRemove = { k -> save(config.withSlot(filled[k].first, null)) })
-                            }
-                        }
-                    }
-                }
-                // Room for the last row above the floating button.
-                item(key = "fab") { Spacer(Modifier.height(88.dp)) }
             }
+        },
+        // 添加 as the page's main action: miuix's docs, FloatingActionButton bound to the
+        // Scaffold. Not greyed when full (the user's call): it says why instead.
+        floatingActionButton = {
+            if (editing) {
+                FloatingActionButton(
+                    modifier = Modifier.navigationBarsPadding(),
+                    onClick = {
+                        target = null
+                        dialog = if (config.firstOpen() == null) AddDialog.FULL else AddDialog.TYPE
+                    }) {
+                    Icon(MiuixIcons.Add, stringResource(R.string.fpquick_add_button), tint = Color.White)
+                }
+            }
+        }) {
+        item(key = "switch") {
+            Card(Modifier.firstCard()) {
+                // Only an answer can put this on (ShadePageView says why).
+                SwitchPreference(title = stringResource(R.string.fpquick_enabled),
+                    summary = when {
+                        asked && !module.alive -> stringResource(R.string.home_status_inactive_hint)
+                        module.alive && !module.fpQuickOk -> stringResource(R.string.fpquick_unsupported)
+                        else -> null
+                    },
+                    checked = editing, enabled = usable,
+                    onCheckedChange = { save(config.copy(on = it)) })
+                FoldUnder(editing, settled = module.alive) {
+                    Column {
+                        val shown = if (dragTotal >= 0f) dragTotal else config.total.toFloat()
+                        ValueSlider(
+                            title = stringResource(R.string.fpquick_time),
+                            value = shown,
+                            valueRange = 0f..MAX_TOTAL.toFloat(),
+                            enabled = true,
+                            detent = DEFAULT_TOTAL.toFloat(),
+                            label = { "${it.toInt()} ms" },
+                            onValueChange = { dragTotal = (Math.round(it / 50f) * 50).toFloat() },
+                            onValueChangeFinished = {
+                                if (dragTotal >= 0f) save(config.copy(total = dragTotal.toInt()))
+                                dragTotal = -1f
+                            })
+                        SwitchPreference(title = stringResource(R.string.fpquick_move),
+                            checked = config.move,
+                            onCheckedChange = { save(config.copy(move = it)) })
+                        SwitchPreference(title = stringResource(R.string.fpquick_face),
+                            checked = config.face,
+                            onCheckedChange = { save(config.copy(face = it)) })
+                    }
+                }
+            }
+        }
+        item(key = "layout") {
+            FoldUnder(editing, settled = module.alive) {
+                Column {
+                    SmallTitle(text = stringResource(R.string.fpquick_layout))
+                    Card(Modifier.nextCard()) {
+                        HiveEditor(config.slots, onTap = { i ->
+                            target = i
+                            dialog = if (i < config.slots.size && !isEmpty(config.slots[i])) {
+                                AddDialog.SLOT
+                            } else {
+                                AddDialog.TYPE
+                            }
+                        })
+                    }
+                }
+            }
+        }
+        item(key = "items") {
+            FoldUnder(editing, settled = module.alive) {
+                Column {
+                    SmallTitle(text = stringResource(R.string.fpquick_items))
+                    Card(Modifier.nextCard()) {
+                        val filled = config.filled
+                        ItemList(filled.map { it.second },
+                            // A new order of the same items into the same places.
+                            onMove = { list ->
+                                var next = config
+                                filled.forEachIndexed { k, (slot, _) -> next = next.withSlot(slot, list[k]) }
+                                save(next)
+                            },
+                            onRemove = { k -> save(config.withSlot(filled[k].first, null)) })
+                    }
+                }
+            }
+        }
+        // Room for the last row above the floating button.
+        item(key = "fab") { Spacer(Modifier.height(88.dp)) }
+    }
 
     AddDialogs(dialog, config.filled.map { it.second }, onDismiss = { dialog = AddDialog.NONE },
         onPick = { dialog = it },
