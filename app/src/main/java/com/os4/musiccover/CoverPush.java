@@ -389,8 +389,14 @@ public final class CoverPush {
                     // It is held until the window has the new cover too (the same word the way
                     // in waits for), so the view and the glass and cards that sample the window
                     // change together.
+                    //
+                    // Only on a view that is on screen. A TransitionDrawable's clock starts on
+                    // its first draw, so one armed while the guard has the cover hidden (the
+                    // desktop) never moves: the old bitmaps are given back on a timer all the
+                    // same, and the first frame after the wake drew the recycled layer 0 - a
+                    // SystemUI crash. Hidden, there is nothing to fade, so the new one just goes on.
                     boolean swap = !isNew && artChanged && sCoverFadingOut == null
-                            && sCoverFadeWaitMs <= 0 && iv.getAlpha() > 0f
+                            && sCoverFadeWaitMs <= 0 && iv.getAlpha() > 0f && iv.isShown()
                             && oldShown != null && !oldShown.isRecycled();
                     if (swap) {
                         armCoverSwap(iv, oldShown, target, oldSharp, oldBlur, full, frosted);
@@ -454,7 +460,10 @@ public final class CoverPush {
                                 Main.main().post(new Runnable() {
                                     @Override
                                     public void run() {
-                                        if (Main.sVideoCoverBlurred && Main.sCover == iv) {
+                                        // The sharp copy too: a track change while this ran
+                                        // makes it the previous album's frost.
+                                        if (Main.sVideoCoverBlurred && Main.sCover == iv
+                                                && Main.sCoverBitmap == sharp) {
                                             Main.sCoverBlurBitmap = f;
                                             applyVideoCoverCrossfade(iv, sharp, f, true);
                                         } else if (f != null) {
@@ -979,6 +988,34 @@ public final class CoverPush {
     }
 
     /**
+     * Takes a or b off the view before they are recycled: a crossfade still holding one of them
+     * is put straight to its last layer, which is where it was going.
+     */
+    private static void settleOff(ImageView iv, Bitmap a, Bitmap b) {
+        android.graphics.drawable.Drawable d = iv.getDrawable();
+        if (!(d instanceof android.graphics.drawable.LayerDrawable)) return;
+        android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) d;
+        boolean holds = false;
+        for (int i = 0; i < ld.getNumberOfLayers(); i++) {
+            android.graphics.drawable.Drawable l = ld.getDrawable(i);
+            if (l instanceof android.graphics.drawable.BitmapDrawable) {
+                Bitmap lb = ((android.graphics.drawable.BitmapDrawable) l).getBitmap();
+                if (lb != null && (lb == a || lb == b)) holds = true;
+            }
+        }
+        if (!holds) return;
+        android.graphics.drawable.Drawable last = ld.getDrawable(ld.getNumberOfLayers() - 1);
+        Bitmap end = last instanceof android.graphics.drawable.BitmapDrawable
+                ? ((android.graphics.drawable.BitmapDrawable) last).getBitmap() : null;
+        if (end != null && end != a && end != b && !end.isRecycled()) {
+            iv.setImageBitmap(end);
+        } else {
+            iv.setImageDrawable(null);
+            Xp.log(Main.TAG + "cover crossfade held only old bitmaps, cleared before the recycle");
+        }
+    }
+
+    /**
      * Owes the view a crossfade from the cover it shows to the new one, started when the
      * wallpaper window has the new one as well (or the wait times out). The old bitmaps are the
      * crossfade's first layer, so they are only given back once it has run.
@@ -994,6 +1031,10 @@ public final class CoverPush {
             }
             final long dur = Math.max(150, Math.min(500, coverFadeMs())) + 100L;
             iv.postDelayed(() -> {
+                // The timer is a guess at when the crossfade is done, and it is wrong for a view
+                // that stopped being drawn part way through (hidden on the way to the desktop):
+                // its transition is still where it was, and would draw the old layer next.
+                settleOff(iv, oldSharp, oldBlur);
                 recycleUnless(oldSharp, Main.sCoverBitmap, Main.sCoverBlurBitmap);
                 if (oldBlur != oldSharp) {
                     recycleUnless(oldBlur, Main.sCoverBitmap, Main.sCoverBlurBitmap);
