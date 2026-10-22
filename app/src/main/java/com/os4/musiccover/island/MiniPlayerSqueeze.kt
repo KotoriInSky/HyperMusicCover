@@ -87,13 +87,6 @@ internal class ShortcutDisc(context: Context) : FrameLayout(context) {
     }
 
     init {
-        // The icon is already selected for the glass surface. HyperOS's force-dark pass can
-        // otherwise darken a light notification glyph while the mini island is attached to
-        // SystemUI's lock-screen tree.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            setForceDarkAllowed(false)
-            element.setForceDarkAllowed(false)
-        }
         // In keyguard_root_view it is a ConstraintLayout's child, and every child there needs an
         // id: the OEM's ConstraintSet.clone of that view, on each change of the lock screen's
         // blueprint, threw for one without and took SystemUI down - nine times on 2026-09-29.
@@ -228,9 +221,6 @@ internal class ShortcutDisc(context: Context) : FrameLayout(context) {
     /** What a small island shows on its glass: the island's picture, or nothing. */
     fun setIcon(drawable: Drawable?) {
         val view = icon ?: ImageView(context).apply {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                setForceDarkAllowed(false)
-            }
             scaleType = if (iconBare) ImageView.ScaleType.FIT_CENTER else ImageView.ScaleType.CENTER_CROP
             clipToOutline = !iconBare
             outlineProvider = elementShape
