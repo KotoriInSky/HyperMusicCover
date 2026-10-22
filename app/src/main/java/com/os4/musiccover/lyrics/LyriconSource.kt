@@ -377,12 +377,16 @@ object LyriconSource {
      *
      * The brackets wrapping the whole line come off at the end, as from a file
      * (LyricParse.unwrapBackground).
+     *
+     * Its end is its last word's when that comes after the lead's: a backing vocal that runs on
+     * keeps the line lit until it is sung (PR #103). Word times that do not fit an Int, or that
+     * go backwards, are not word times the renderer can follow: the line stays line-timed.
      */
-    private fun background(line: RichLyricLine, nextStart: Int): LyricLine? {
+    internal fun background(line: RichLyricLine, nextStart: Int): LyricLine? {
         val published = line.secondary?.trim().orEmpty()
         val words = line.secondaryWords.orEmpty().filter { !it.text.isNullOrBlank() }
         var built: LyricLine? = null
-        if (words.isNotEmpty()) {
+        if (words.isNotEmpty() && timesFit(words)) {
             var text = published
             var chars = if (published.isEmpty()) null else placed(published, words)
             if (chars == null) {
@@ -406,16 +410,29 @@ object LyriconSource {
                     if (w.end > w.begin) w.end.toInt() else w.begin.toInt()
                 }
                 LyricParse.closeUntimedTail(s, e, line.end.toInt(), nextStart)
-                built = LyricLine(text, null, s[0], line.end.toInt(), line.isAlignedRight,
-                    s, e, chars)
+                built = LyricLine(text, null, s[0], maxOf(line.end.toInt(), e.max()),
+                    line.isAlignedRight, s, e, chars)
             }
         }
         if (built == null) {
-            if (published.isEmpty()) return null
-            built = LyricLine(published, null, line.begin.toInt(), line.end.toInt(),
+            // Words whose times could not be used still say what is sung.
+            val shown = published.ifEmpty { words.joinToString("") { it.text.orEmpty() }.trim() }
+            if (shown.isEmpty()) return null
+            built = LyricLine(shown, null, line.begin.toInt(), line.end.toInt(),
                 line.isAlignedRight, null, null, null)
         }
         return LyricParse.unwrapBackground(built)
+    }
+
+    /** Every time inside an Int, and the words in the order they are sung. */
+    private fun timesFit(words: List<LyricWord>): Boolean {
+        val fits = 0L..Int.MAX_VALUE.toLong()
+        var last = 0L
+        for (w in words) {
+            if (w.begin !in fits || w.end !in fits || w.begin < last) return false
+            last = w.begin
+        }
+        return true
     }
 
     /**

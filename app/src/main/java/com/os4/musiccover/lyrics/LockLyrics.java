@@ -120,6 +120,33 @@ public final class LockLyrics {
      * the translation it is laid out, not fetched: switching it redraws what is already there.
      */
     public static volatile boolean sRoma = false;
+    /**
+     * Whether a lyric may come off the network (PR #103): the database, the TTML Hub, the
+     * catalogues, the queue's read-ahead and the translations borrowed from any of them. Off,
+     * only the player's own session, its file and the Lyricon bridge are read. On by default.
+     */
+    public static volatile boolean sOnline = true;
+
+    /**
+     * Switches sOnline and looks the song on screen up again: off, a lyric that came off the
+     * network goes - with nothing local to replace it the song has none; on, a song with no
+     * lyric, or no translation, gets the chance of one. The cache goes either way, since it
+     * holds answers found under the other setting.
+     */
+    public static boolean setOnline(boolean on) {
+        if (on == sOnline) return false;
+        sOnline = on;
+        Main.main().post(() -> {
+            CACHE.clear();
+            if (!sEnabled || sDemo || sKey.isEmpty() || sController == null) return;
+            if (!on && sLines.isEmpty() && !sLoading) return;
+            Main.main().removeCallbacks(SETTLED_LOOKUP);
+            unpark();
+            sInfoSeen = LyricSource.infoFor(sController);
+            lookup(sKey, sController, on && !sLines.isEmpty());
+        });
+        return true;
+    }
     /** The two switches together, as LyricLine.under() and the layout read them. */
     static final int BELOW_TRANS = 1, BELOW_ROMA = 2;
 
@@ -141,7 +168,11 @@ public final class LockLyrics {
     public static volatile LyricStyle sStyle = LyricStyle.DEFAULT;
     /** Colours and opacity of the lead and the backing vocal; the default is the official look. */
     public static volatile LyricAppearance sAppearance = LyricAppearance.DEFAULT;
-    /** How many lines sung at the same time are lit together (LyricFocus), 1..4. */
+    /**
+     * The most lines sung at the same time that are lit together (LyricFocus), 1..4. Not saved:
+     * every overlapping line is lit, up to the ceiling; `op lyricmaxlines` lowers it for the
+     * session.
+     */
     public static volatile int sMaxLines = LyricFocus.DEFAULT_LIMIT;
 
     public static void setAppearance(String json) {

@@ -4,7 +4,12 @@ import java.util.Arrays;
 import java.util.List;
 
 final class LyricFocus {
-    static final int DEFAULT_LIMIT = 3;
+    /**
+     * Every line being sung is lit, as many as overlap - not a setting (user, 2026-10-23: it
+     * follows the lyric). Four is only the ceiling: no real lyric has more at once, and past it
+     * the fitted layout would shrink the words too far.
+     */
+    static final int DEFAULT_LIMIT = 4;
     private final int[] selected = new int[4];
     int count;
     int first;

@@ -782,6 +782,7 @@ public final class LyricSource {
      * anything, and the artwork prefetch shares neither the thread nor the wait.
      */
     public static void warm(String id, String dir, String title, String artist) {
+        if (!LockLyrics.sOnline) return;
         final int gen = --sWarmGen;
         if (id != null && dir != null) {
             String key = dir + '/' + id;
@@ -886,6 +887,8 @@ public final class LyricSource {
         // Held now, on the caller's thread, because the worker below has no way to reach one.
         final android.content.Context ctx = Main.sAppCtx;
         final MediaController controller = c;
+        // Read once: a switch flipped mid-lookup starts a lookup of its own (LockLyrics.setOnline).
+        final boolean online = LockLyrics.sOnline;
         if (info == null && id == null && q == null && ctx == null) {
             Xp.log("[MCLyric] " + pkg + " publishes neither lyricInfo, a song id, nor a name");
             onMain(cb, java.util.Collections.<LyricLine>emptyList(),
@@ -920,7 +923,15 @@ public final class LyricSource {
                 if (r.lines.isEmpty()) {
                     lyricon(controller, r);
                 }
-                if (r.lines.isEmpty() && (id != null || q != null)) {
+                // A placeholder from either of those two says only that whoever filled it had no
+                // lyric - MeiloX's bridge sends one line of "纯音乐" for a song it has none for -
+                // not that the song has no words. Dropped, and the search goes on: taken as a
+                // catalogue's verdict it stopped a streaming player's .lrc being read (花海,
+                // 2026-10-22). A file player's own file saying so is still believed, below.
+                if (r.source == SRC_LYRIC_INFO || r.source == SRC_LYRICON) {
+                    dropPlaceholder(r);
+                }
+                if (r.lines.isEmpty() && online && (id != null || q != null)) {
                     race(gen, pkg, ctx, id, dir, q, r);
                 }
                 // A catalogue that places the song and answers that it is instrumental has
@@ -931,7 +942,7 @@ public final class LyricSource {
                 // nothing above it is still running by the time it starts, and a song that
                 // already works never reaches it, so what it costs is paid only by songs that
                 // would otherwise show nothing at all.
-                if (r.lines.isEmpty() && q != null && !instrumental) {
+                if (r.lines.isEmpty() && online && q != null && !instrumental) {
                     web(pkg, q, r);
                     instrumental = dropPlaceholder(r);
                 }
@@ -948,6 +959,7 @@ public final class LyricSource {
                 onMain(cb, r.lines, r.why, r.source);
                 // Extra to the answer already sent, so nothing in it is worth a thread - and an
                 // uncaught throw on this one takes SystemUI with it.
+                if (!online) return;
                 try {
                     borrow(gen, pkg, ctx, id, dir, q, r, cb);
                 } catch (Throwable t) {

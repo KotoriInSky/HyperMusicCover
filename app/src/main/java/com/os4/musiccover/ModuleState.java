@@ -85,11 +85,17 @@ public final class ModuleState {
                     + "\naodsmall=" + (Main.sAodSmall ? 1 : 0)
                     // Off when absent, which is what every file from before it had.
                     + "\nlyricroma=" + (LockLyrics.sRoma ? 1 : 0)
+                    // On when absent: every file from before it looked lyrics up online.
+                    + "\nlyriconline=" + (LockLyrics.sOnline ? 1 : 0)
                     // 0 left, 1 centre, 2 right, and left when the key is absent: a file from
                     // before this setting is one where the lyrics always sat left.
                     + "\nlyricalign=" + LockLyrics.sAlign
-                    + "\nlyricmaxlines=" + LockLyrics.sMaxLines
-                    // The band's five values are fixed now and are not written; see LyricStyle.
+                    // The two sizes are the user's again (the 歌词外观 page, 2026-10-22); the
+                    // band's other four values are still fixed and not written, see LyricStyle.
+                    + "\nlyricsize=" + LockLyrics.sStyle.sizeSp
+                    + "\nlyricbgsize=" + LockLyrics.sStyle.bgSizeSp
+                    // One line of JSON: no '=' or newline in it to confuse the reader below.
+                    + "\nlyricappearance=" + LockLyrics.sAppearance.toJson()
                     // Not a setting - whether the last lookup got its lyric from the session.
                     // Kept across restarts so the settings page does not accuse a working
                     // provider module of doing nothing merely because nothing has played yet;
@@ -205,13 +211,18 @@ public final class ModuleState {
                         else if ("lyrictrans".equals(k)) LockLyrics.sTrans = "1".equals(v);
                         else if ("aodsmall".equals(k)) Main.sAodSmall = "1".equals(v);
                         else if ("lyricroma".equals(k)) LockLyrics.sRoma = "1".equals(v);
+                        else if ("lyriconline".equals(k)) LockLyrics.sOnline = "1".equals(v);
                         // Clamped in the setter; absent or unreadable means left, see saveState.
                         else if ("lyricalign".equals(k)) LockLyrics.setAlign(Integer.parseInt(v));
-                        else if ("lyricmaxlines".equals(k)) LockLyrics.setMaxLines(Integer.parseInt(v));
+                        // lyricmaxlines is not read: every overlapping line is lit, see LyricFocus.
+                        // Clamped by LyricStyle.with, like an op's value.
+                        else if ("lyricsize".equals(k)) LockLyrics.setStyle("size", Float.parseFloat(v));
+                        else if ("lyricbgsize".equals(k)) LockLyrics.setStyle("bgsize", Float.parseFloat(v));
+                        else if ("lyricappearance".equals(k)) LockLyrics.setAppearance(v);
                         // The dp lyricoff and lyricgap from before the shares are dropped: what
                         // they meant depends on the room, which is not known here. lyricfill,
-                        // lyricpos, lyricside, lyricsize and lyricweight are dropped with them:
-                        // the band and its type are fixed, see LyricStyle.DEFAULT.
+                        // lyricpos, lyricside and lyricweight are dropped with them: the band
+                        // and its weight are fixed, see LyricStyle.DEFAULT.
                         else if ("sawlyric".equals(k)) {
                             LockLyrics.sSawSessionLyric = "1".equals(v);
                         }

@@ -383,23 +383,48 @@ public final class LocalLyrics {
      * The richer formats first (PR #103): a TTML or a word-timed YRC/KRC/Lyricify file kept
      * beside the audio is there because its owner wanted the words timed. A KRC has to be the
      * decrypted text; one that does not parse is passed over for the next.
+     *
+     * Any other mix of case - "Song.Lrc", or a stem whose case differs from the audio's - is
+     * found by listing the folder once, and only when the two stats per format found nothing
+     * (PR #103): most songs have no file beside them, and a large folder costs more to list.
      */
     private static Found sidecar(String audio) {
         int dot = audio.lastIndexOf('.');
         String stem = dot <= 0 ? audio : audio.substring(0, dot);
+        java.util.Set<String> tried = new java.util.HashSet<>();
         for (String ext : SIDECAR_FORMATS) {
             for (String p : new String[] {stem + "." + ext, stem + "." + ext.toUpperCase()}) {
-                File f = new File(p);
-                if (!f.isFile() || f.length() == 0L || f.length() > MAX_LYRIC_BYTES) {
-                    continue;
-                }
-                String body = decode(readAll(f));
-                if (usable(body)) {
-                    return new Found(body, "a ." + ext + " beside it", p);
-                }
+                tried.add(p);
+                Found f = sidecarAt(p, ext);
+                if (f != null) return f;
+            }
+        }
+        File dir = new File(stem).getParentFile();
+        String[] names = dir == null ? null : dir.list();
+        if (names == null) return null;
+        java.util.Arrays.sort(names);
+        String base = new File(stem).getName();
+        for (String ext : SIDECAR_FORMATS) {
+            String want = base + "." + ext;
+            for (String name : names) {
+                if (!name.equalsIgnoreCase(want)) continue;
+                String p = new File(dir, name).getPath();
+                if (!tried.add(p)) continue;
+                Found f = sidecarAt(p, ext);
+                if (f != null) return f;
             }
         }
         return null;
+    }
+
+    /** The file at p as a lyric of the given format, or null when it is absent or unusable. */
+    private static Found sidecarAt(String p, String ext) {
+        File f = new File(p);
+        if (!f.isFile() || f.length() == 0L || f.length() > MAX_LYRIC_BYTES) {
+            return null;
+        }
+        String body = decode(readAll(f));
+        return usable(body) ? new Found(body, "a ." + ext + " beside it", p) : null;
     }
 
     private static final String[] SIDECAR_FORMATS = {"ttml", "lrc", "yrc", "krc", "lys"};

@@ -15,11 +15,11 @@ public final class LyricStyle {
     /**
      * The band the lyrics are always drawn in.
      *
-     * Every one of these was a slider and none of them is one now: the app has no row for any of
-     * the six and loadState does not read them. They are the values this shipped with, except
-     * the weight, which comes down from 600 to 500 - the one that was worth changing on the way
-     * past. The backing vocal's 17sp is the size it always had beside the 25sp lead.
-     * `op lyricstyle` still moves all six for the rest of the session.
+     * Every one of these was a slider. The two sizes are again (the 歌词外观 page, 2026-10-22),
+     * saved and read back; the other four have no row and loadState does not read them. They
+     * are the values this shipped with, except the weight, which comes down from 600 to 500 -
+     * the one that was worth changing on the way past. The backing vocal's 17sp is the size it
+     * always had beside the 25sp lead. `op lyricstyle` still moves all six for the session.
      */
     static final LyricStyle DEFAULT = new LyricStyle(1f, 0.5f, 30f, 25f, 17f, 500);
 

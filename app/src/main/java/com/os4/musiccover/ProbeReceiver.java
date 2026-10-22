@@ -167,12 +167,14 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                 ModuleState.saveStateSoon();
             }
         } else if ("lyricappearance".equals(op)) {
-            // Not saved yet: the page that sets these is still to come.
-            if (i.hasExtra("json")) LockLyrics.setAppearance(i.getStringExtra("json"));
+            if (i.hasExtra("json")) {
+                LockLyrics.setAppearance(i.getStringExtra("json"));
+                ModuleState.saveStateSoon();
+            }
         } else if ("lyricmaxlines".equals(op)) {
+            // For the session only: not a setting, see LyricFocus.DEFAULT_LIMIT.
             if (LockLyrics.setMaxLines(i.getIntExtra("v", LockLyrics.sMaxLines))) {
                 LockLyrics.refresh();
-                ModuleState.saveStateSoon();
             }
         } else if ("lyricalign".equals(op)) {
             // Same shape as the translation switch: the view notices the change and
@@ -183,6 +185,11 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                 Xp.log(Main.TAG + "lyrics alignment: " + LockLyrics.sAlign);
                 LockLyrics.refresh();
                 ModuleState.saveStateSoon();
+            }
+        } else if ("lyriconline".equals(op)) {
+            if (LockLyrics.setOnline(i.getBooleanExtra("on", !LockLyrics.sOnline))) {
+                Xp.log(Main.TAG + "lyrics from the network: " + LockLyrics.sOnline);
+                ModuleState.saveState();
             }
         } else if ("lyrickeep".equals(op)) {
             LockLyrics.sKeepOn = i.getBooleanExtra("on", !LockLyrics.sKeepOn);
@@ -415,6 +422,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             out.putBoolean("lyrichdr", LockLyrics.sHdr);
             out.putBoolean("lyrictrans", LockLyrics.sTrans);
             out.putBoolean("lyricroma", LockLyrics.sRoma);
+            out.putBoolean("lyriconline", LockLyrics.sOnline);
             out.putInt("lyricalign", LockLyrics.sAlign);
             out.putInt("lyricmaxlines", LockLyrics.sMaxLines);
             out.putFloat("lyricbgsize", LockLyrics.sStyle.bgSizeSp);
