@@ -275,9 +275,9 @@ final class HyperTweaks {
      * The head animator a bar built at level 1 or 2 is given in its constructor, built here for a
      * bar that was built flat.
      *
-     * ProgressAnimTarget is an inner class of the widget, so it needs the bar to construct, and
-     * Folme hands it the implementation the touch path animates through the FolmeObject interface
-     * - itself the reason this is not simply a field write.
+     * ProgressAnimTarget is the widget's own FolmeObject (see newAnimTarget for how one is had),
+     * and Folme hands it the implementation the touch path animates through that interface -
+     * itself the reason this is not simply a field write.
      *
      * Best effort by design. Its absence costs the press feedback and nothing else, because the
      * touch guard above stands aside only when this is known to have worked, and a failure here
@@ -288,9 +288,7 @@ final class HyperTweaks {
             ClassLoader cl = bar.getClass().getClassLoader();
             Class<?> targetCls = Xp.findClass(
                     "miuix.miuixbasewidget.widget.HyperProgressSeekBar$ProgressAnimTarget", cl);
-            java.lang.reflect.Constructor<?> ctor = targetCls.getDeclaredConstructor(bar.getClass());
-            ctor.setAccessible(true);
-            Object target = ctor.newInstance(bar);
+            Object target = newAnimTarget(targetCls, bar);
             Xp.findMethodExact(
                             Xp.findClass("miuix.animation.Folme", cl), "use",
                             Xp.findClass("miuix.animation.FolmeObject", cl))
@@ -300,18 +298,59 @@ final class HyperTweaks {
                 Xp.log(TAG + "head animator built but Folme gave it no impl");
                 return;
             }
-            Xp.setObjectField(bar, "mHeadAlphaAnimator", target);
-            // The resting value the constructor sets. The field already reads 1.0, so a build
-            // where this resolves to a different overload is not worth failing the whole thing
-            // over - the touch path sets its own values from here.
-            try {
-                Xp.callMethod(impl, "setTo",
-                        Xp.getObjectField(bar, "PROPERTY_HEAD_ALPHA"), Float.valueOf(1.0f));
-            } catch (Throwable ignored) {
+            // The resting value the constructor sets, and not optional: a head alpha Folme has
+            // never been told starts its first spring from nothing, and the shader it feeds
+            // (uHeadGlowAlpha) drew no bar at all from the first tap on - measured 2026-10-23.
+            // setTo is varargs, setTo(Object[]), so it is found and called as that; the old
+            // two-argument callMethod matched no overload and failed without a word. Done before
+            // the field is written, so a build where it cannot be done keeps the level 0 drag.
+            java.lang.reflect.Method setTo = null;
+            for (java.lang.reflect.Method m : impl.getClass().getMethods()) {
+                Class<?>[] p = m.getParameterTypes();
+                if ("setTo".equals(m.getName()) && p.length == 1 && p[0] == Object[].class) {
+                    setTo = m;
+                    break;
+                }
             }
+            if (setTo == null) {
+                Xp.log(TAG + "head animator built but its impl has no setTo(Object...)");
+                return;
+            }
+            setTo.invoke(impl, (Object) new Object[]{
+                    Xp.getObjectField(bar, "PROPERTY_HEAD_ALPHA"), Float.valueOf(1.0f)});
+            Xp.setObjectField(bar, "mHeadAlphaAnimator", target);
         } catch (Throwable t) {
             Xp.log(TAG + "head animator not built, drag falls back to level 0: " + t);
         }
+    }
+
+    /**
+     * A ProgressAnimTarget, however this build declares it. It is a static class with nothing to
+     * construct - one field, set by Folme.use - and never did take the bar, which is why the
+     * lookup for that constructor failed on every build. The control centre plugin's copy
+     * (18.3.2.40.1) has a private no-argument one. SystemUI's (17.03 on OS4.0.18 and OS4.0.24) has
+     * none at all: R8 took the empty one out, and the widget itself does new-instance then
+     * Object.<init>. So the last resort is the same thing done through Unsafe, an instance with no
+     * constructor run, which is all the widget's own code gives it.
+     */
+    private static Object newAnimTarget(Class<?> targetCls, android.view.View bar)
+            throws Exception {
+        for (java.lang.reflect.Constructor<?> c : targetCls.getDeclaredConstructors()) {
+            Class<?>[] p = c.getParameterTypes();
+            if (p.length == 0) {
+                c.setAccessible(true);
+                return c.newInstance();
+            }
+            if (p.length == 1 && p[0].isInstance(bar)) {
+                c.setAccessible(true);
+                return c.newInstance(bar);
+            }
+        }
+        Class<?> unsafeCls = Class.forName("sun.misc.Unsafe");
+        java.lang.reflect.Field f = unsafeCls.getDeclaredField("theUnsafe");
+        f.setAccessible(true);
+        return unsafeCls.getMethod("allocateInstance", Class.class)
+                .invoke(f.get(null), targetCls);
     }
 
     /**
