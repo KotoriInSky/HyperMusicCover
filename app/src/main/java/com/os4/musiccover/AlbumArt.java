@@ -51,7 +51,12 @@ public final class AlbumArt {
      */
     static Bitmap albumArt(Context ctx, boolean allowCard, int[] sessionBits) {
         if (sessionBits != null) sessionBits[0] = -1;
-        MediaController c = Main.pickController(ctx);
+        // The card's own session first: the media card is the switch, and when it shows a paused
+        // player while another one plays (a carousel module's pick, KeiMi's) the ranking below
+        // would hand over the other player's album - every retry, since it is the same picture.
+        // A token whose session has gone answers no metadata; the ranking is the fallback then.
+        MediaController c = MediaCard.controllerFromCard(ctx);
+        if (c == null || c.getMetadata() == null) c = Main.pickController(ctx);
         if (c != null) {
             MediaMetadata md = c.getMetadata();
             if (md != null) {
@@ -123,7 +128,11 @@ public final class AlbumArt {
                 try {
                     int id = v.getContext().getResources()
                             .getIdentifier("album_art_image", "id", "com.android.systemui");
-                    View art = id == 0 ? null : v.getRootView().findViewById(id);
+                    // Under the card first. A carousel keeps other players' cards in the same
+                    // header with the same child ids, and only the live one keeps the root id.
+                    View card = Main.findSysuiView("mi_media_controls");
+                    View art = id == 0 || card == null ? null : card.findViewById(id);
+                    if (art == null && id != 0) art = v.getRootView().findViewById(id);
                     if (art instanceof ImageView) {
                         Drawable d = ((ImageView) art).getDrawable();
                         if (d instanceof BitmapDrawable) out[0] = ((BitmapDrawable) d).getBitmap();

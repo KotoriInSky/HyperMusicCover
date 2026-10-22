@@ -2610,12 +2610,25 @@ public class Main extends XposedModule {
 
     /** The card's background view, where its material is set. */
     public static View miniPlayerMediaBg(View header) {
-        return header == null ? null : findByName(header, "media_bg");
+        return headerMediaBg(header);
+    }
+
+    /**
+     * media_bg under the header's live card. A carousel (KeiMi's) parks other players' cards in
+     * the same header with their child ids intact - only the live one keeps mi_media_controls -
+     * so a plain walk of the header finds whichever card comes first in it.
+     */
+    static View headerMediaBg(View header) {
+        if (header == null) return null;
+        int id = header.getResources().getIdentifier("mi_media_controls", "id", "com.android.systemui");
+        View card = id == 0 ? null : header.findViewById(id);
+        View bg = card == null ? null : findByName(card, "media_bg");
+        return bg != null ? bg : findByName(header, "media_bg");
     }
 
     /** The corner the card itself draws: media_bg's outline, 24dp on this device. */
     public static float miniPlayerCardRadius(View header) {
-        View bg = header == null ? null : findByName(header, "media_bg");
+        View bg = headerMediaBg(header);
         float r = bg == null ? 0f : outlineRadius(bg);
         return r > 0f ? r : 24f * density();
     }

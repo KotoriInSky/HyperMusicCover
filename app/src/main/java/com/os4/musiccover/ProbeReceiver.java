@@ -100,7 +100,9 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
         if ("pushart".equals(op)) {
             boolean on = i.getBooleanExtra("on", true);
             if (i.hasExtra("bias")) Main.sBias = Main.clamp01(i.getFloatExtra("bias", Main.sBias));
-            Main.sTrackKey = on ? Main.trackKey(Main.pickController(c)) : "";
+            MediaController mc = on ? MediaCard.controllerFromCard(c) : null;
+            if (on && mc == null) mc = Main.pickController(c);
+            Main.sTrackKey = on ? Main.trackKey(mc) : "";
             Main.setCoverEnabled(on, i.getBooleanExtra("anim", true), false);
         } else if ("coverstyle".equals(op)) {
             String key = i.getStringExtra("key");

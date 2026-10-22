@@ -81,7 +81,8 @@ final class PreviewShots {
             if (diag != null) {
                 diag.append("\n  art: ").append(thumb == null ? "NULL" : thumb.length + "B");
                 if (thumb == null) {
-                    MediaController mc = Main.pickController(c);
+                    MediaController mc = MediaCard.controllerFromCard(c);
+                    if (mc == null) mc = Main.pickController(c);
                     diag.append(" (session=")
                         .append(mc == null ? "none" : mc.getPackageName())
                         .append(" metadata=")

@@ -713,14 +713,84 @@ public final class MediaCard {
         try {
             Class<?> card = Xp.findClass(Main.CLS_MEDIA_CARD, cl);
             Xp.hookAll(card, "access$setTopMediaData", chain -> {
-                Object result = chain.proceed();
                 java.util.List<Object> args = chain.getArgs();
-                onCardChanged(args.size() > 1 ? args.get(1) : null);
+                if (!args.isEmpty()) listenTo(args.get(0), cl);
+                Object result = chain.proceed();
+                Object data = args.size() > 1 ? args.get(1) : null;
+                // The listener below runs inside the setter, so it has already seen this one.
+                boolean seen = sHeardValid && sHeard == data;
+                sHeardValid = false;
+                sHeard = null;
+                if (!seen) onCardChanged(data);
                 return result;
             });
             Xp.log(Main.TAG + "media card hooked");
         } catch (Throwable t) {
             Xp.w(Main.TAG + "media card hook failed: " + t);
+        }
+        try {
+            Class<?> card = Xp.findClass(Main.CLS_MEDIA_CARD, cl);
+            Xp.hookAllConstructors(card, chain -> {
+                Object result = chain.proceed();
+                listenTo(chain.getThisObject(), cl);
+                return result;
+            });
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "media card listener hook failed: " + t);
+        }
+    }
+
+    /**
+     * The card change as the OEM's own listeners hear it, next to the setter hook above.
+     *
+     * The hook alone misses every change made by a caller that runs the setter's original past
+     * the hooks - an older KeiMi build does exactly that for its carousel, so swiping to another
+     * player's card changed the card and never reached us: the cover stayed on the first album.
+     * The setter still tells topMediaListeners, whoever calls it, so we are one of them too
+     * (KeiMi's own fix went the same way). Both paths fire on an ordinary change; the listener
+     * runs first, inside the setter, and the hook skips the data it has already heard.
+     */
+    private static volatile Object sListened;
+    private static Object sHeard;
+    private static boolean sHeardValid;
+
+    private static void listenTo(Object controller, ClassLoader cl) {
+        if (controller == null || sListened == controller) return;
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.Set<Object> set =
+                    (java.util.Set<Object>) Xp.getObjectField(controller, "topMediaListeners");
+            Class<?> iface = Xp.findClass(Main.CLS_MEDIA_CARD + "$MediaDataChangeListener", cl);
+            Object listener = java.lang.reflect.Proxy.newProxyInstance(cl, new Class<?>[]{iface},
+                    (proxy, method, a) -> {
+                        switch (method.getName()) {
+                            case "onMediaDataChanged":
+                                Object data = a != null && a.length > 0 ? a[0] : null;
+                                sHeard = data;
+                                sHeardValid = true;
+                                // Inside the OEM's own loop over its listeners: nothing of ours
+                                // may throw out into it.
+                                try {
+                                    onCardChanged(data);
+                                } catch (Throwable t) {
+                                    Xp.w(Main.TAG + "card listener failed: " + t);
+                                }
+                                return null;
+                            case "hashCode":
+                                return System.identityHashCode(proxy);
+                            case "equals":
+                                return a != null && a.length > 0 && proxy == a[0];
+                            case "toString":
+                                return "MusicCover card listener";
+                            default:
+                                return null;
+                        }
+                    });
+            set.add(listener);
+            sListened = controller;
+            Xp.log(Main.TAG + "media card listener registered");
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "media card listener not registered: " + t);
         }
     }
 }
