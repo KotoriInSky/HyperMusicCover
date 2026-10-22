@@ -104,6 +104,11 @@ public final class LyricSource {
         if (info == null) {
             return false;
         }
+        // A payload that is only a TTML document - no lyric or rawLyric beside it - is still the
+        // song's lyric, and the richest form of it.
+        if (documentOfLyricInfo(info) != null) {
+            return true;
+        }
         String raw = rawOfLyricInfo(info);
         if (raw != null) {
             return !placeholder(raw);
@@ -161,6 +166,38 @@ public final class LyricSource {
      * refused on every sung line (#47).
      */
     static String infoFor(MediaController c) {
+        String session = sessionInfoFor(c);
+        if (usable(session)) {
+            return session;
+        }
+        // Players that put the lyric itself on the metadata, under the platform's key or one of
+        // their own, rather than in a lyricInfo payload. Taken only when it is a lyric with times
+        // in it: a few of these keys carry a plain text that cannot be followed.
+        for (String key : METADATA_LYRIC_KEYS) {
+            String body = metaOf(c, key);
+            if (body == null || body.isEmpty() || placeholder(body)) {
+                continue;
+            }
+            if (timedLines(body) < MIN_SESSION_LINES && !body.contains("<tt")
+                    && !WORD_TIMED.matcher(body).find()) {
+                continue;
+            }
+            try {
+                return new org.json.JSONObject().put("rawLyric", body).toString();
+            } catch (Throwable ignored) {
+            }
+        }
+        return session;
+    }
+
+    private static final String[] METADATA_LYRIC_KEYS = {
+            "android.media.metadata.LYRICS", "lyrics", "LYRICS", "lyric", "ttml"
+    };
+    /** A YRC/QRC line, [start,duration] then (start,duration,0) or <start,duration> words. */
+    private static final java.util.regex.Pattern WORD_TIMED =
+            java.util.regex.Pattern.compile("(?m)^\\[(?:[0-9]+,[0-9]+|[0-9]+)\\].*[<(][0-9]+,");
+
+    private static String sessionInfoFor(MediaController c) {
         String info = lyricInfoOf(c);
         if (info == null) {
             return null;
@@ -530,6 +567,19 @@ public final class LyricSource {
     private static String jsonString(org.json.JSONObject o, String key) {
         Object v = o.opt(key);
         return v instanceof String ? (String) v : null;
+    }
+
+    /** The payload's TTML document, or null when it carries none or an empty one. */
+    private static String documentOfLyricInfo(String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        try {
+            String doc = jsonString(new org.json.JSONObject(json), "ttml");
+            return doc == null || doc.trim().isEmpty() ? null : doc;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     /**
@@ -1283,7 +1333,8 @@ public final class LyricSource {
         try {
             String text = textOfLyricInfo(info);
             String raw = rawOfLyricInfo(info);
-            if (text == null && raw == null) {
+            String doc = documentOfLyricInfo(info);
+            if (text == null && raw == null && doc == null) {
                 // The field is there and empty, which is what a provider module publishes while
                 // it is still fetching - MeiLoX writes {"lyric":"","noLyric":true}.
                 r.why = "the session's lyricInfo is empty";
@@ -1293,7 +1344,7 @@ public final class LyricSource {
             // before the parse rather than after it because what makes it a placeholder is its
             // text, which the parsed rows keep but the account of them does not. Falls through
             // to the catalogues, which is where this song's lyric actually is.
-            if (placeholder(raw != null ? raw : text)) {
+            if (doc == null && placeholder(raw != null ? raw : text)) {
                 r.why = "the session's lyricInfo says there are no lyrics";
                 return;
             }
@@ -1307,8 +1358,7 @@ public final class LyricSource {
             // first and allowed to fail - if the document does not parse, the same lyric is
             // still sitting in the fields below.
             String used = "lyric";
-            String doc = jsonString(new org.json.JSONObject(info), "ttml");
-            if (doc != null && !doc.isEmpty()) {
+            if (doc != null) {
                 List<LyricLine> d = LyricParse.parse(doc, tr);
                 if (!d.isEmpty()) {
                     r.lines = d;
@@ -1317,11 +1367,12 @@ public final class LyricSource {
                     Xp.log("[MCLyric] the payload's ttml parsed to nothing; using its fields");
                 }
             }
+            List<LyricLine> rawLines = java.util.Collections.emptyList();
             if (r.lines.isEmpty() && raw != null) {
-                List<LyricLine> w = LyricParse.parse(raw, tr);
-                for (LyricLine l : w) {
+                rawLines = LyricParse.parse(raw, tr);
+                for (LyricLine l : rawLines) {
                     if (l.hasWords()) {
-                        r.lines = w;
+                        r.lines = rawLines;
                         used = "rawLyric";
                         break;
                     }
@@ -1329,6 +1380,12 @@ public final class LyricSource {
             }
             if (r.lines.isEmpty() && text != null) {
                 r.lines = LyricParse.parse(text, tr);
+            }
+            // A rawLyric with no word timing is still a lyric when there is no lyric field to
+            // prefer it to - which is how the metadata keys arrive (infoFor).
+            if (r.lines.isEmpty() && !rawLines.isEmpty()) {
+                r.lines = rawLines;
+                used = "rawLyric";
             }
             if (r.lines.isEmpty()) {
                 r.why = "lyricInfo parsed to nothing";

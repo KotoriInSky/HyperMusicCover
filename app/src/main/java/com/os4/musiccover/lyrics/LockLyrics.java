@@ -1011,6 +1011,25 @@ public final class LockLyrics {
     private static int sInfoTries;
 
     /**
+     * The bridge has just published a song with lyrics (PR #103). Its answer often lands after the
+     * lookup for the track has already gone past it and settled on a catalogue, or on nothing; the
+     * lookup is run again, in its usual order, so the bridge's lyric takes its place. Not when
+     * what is up already came from the player's own session, its file, or the bridge itself:
+     * a re-run would only find that again.
+     */
+    static void onProviderLyrics() {
+        Main.main().post(() -> {
+            if (!sEnabled || sDemo || sKey.isEmpty() || sController == null) return;
+            if (!sLines.isEmpty() && (sSource == LyricSource.SRC_LYRIC_INFO
+                    || sSource == LyricSource.SRC_LOCAL || sSource == LyricSource.SRC_LYRICON)) {
+                return;
+            }
+            CACHE.remove(sKey);
+            lookup(sKey, sController, !sLines.isEmpty());
+        });
+    }
+
+    /**
      * Starts the lookup for `key` and puts whatever it finds on screen.
      *
      * `keepCurrent` is the whole difference between the two callers. A track change has already

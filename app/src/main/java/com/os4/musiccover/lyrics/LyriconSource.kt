@@ -174,14 +174,17 @@ object LyriconSource {
     private object Listener : ActivePlayerListener {
         override fun onSongChanged(song: Song?) {
             try {
-                synchronized(sSongLock) {
+                val changed = synchronized(sSongLock) {
+                    val changed = song != sSong
                     sSong = song
                     if (song != null) {
                         sSongs++
                         sPlayerSongs++
                     }
                     sSongLock.notifyAll()
+                    changed
                 }
+                if (changed && !song?.lyrics.isNullOrEmpty()) LockLyrics.onProviderLyrics()
             } catch (t: Throwable) {
                 sError = t.toString()
             }

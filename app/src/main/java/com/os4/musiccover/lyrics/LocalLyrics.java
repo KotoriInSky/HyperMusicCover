@@ -373,29 +373,36 @@ public final class LocalLyrics {
     private static final int MAX_LYRIC_BYTES = 512 * 1024;
 
     /**
-     * The .lrc sitting beside the audio, if there is one.
+     * The lyric file sitting beside the audio, if there is one.
      *
      * Tried before the tag because it is the one a person edits: a file whose embedded lyric is
      * wrong gets a .lrc dropped next to it, and that correction is the whole point of it being
      * there. Both cases of the extension are tried - this library holds .MP3 and .mp3 alike, and
      * the volume is case-insensitive in practice, but asking costs one stat.
+     *
+     * The richer formats first (PR #103): a TTML or a word-timed YRC/KRC/Lyricify file kept
+     * beside the audio is there because its owner wanted the words timed. A KRC has to be the
+     * decrypted text; one that does not parse is passed over for the next.
      */
     private static Found sidecar(String audio) {
         int dot = audio.lastIndexOf('.');
         String stem = dot <= 0 ? audio : audio.substring(0, dot);
-        String[] tries = {stem + ".lrc", stem + ".LRC"};
-        for (String p : tries) {
-            File f = new File(p);
-            if (!f.isFile() || f.length() == 0L || f.length() > MAX_LYRIC_BYTES) {
-                continue;
-            }
-            String body = decode(readAll(f));
-            if (usable(body)) {
-                return new Found(body, "a .lrc beside it", p);
+        for (String ext : SIDECAR_FORMATS) {
+            for (String p : new String[] {stem + "." + ext, stem + "." + ext.toUpperCase()}) {
+                File f = new File(p);
+                if (!f.isFile() || f.length() == 0L || f.length() > MAX_LYRIC_BYTES) {
+                    continue;
+                }
+                String body = decode(readAll(f));
+                if (usable(body)) {
+                    return new Found(body, "a ." + ext + " beside it", p);
+                }
             }
         }
         return null;
     }
+
+    private static final String[] SIDECAR_FORMATS = {"ttml", "lrc", "yrc", "krc", "lys"};
 
     /** The lyric inside the audio file, for the formats that carry one where we can find it. */
     private static Found embedded(String path) {
@@ -421,10 +428,12 @@ public final class LocalLyrics {
      *
      * Rejected per source rather than per file, so a .lrc holding a placeholder still falls
      * through to the tag inside the audio.
+     *
+     * Timings are judged by parsing rather than by LRC's [mm:ss] tag: TTML, YRC and Lyricify
+     * carry theirs in other shapes. The cheap placeholder check goes first.
      */
     private static boolean usable(String body) {
-        return body != null && LyricSource.TIMED.matcher(body).find()
-                && !LyricSource.placeholder(body);
+        return body != null && !LyricSource.placeholder(body) && !LyricParse.parse(body).isEmpty();
     }
 
     // ---------------------------------------------------------------- ID3v2
