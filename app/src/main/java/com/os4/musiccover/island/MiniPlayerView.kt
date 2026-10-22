@@ -35,6 +35,17 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     private var materialLayer = MaterialElement(context)
     private val artwork = ImageView(context)
 
+    init {
+        // HyperOS may apply its force-dark pass to notification content hosted by SystemUI.
+        // The island already chooses ink from its material and night mode; a second implicit
+        // transform may darken light navigation glyphs over glass. Opt this host out while
+        // preserving the notification drawable's own colors.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            setForceDarkAllowed(false)
+            artwork.setForceDarkAllowed(false)
+        }
+    }
+
     /**
      * The artwork's place: [artwork], or a live view over it (showArtworkView). Everything that
      * moves, fades, turns or rounds the artwork does it to this, so a view in it goes along.
@@ -55,13 +66,13 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     private val title = EdgeBlurText(context)
     private val artist = EdgeBlurText(context)
     private val textColumn = LinearLayout(context)
-    private val toggle = ImageButton(context)
+    private val toggle = PressFeedbackButton(context)
 
     /**
      * A focus notification's second button, left of the first: shown while the pill is the big
      * island, the row's only one; gone as the small island comes in beside it (setSecondShown).
      */
-    private val toggle2 = ImageButton(context)
+    private val toggle2 = PressFeedbackButton(context)
     private val density = resources.displayMetrics.density
     private var lastAppearance: String? = null
     private var lastMaterial: String? = null
