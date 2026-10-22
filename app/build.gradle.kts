@@ -166,6 +166,7 @@ dependencies {
     implementation(libs.miuix.preference)
     implementation(libs.miuix.icons)
     implementation(libs.miuix.squircle)
+    implementation(libs.material.color.utilities)
     implementation(libs.material.icons.extended)
 
     // ColorOS's pickup plugin (assets/coloros/pcr_plugin.apk) is loaded at runtime into a class

@@ -139,6 +139,30 @@ public final class LockLyrics {
     public static volatile int sAlign = ALIGN_LEFT;
     /** Immutable snapshot: the UI, renderer and state loader all use the same validated values. */
     public static volatile LyricStyle sStyle = LyricStyle.DEFAULT;
+    /** Colours and opacity of the lead and the backing vocal; the default is the official look. */
+    public static volatile LyricAppearance sAppearance = LyricAppearance.DEFAULT;
+    /** How many lines sung at the same time are lit together (LyricFocus), 1..4. */
+    public static volatile int sMaxLines = LyricFocus.DEFAULT_LIMIT;
+
+    public static void setAppearance(String json) {
+        LyricAppearance next = LyricAppearance.parse(json);
+        if (sAppearance.toJson().equals(next.toJson())) return;
+        sAppearance = next;
+        LyricView view = sView;
+        if (view != null) {
+            view.invalidate();
+            view.kick();
+        }
+    }
+
+    public static boolean setMaxLines(int value) {
+        int next = LyricFocus.clampLimit(value);
+        if (next == sMaxLines) return false;
+        sMaxLines = next;
+        LyricView view = sView;
+        if (view != null) view.kick();
+        return true;
+    }
 
     /**
      * Applies one alignment pref, validated here rather than at the callers: a state file and an
