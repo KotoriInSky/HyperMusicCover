@@ -51,6 +51,11 @@ jobs:
       - name: Build release
         run: ./gradlew --no-daemon assembleRelease
 
+      # The tests went unrun here, and when the sources moved into packages (2026-10) most of
+      # them stopped compiling without anyone seeing it.
+      - name: Unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+
       - name: Lint
         run: ./gradlew --no-daemon lintDebug
 

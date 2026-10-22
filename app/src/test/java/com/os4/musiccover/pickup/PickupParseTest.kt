@@ -1,4 +1,4 @@
-package com.os4.musiccover
+package com.os4.musiccover.pickup
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

@@ -1,4 +1,4 @@
-package com.os4.musiccover;
+package com.os4.musiccover.lyrics;
 
 import org.junit.Test;
 

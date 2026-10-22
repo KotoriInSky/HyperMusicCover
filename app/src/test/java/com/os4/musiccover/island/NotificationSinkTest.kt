@@ -1,4 +1,4 @@
-package com.os4.musiccover
+package com.os4.musiccover.island
 
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.Channel
