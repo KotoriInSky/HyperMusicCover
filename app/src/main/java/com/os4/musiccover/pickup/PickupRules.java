@@ -1,6 +1,5 @@
 package com.os4.musiccover.pickup;
 import android.content.Context;
-import android.os.Bundle;
 import android.util.Xml;
 
 import org.json.JSONArray;
@@ -29,25 +28,13 @@ final class PickupRules {
     private final Set<String> cloudDisabledOrigins;
     private final String version;
     private final PickupPolicy recognitionPolicy;
-    private final long revision;
 
-    private PickupRules(Context host, long revision) throws Exception {
-        this.revision = revision;
-        String overlay = readOverlay(host);
-        ParseResult parsed = null;
-        if (!overlay.isEmpty()) {
-            try {
-                parsed = parse(new ByteArrayInputStream(overlay.getBytes(StandardCharsets.UTF_8)));
-            } catch (Exception ignored) {
-            }
-        }
-        if (parsed == null || parsed.rules.isEmpty()) {
-            try (InputStream input = PickupOem.asset(PickupConst.RULE_ASSET)) {
-                parsed = parse(input);
-            }
+    private PickupRules(Context host) throws Exception {
+        ParseResult parsed;
+        try (InputStream input = PickupOem.asset(PickupConst.RULE_ASSET)) {
+            parsed = parse(input);
         }
         rules = Collections.unmodifiableList(parsed.rules);
-        // Fixture XML is appended above; its default root flags must not replace production RUS.
         recognitionPolicy = parsed.policy;
         HashSet<String> packageNames = new HashSet<>();
         for (PickupRule rule : rules) packageNames.add(rule.packageName);
@@ -58,16 +45,25 @@ final class PickupRules {
         version = parsed.version.isEmpty() ? PickupConst.BUILTIN_RULE_VERSION : parsed.version;
     }
 
+    /**
+     * The rules, built once and kept until [invalidate].
+     *
+     * This used to ask the reference implementation's ContentProvider for a revision on every
+     * call, and for an overlay XML on every build. That provider lives in its own app, which this
+     * module is not, so each call was a binder round trip to system_server that could only fail -
+     * hundreds an hour, in bursts, from SystemUI - and had it ever answered, any app claiming the
+     * authority could have handed SystemUI its rules. A change of rules comes from [PickupCloud],
+     * which calls [invalidate].
+     */
     static PickupRules get(Context context) {
-        long revision = readRevision(context);
         PickupRules current = instance;
-        if (current != null && (revision < 0 || current.revision == revision)) return current;
+        if (current != null) return current;
         synchronized (PickupRules.class) {
             current = instance;
-            if (current == null || revision >= 0 && current.revision != revision) {
+            if (current == null) {
                 try {
                     Context application = context.getApplicationContext();
-                    current = new PickupRules(application == null ? context : application, revision);
+                    current = new PickupRules(application == null ? context : application);
                 } catch (Exception e) {
                     throw new IllegalStateException("ColorOS rules unavailable", e);
                 }
@@ -79,13 +75,6 @@ final class PickupRules {
 
     static void invalidate() {
         instance = null;
-    }
-
-    private static long readRevision(Context context) {
-        try {
-            Bundle out = context.getContentResolver().call(PickupConst.PROVIDER_URI, "config", null, null);
-            return out == null ? -1L : out.getLong("rules_revision", -1L);
-        } catch (Exception ignored) { return -1L; }
     }
 
     String version() {
@@ -313,24 +302,14 @@ final class PickupRules {
         return PickupEvent.clean(value).toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     }
 
-    private static String readOverlay(Context host) {
-        try {
-            Bundle out = host.getContentResolver().call(
-                    PickupConst.PROVIDER_URI, "rules", null, null);
-            return out == null ? "" : out.getString("xml", "");
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
-
     /**
      * The brand names and the switch-offs the cloud's applet list carries.
      *
-     * This used to be a ContentProvider call - the reference implementation's own app, whose
-     * authority [PickupConst.PROVIDER_URI] still names - and that provider does not exist here: the
-     * app this ships in is `com.github.zyl6932.HyperMusicCover`, so the call could only ever throw
-     * and the list was always empty. [PickupCloud] is where it comes from now, filled from
-     * ColorOS's cloud by the module itself, and its `disabled` flag is read for the first time.
+     * This used to be a ContentProvider call - the reference implementation's own app - and that
+     * provider does not exist here: the app this ships in is `com.github.zyl6932.HyperMusicCover`,
+     * so the call could only ever throw and the list was always empty. [PickupCloud] is where it
+     * comes from now, filled from ColorOS's cloud by the module itself, and its `disabled` flag is
+     * read for the first time.
      */
     private static CloudPolicy readCloudPolicy(Context host) {
         try {
