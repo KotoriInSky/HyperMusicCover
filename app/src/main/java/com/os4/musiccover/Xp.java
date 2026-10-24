@@ -84,6 +84,18 @@ public final class Xp {
     }
 
     /**
+     * One remote preference, asked at the moment it matters (a hot reload, not a page's state).
+     * Missing group, no framework, or a value of another type: the default.
+     */
+    static boolean remoteBoolean(String group, String key, boolean def) {
+        try {
+            return api().getRemotePreferences(group).getBoolean(key, def);
+        } catch (Throwable t) {
+            return def;
+        }
+    }
+
+    /**
      * The framework's log, which is where LSPosed collects module output. Tagged per line the
      * way the old XposedBridge.log was, so `logcat | grep MCProbe` still works.
      */

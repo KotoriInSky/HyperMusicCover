@@ -779,8 +779,9 @@ public class Main extends XposedModule {
     }
 
     /**
-     * Step 0 of the hot-reload plan. Only Apple Music agrees; every other process refuses, so
-     * updating the module there still means a restart exactly as it does today. See HotReload.
+     * Hot reload's retirement half. Step 4 has no process on
+     * {@link HotReloadPolicy#SUPPORTED}, so every process refuses and updating still means a
+     * restart exactly as it does today. See HotReload.
      */
     @Override
     public boolean onHotReloading(XposedModuleInterface.HotReloadingParam param) {
@@ -809,7 +810,7 @@ public class Main extends XposedModule {
         String pkg = param.getPackageName();
         // A hot-reload refusal has no process name to read - HotReloadingParam carries only
         // extras - so this is where the process remembers what it was asked to do.
-        HotReload.onPackageLoaded(pkg);
+        HotReload.onPackageLoaded(pkg, param.getDefaultClassLoader());
         if ("com.miui.miwallpaper".equals(pkg)) {
             WallpaperProbe.handle(param);
             return;
@@ -1590,7 +1591,7 @@ public class Main extends XposedModule {
      * first moment there is one - and again by a hot-reloaded generation, which starts with
      * every static field empty.
      */
-    private static synchronized void boot(Context ctx) {
+    static synchronized void boot(Context ctx) {
         if (sReceiverRegistered) {
             return;
         }
@@ -1730,6 +1731,9 @@ public class Main extends XposedModule {
         lf.addAction(Intent.ACTION_USER_PRESENT);
         Gen.receiver(ctx, lifecycle, lf, Context.RECEIVER_NOT_EXPORTED);
         Xp.log(TAG + "lifecycle receiver registered (screen off / user present)");
+        // Last: a marker left by a hot-reloaded generation means this process did not survive
+        // it, and this build must not be hot reloaded into again (see HotReload.onBoot).
+        HotReload.onBoot(ctx);
     }
 
     /**

@@ -181,6 +181,9 @@ dependencies {
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
 
     testImplementation("junit:junit:4.13.2")
+    // HandleStore is tested against the real hook-handle interface; compileOnly keeps it out of
+    // the APK, so the tests need their own copy.
+    testImplementation("io.github.libxposed:api:102.0.0")
     // The real org.json for the JVM tests: android.jar's is a stub (AmapTransitCardTest).
     testImplementation("org.json:json:20231013")
 }

@@ -598,7 +598,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
         } else if ("gen".equals(op)) {
             // What this generation of the module holds in this process, and whether it still
             // answers at all. The log line is for adb without an ordered sender.
-            String report = Gen.report();
+            String report = Gen.report() + " " + HotReload.status();
             Xp.log(Main.TAG + "gen " + report);
             setResultData(report);
         } else if ("anim".equals(op)) {
