@@ -53,6 +53,7 @@ final class SystemUiRetire {
         }
 
         String before = Gen.report();
+        String swept = "not run";
         List<String> warnings = new ArrayList<>();
         long started = SystemClock.uptimeMillis();
         // New work is refused while the teardown runs, so a feature's own "off" path cannot
@@ -61,6 +62,9 @@ final class SystemUiRetire {
         try {
             retireAll(warnings);
             if (!Gen.sweepForDryRun(2000L)) warnings.add("sweep timed out");
+            // The reading the acceptance is about: what is left between the teardown and the
+            // rebuild. Install-scoped registrations and the long-lived threads stay by design.
+            swept = Gen.report();
         } catch (Throwable t) {
             warnings.add("sweep: " + t);
         } finally {
@@ -75,6 +79,7 @@ final class SystemUiRetire {
         String out = "retire_dryrun ms=" + (SystemClock.uptimeMillis() - started)
                 + " warnings=" + warnings
                 + " before{" + before + "}"
+                + " swept{" + swept + "}"
                 + " after{" + Gen.report() + "}";
         Xp.w(HotReload.TAG + "dry run: " + out);
         return out;
