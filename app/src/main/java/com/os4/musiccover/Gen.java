@@ -233,7 +233,7 @@ public final class Gen {
 
         for (PostedOn p : postedOn) {
             try {
-                p.view.removeCallbacks(p.wrapper);
+                p.view.removeCallbacks(p);
             } catch (Throwable ignored) {
             }
         }
@@ -482,17 +482,23 @@ public final class Gen {
     private static final ExecutorService ioExecutor =
             Executors.newCachedThreadPool(r -> new Thread(guarded(r), "mc-io"));
 
-    private static final class PostedOn {
+    private static final class PostedOn implements Runnable {
         final View view;
         /** What the caller holds, for removeCallbacksOn. */
         final Runnable original;
-        /** What is actually on the view, and what retirement removes. */
-        final Runnable wrapper;
 
-        PostedOn(View view, Runnable original, Runnable wrapper) {
+        PostedOn(View view, Runnable original) {
             this.view = view;
             this.original = original;
-            this.wrapper = wrapper;
+        }
+
+        @Override
+        public void run() {
+            // Like the main-handler wrapper below: a runnable that has run is no longer held,
+            // or a track change's one-shot post would keep its view and bitmaps for the whole
+            // generation.
+            postedOn.remove(this);
+            if (live()) original.run();
         }
     }
 
@@ -787,15 +793,15 @@ public final class Gen {
         for (PostedOn p : hits) {
             postedOn.remove(p);
             try {
-                view.removeCallbacks(p.wrapper);
+                view.removeCallbacks(p);
             } catch (Throwable ignored) {
             }
         }
     }
 
     private static Runnable remember(View view, Runnable original) {
-        Runnable g = guarded(original);
-        postedOn.add(new PostedOn(view, original, g));
+        PostedOn g = new PostedOn(view, original);
+        postedOn.add(g);
         return g;
     }
 

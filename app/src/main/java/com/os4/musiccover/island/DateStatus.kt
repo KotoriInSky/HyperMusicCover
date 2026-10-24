@@ -604,7 +604,7 @@ internal object DateStatus {
         val host = hosts.getOrPut(v) {
             start(v.context)
             Host(v).also { h ->
-                Gen.layoutChange(v) { _, l, t, r, b, _, _, _, _ ->
+                val layoutListener = View.OnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
                     val previous = h.layout
                     val current = DateStatusLayout(l, t, r - l, b - t,
                         (v.parent as? View)?.width ?: 0, h.extra, MiniPlayerScene.aodActive)
@@ -619,6 +619,7 @@ internal object DateStatus {
                         h.offset.to(0f, 0.42f)
                     }
                 }
+                Gen.layoutChange(v, layoutListener)
                 Gen.attachState(v, object : View.OnAttachStateChangeListener {
                     override fun onViewAttachedToWindow(view: View) {
                         h.layout = null
@@ -631,9 +632,10 @@ internal object DateStatus {
                         h.offset.snap(0f)
                         later()
                         // The keyguard is rebuilt and this view goes with it. Left registered,
-                        // this listener and the host would keep the whole old tree reachable
+                        // these listeners and the host would keep the whole old tree reachable
                         // and the ledger one entry longer per rebuild; a view that comes back
                         // is measured again and gets a new host in the same cleared state.
+                        Gen.unlayoutChange(view, layoutListener)
                         Gen.unattachState(view, this)
                         hosts.remove(view)
                     }
