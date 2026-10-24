@@ -1,4 +1,5 @@
 package com.os4.musiccover.lyrics;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -103,7 +104,7 @@ public final class OnlineLyrics {
         final BlockingQueue<Integer> done = new LinkedBlockingQueue<>();
         for (int i = 0; i < 2; i++) {
             final int slot = i;
-            new Thread(new Runnable() {
+            Gen.thread("MCLyric" + order.get(i), new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -112,7 +113,7 @@ public final class OnlineLyrics {
                         done.offer(slot);
                     }
                 }
-            }, "MCLyric" + order.get(i)).start();
+            });
         }
         long deadline = android.os.SystemClock.uptimeMillis() + BUDGET_MS;
         boolean[] finished = new boolean[2];

@@ -1,6 +1,7 @@
 package com.os4.musiccover.lyrics;
 import com.os4.musiccover.LockTaps;
 import com.os4.musiccover.Main;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.graphics.PixelFormat;
@@ -148,12 +149,12 @@ final class LyricWindow {
     private static void setHost(View layer) {
         ViewTreeObserver old = sHostVto;
         LyricView v = sView;
-        if (old != null && v != null && old.isAlive()) old.removeOnPreDrawListener(v.preDrawListener());
+        if (old != null && v != null && old.isAlive()) Gen.unpreDraw(v, v.preDrawListener());
         sHost = layer;
         sHostVto = null;
         if (layer == null || v == null) return;
         ViewTreeObserver vto = layer.getViewTreeObserver();
-        vto.addOnPreDrawListener(v.preDrawListener());
+        Gen.preDraw(v, v.preDrawListener());
         sHostVto = vto;
     }
 
@@ -311,7 +312,7 @@ final class LyricWindow {
     private static void lookUpTraversal(final Class<?> rootClass) {
         if (sLookupStarted || rootClass == null) return;
         sLookupStarted = true;
-        new Thread(new Runnable() {
+        Gen.thread("mc-lyric-lookup", new Runnable() {
             @Override
             public void run() {
                 java.lang.reflect.Method m = findTraversal(rootClass, true);
@@ -333,7 +334,7 @@ final class LyricWindow {
                 sDoTraversal = m;
                 Xp.log(TAG + "drawing first through " + m);
             }
-        }, "mc-lyric-lookup").start();
+        });
     }
 
     /** The frame's own time, as the traversal callback hands it on; hidden from the SDK. */

@@ -319,6 +319,17 @@ public final class Gen {
         return e;
     }
 
+    public static ExecutorService executor(String name, int threads, int priority, boolean daemon) {
+        ExecutorService e = Executors.newFixedThreadPool(threads, r -> {
+            Thread t = new Thread(guarded(r), name);
+            t.setDaemon(daemon);
+            t.setPriority(priority);
+            return t;
+        });
+        executors.add(e);
+        return e;
+    }
+
     public static Thread thread(String name, Runnable r) {
         Thread t = new Thread(guarded(r), name);
         threads.add(t);

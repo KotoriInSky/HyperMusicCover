@@ -22,11 +22,6 @@ WallpaperProbe.java
 WallpaperVideo.java
 immersive/CountdownScene.java
 immersive/ImmersiveHost.java
-lyrics/LockLyrics.java
-lyrics/LyricSource.java
-lyrics/LyricView.java
-lyrics/LyricWindow.java
-lyrics/OnlineLyrics.java
 pickup/PickupIsland.kt
 pickup/PickupObserver.kt
 shade/ShadeBackdrop.java

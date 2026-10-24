@@ -6,6 +6,7 @@ import com.os4.musiccover.CoverCardLayer;
 import com.os4.musiccover.CoverMorphRoute;
 import com.os4.musiccover.CoverPush;
 import com.os4.musiccover.Main;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Intent;
 import android.media.session.MediaController;
@@ -1806,7 +1807,7 @@ public final class LockLyrics {
         try {
             android.hardware.display.DisplayManager dm = Main.sAppCtx.getSystemService(
                     android.hardware.display.DisplayManager.class);
-            dm.registerDisplayListener(new android.hardware.display.DisplayManager.DisplayListener() {
+            Gen.displayListener(dm, new android.hardware.display.DisplayManager.DisplayListener() {
                 @Override
                 public void onDisplayAdded(int id) {
                 }
