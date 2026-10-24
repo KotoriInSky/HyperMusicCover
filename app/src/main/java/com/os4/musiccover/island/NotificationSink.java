@@ -1,4 +1,7 @@
 package com.os4.musiccover.island;
+
+import com.os4.musiccover.Xp;
+
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
@@ -69,6 +72,39 @@ public final class NotificationSink {
         injected.clear();
         policies.clear();
         requestedMode = 0;
+    }
+
+    /**
+     * The live combines this generation injected into, for the next generation to re-attach
+     * to. Host objects only; the array field is found again by shape. Read before {@link
+     * #restore()}, which puts the originals back and forgets them.
+     */
+    public synchronized Object[] owners() {
+        List<Object> out = new ArrayList<>();
+        for (Injected i : injected) {
+            Object owner = i.owner.get();
+            if (owner != null) out.add(owner);
+        }
+        return out.toArray();
+    }
+
+    /**
+     * Takes the live combines over again after a hot reload: the retirement put the OEM's own
+     * arrays back, and the already-running combine flows will not call the factory again. Each
+     * failure leaves that flow exactly as it was before the module.
+     */
+    public synchronized void adopt(Object[] owners, int mode) {
+        if (owners == null || owners.length == 0) return;
+        int n = 0;
+        for (Object owner : owners) {
+            try {
+                if (owner != null && attach(owner, mode)) n++;
+            } catch (Throwable t) {
+                Xp.log("[MCNotify] re-attach to a live combine failed: " + t);
+            }
+        }
+        Xp.log("[MCNotify] re-attached to " + n + "/" + owners.length
+                + " live combine(s), mode=" + mode);
     }
 
     public synchronized String describe() {

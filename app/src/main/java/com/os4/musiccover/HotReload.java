@@ -246,6 +246,9 @@ public final class HotReload {
             out.add(new Object[]{"clock", Main.sContainer});
             out.add(new Object[]{"mediacard", MediaCard.save()});
             out.add(new Object[]{"island", MiniPlayerRuntime.save()});
+            // Read before the teardown's restore() puts the OEM's arrays back: the live
+            // combines are what the next generation has to inject into again.
+            out.add(new Object[]{"notifsink", Main.sNotificationSink.owners()});
         }
         if ("com.miui.miwallpaper".equals(proc)) {
             // The other side of SystemUI's token, the cover on the texture and the wallpaper it
@@ -451,6 +454,7 @@ public final class HotReload {
                 Object[] core = null;
                 Object card = null;
                 Object[] island = null;
+                Object[] notifSink = null;
                 android.view.View container = null;
                 for (Object[] f : features) {
                     if (!(f[0] instanceof String)) continue;
@@ -469,6 +473,9 @@ public final class HotReload {
                         case "island":
                             if (f[1] instanceof Object[]) island = (Object[]) f[1];
                             break;
+                        case "notifsink":
+                            if (f[1] instanceof Object[]) notifSink = (Object[]) f[1];
+                            break;
                         default:
                             break;
                     }
@@ -478,6 +485,16 @@ public final class HotReload {
                     Main.boot(ctx);
                 } else {
                     Xp.w(TAG + "no context yet; boot waits for the next container attach");
+                }
+                if (notifSink != null) {
+                    // The retirement put the OEM's own 7-element arrays back; the live combine
+                    // flows will not call the factory again, so this generation takes them over
+                    // with the mode the state file just loaded.
+                    Main.sNotificationSink.adopt(notifSink, Fingerprint.sFpAvoid);
+                    Main.refreshNotificationSink();
+                } else {
+                    Xp.w(TAG + "no notification sink handover; the bound-mode policy waits for"
+                            + " the next collection");
                 }
                 if (card != null) MediaCard.adopt(card, host);
                 if (island != null) {
