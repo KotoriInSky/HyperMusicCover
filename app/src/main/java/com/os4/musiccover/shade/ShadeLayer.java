@@ -116,12 +116,25 @@ public final class ShadeLayer {
      */
     public static void retire() {
         UI.removeCallbacks(DRIVE);
+        forgetExpansion();
+        ShadeBackdrop.retire();
+    }
+
+    /**
+     * Both readings back to shut, without touching the backdrop.
+     *
+     * <p>The OEM force-closes the shade on unlock and on screen off without writing the last
+     * value through the setter the expansion hook watches: a shade pulled down on the lock
+     * screen left this at 1 for the rest of the process, and the hot-reload busy check then
+     * refused every update with "the shade is open" over a panel that was not there (measured
+     * 2026-10-25; `NotificationShade` was GONE and `cmd statusbar collapse` cleared it).
+     */
+    public static void forgetExpansion() {
         sExpansion = 0f;
         sCentreExpansion = 0f;
         sLastDriven = 0f;
         sLastShade = 0f;
         sLastCentre = 0f;
-        ShadeBackdrop.retire();
     }
 
     // ------------------------------------------------------------------ driving

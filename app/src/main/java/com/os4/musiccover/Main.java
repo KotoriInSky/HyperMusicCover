@@ -1689,10 +1689,15 @@ public class Main extends XposedModule {
                     // A tap still waiting out its double tap window was aimed at a screen that
                     // is gone; whatever was going to cancel it cannot arrive now.
                     LockTaps.cancelPendingTap("screen off");
+                    // The shade goes away with the screen, on the same silent path as unlock.
+                    ShadeLayer.forgetExpansion();
                 }
                 if (Intent.ACTION_USER_PRESENT.equals(a)) {
                     CoverMorphLayer.cancel();
                     CoverCardLayer.hideNow();
+                    // A shade pulled down over the lock screen is force-closed without the
+                    // expansion setter being called; see ShadeLayer.forgetExpansion.
+                    ShadeLayer.forgetExpansion();
                 }
                 else CoverCardLayer.refresh();
                 // An immersive page's app stops drawing it while the phone is unlocked, and is
