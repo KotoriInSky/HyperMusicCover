@@ -74,7 +74,8 @@ final class WallpaperVideo {
 
     // ---------------------------------------------------------------- GL-thread state
 
-    private static EGLContext sCtx;
+    /** GL thread writes it; the hot reload's check section reads it from a binder thread. */
+    private static volatile EGLContext sCtx;
     private static int sOes;
     private static volatile SurfaceTexture sTexture;
     private static int sProgMirror, sProgBlur, sProgCompose;

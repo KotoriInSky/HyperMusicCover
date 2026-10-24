@@ -75,6 +75,25 @@ public final class ProbeGuard {
     }
 
     /**
+     * The token this process learned from SystemUI, for a hot-reloaded generation to inherit.
+     * Null for the process that mints (it is handed over through {@link #token}).
+     */
+    static synchronized String learnedToken() {
+        return sMinted ? null : sToken;
+    }
+
+    /**
+     * Takes on the token the retiring generation learned from SystemUI. The wallpaper process
+     * does not mint one; a fresh generation that started with nothing would have every message
+     * it sends refused until SystemUI next said hello.
+     */
+    static synchronized void adoptLearnedToken(String token) {
+        if (token == null || token.isEmpty() || sMinted) return;
+        sToken = token;
+        Xp.log("[MCProbe] learned token inherited from the previous generation");
+    }
+
+    /**
      * Takes on the retiring generation's token instead of minting a new one: the wallpaper
      * process holds the old token and would refuse every hello until it heard a new one.
      */

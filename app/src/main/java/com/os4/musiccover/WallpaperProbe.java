@@ -1487,7 +1487,14 @@ public class WallpaperProbe {
     }
 
     private static void saveArtLater(final Context ctx, final byte[] jpg) {
-        Gen.thread("mc-art-save", () -> saveArt(ctx, jpg));
+        sArtSaving.incrementAndGet();
+        Gen.thread("mc-art-save", () -> {
+            try {
+                saveArt(ctx, jpg);
+            } finally {
+                sArtSaving.decrementAndGet();
+            }
+        });
     }
 
     private static void saveArt(Context ctx, byte[] jpg) {
@@ -2524,6 +2531,12 @@ public class WallpaperProbe {
                         String report = genReport();
                         Xp.log(TAG + "gen " + report);
                         setResultData(report);
+                    } else if ("retire_dryrun".equals(op)) {
+                        // The rehearsal: retirement and adoption in this generation, no code
+                        // swapped. See dryRun().
+                        String report = dryRun(c);
+                        Xp.log(TAG + "retire_dryrun " + report);
+                        setResultData(report);
                     } else if ("state".equals(op)) {
                         Xp.log(TAG + "art=" + describe(sArt)
                                 + " orig=" + describe(sOrig)
@@ -2579,6 +2592,237 @@ public class WallpaperProbe {
         // Unprompted as well as when asked: a restart of this process alone would otherwise
         // leave SystemUI on whatever it last heard, which may be nothing.
         sayHello(ctx);
+    }
+
+    // ------------------------------------------------------------------ hot reload
+
+    /** Compositions in flight: a source push or a precompose. The check section refuses. */
+    private static final java.util.concurrent.atomic.AtomicInteger sComposing =
+            new java.util.concurrent.atomic.AtomicInteger();
+    /** JPEG writes in flight: the next generation restores the cover from what is on disk. */
+    private static final java.util.concurrent.atomic.AtomicInteger sArtSaving =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * The feature that cannot be interrupted right now, or null.
+     *
+     * Every read here is a volatile field, on the binder thread the hot reload arrives on. The
+     * rule is SystemUI's, only wider: a wallpaper restart is a flash the user barely sees, so
+     * anything mid-GL, mid-compose or mid-video is refused rather than handed over.
+     */
+    static String busyReason() {
+        if (sFade != null || sGpuFade != null || sUploadOverride != null
+                || sUploading != null || sFadeInFlight || sLeaveAt != 0L) {
+            return "a cover crossfade is running";
+        }
+        if (sComposing.get() > 0) return "a cover is being composed";
+        if (sArtSaving.get() > 0) return "the cover is still being written";
+        if (sLyricBlurWant != sLyricBlur) return "a lyric blur change is in flight";
+        if (sKeepAt != 0L) return "the keep-wallpaper dim is moving";
+        if (sGlTex != 0) return "a gpu crossfade holds a texture";
+        if (sVideoGlLive || WallpaperVideo.holdsGl()) return "the motion cover holds GL objects";
+        if (sCoverVideoActive || sActiveEngine != null || sPathPinned) {
+            return "the cover video owns the wallpaper window";
+        }
+        if (Boolean.TRUE.equals(sLockIsVideo) || (sLockIsVideo == null && sVideoEngine != null)) {
+            return "the lock wallpaper is a live video";
+        }
+        return null;
+    }
+
+    // What a generation hands the next one. Index 0 is the layout version: an array this build
+    // does not know is ignored whole, and the new generation adopts from disk as on a cold start.
+    private static final int WALL_STATE_SCHEMA = 1;
+    private static final int S_ART = 1, S_CARD = 2, S_ORIG = 3, S_ORIG_PRINT = 4,
+            S_TEX_COVER = 5, S_BLUR = 6, S_BLUR_WANT = 7, S_BLUR_SEQ = 8,
+            S_MSG_SEQ = 9, S_ART_SEQ = 10, S_REPORTED_W = 11, S_REPORTED_H = 12,
+            S_SURFACE_W = 13, S_SURFACE_H = 14, S_FADE_MS = 15, S_TRACK_FADE_MS = 16,
+            S_SKIP_FROST = 17, S_GPU_FADE = 18, S_GPU_BROKEN = 19, S_TEX_FIT = 20,
+            S_KG_ENGINE = 21, S_DESK_ENGINE = 22, S_KG_TEXTURE = 23, S_KG_RENDERER = 24,
+            S_DESK_RENDERER = 25, S_OEM_DARK = 26, S_OEM_DARK_KNOWN = 27,
+            S_HOME_DARK = 28, S_HOME_DARK_KNOWN = 29, S_SHARED = 30, S_DESK_KG = 31,
+            S_DESK_ON_LOCK = 32, S_SHADE = 33, S_SHADE_AT = 34, S_LOCK_VIDEO = 35,
+            S_FRAME_REQ = 36, S_KEEP_DIM = 37, S_KEEP_FROM = 38, S_KEEP_TO = 39,
+            S_KEEP_AT = 40, S_KEEP_MS = 41, S_GL_TID = 42, S_ASKS = 43, S_TOKEN = 44,
+            S_CTX = 45, S_LEN = 46;
+
+    /**
+     * The runtime state the next generation cannot look up again, and nothing else: settings
+     * stay in the state file, and the caches (frosted copies, compositions, fade buffers) are
+     * recomputed on demand. Everything here is a framework object or a primitive, which is what
+     * the framework lets cross a generation.
+     */
+    static Object[] save() {
+        return new Object[]{
+                WALL_STATE_SCHEMA,
+                sArt, sCardMode, sOrig, sOrigPrint, sTexShowsCover,
+                sLyricBlur, sLyricBlurWant, sBlurSeq, sMsgSeq, sArtSeq,
+                sReportedW, sReportedH, sSurfaceW, sSurfaceH,
+                sFadeMs, sTrackFadeMs, sSkipFrost, sGpuFadeOn, sGpuFadeBroken, sTexFit,
+                sKeyguardEngine, sDesktopEngine, sKeyguardTexture, sKeyguardRenderer,
+                sDesktopRenderer, sOemDarken, sOemDarkenKnown, sHomeDarken, sHomeDarkenKnown,
+                sSharedLock, sDesktopKgShown, sDesktopOnLock, sShadeOn, sShadeAt, sLockIsVideo,
+                sFrameReq, sKeepDim, sKeepFrom, sKeepTo, sKeepAt, sKeepDurMs,
+                sKeyguardGlTid, sAsks, ProbeGuard.learnedToken(), sCtx,
+        };
+    }
+
+    /**
+     * Puts the handed-over state in place. Runs on the framework's binder thread *before*
+     * install(): the new hooks are live the moment they are installed, and an upload arriving
+     * before sArt is back would see no cover and hand MiWallpaper the real wallpaper to decode.
+     */
+    static void adoptState(Object[] f) {
+        if (f == null || f.length < S_LEN) return;
+        if (!(f[0] instanceof Integer) || (Integer) f[0] != WALL_STATE_SCHEMA) {
+            Xp.w(TAG + "saved wall state is not this build's; the cover comes back from disk");
+            return;
+        }
+        if (f[S_ART] instanceof Bitmap) sArt = (Bitmap) f[S_ART];
+        if (f[S_CARD] instanceof Boolean) sCardMode = (Boolean) f[S_CARD];
+        if (f[S_ORIG] instanceof Bitmap) sOrig = (Bitmap) f[S_ORIG];
+        sOrigPrint = intAt(f, S_ORIG_PRINT, sOrigPrint);
+        sLyricBlur = boolAt(f, S_BLUR, sLyricBlur);
+        sLyricBlurWant = boolAt(f, S_BLUR_WANT, sLyricBlurWant);
+        sBlurSeq = longAt(f, S_BLUR_SEQ, sBlurSeq);
+        sMsgSeq = intAt(f, S_MSG_SEQ, sMsgSeq);
+        sArtSeq = intAt(f, S_ART_SEQ, sArtSeq);
+        sReportedW = intAt(f, S_REPORTED_W, sReportedW);
+        sReportedH = intAt(f, S_REPORTED_H, sReportedH);
+        sSurfaceW = intAt(f, S_SURFACE_W, sSurfaceW);
+        sSurfaceH = intAt(f, S_SURFACE_H, sSurfaceH);
+        sFadeMs = longAt(f, S_FADE_MS, sFadeMs);
+        sTrackFadeMs = longAt(f, S_TRACK_FADE_MS, sTrackFadeMs);
+        sSkipFrost = boolAt(f, S_SKIP_FROST, sSkipFrost);
+        sGpuFadeOn = boolAt(f, S_GPU_FADE, sGpuFadeOn);
+        sGpuFadeBroken = boolAt(f, S_GPU_BROKEN, sGpuFadeBroken);
+        sTexFit = boolAt(f, S_TEX_FIT, sTexFit);
+        sKeyguardEngine = f[S_KG_ENGINE];
+        sDesktopEngine = f[S_DESK_ENGINE];
+        sKeyguardTexture = f[S_KG_TEXTURE];
+        sKeyguardRenderer = f[S_KG_RENDERER];
+        sDesktopRenderer = f[S_DESK_RENDERER];
+        sOemDarken = boolAt(f, S_OEM_DARK, sOemDarken);
+        sOemDarkenKnown = boolAt(f, S_OEM_DARK_KNOWN, sOemDarkenKnown);
+        sHomeDarken = boolAt(f, S_HOME_DARK, sHomeDarken);
+        sHomeDarkenKnown = boolAt(f, S_HOME_DARK_KNOWN, sHomeDarkenKnown);
+        sSharedLock = boolAt(f, S_SHARED, sSharedLock);
+        sDesktopKgShown = f[S_DESK_KG] instanceof Boolean ? (Boolean) f[S_DESK_KG] : null;
+        sDesktopOnLock = boolAt(f, S_DESK_ON_LOCK, sDesktopOnLock);
+        sShadeOn = boolAt(f, S_SHADE, sShadeOn);
+        sShadeAt = longAt(f, S_SHADE_AT, sShadeAt);
+        sLockIsVideo = f[S_LOCK_VIDEO] instanceof Boolean ? (Boolean) f[S_LOCK_VIDEO] : null;
+        sFrameReq = intAt(f, S_FRAME_REQ, sFrameReq);
+        sKeepDim = floatAt(f, S_KEEP_DIM, sKeepDim);
+        sKeepFrom = floatAt(f, S_KEEP_FROM, sKeepFrom);
+        sKeepTo = floatAt(f, S_KEEP_TO, sKeepTo);
+        sKeepAt = longAt(f, S_KEEP_AT, sKeepAt);
+        sKeepDurMs = intAt(f, S_KEEP_MS, sKeepDurMs);
+        sKeyguardGlTid = intAt(f, S_GL_TID, sKeyguardGlTid);
+        sAsks = intAt(f, S_ASKS, sAsks);
+        sTexShowsCover = sArt != null;
+        if (f[S_CTX] instanceof Context) sCtx = (Context) f[S_CTX];
+        ProbeGuard.adoptLearnedToken(f[S_TOKEN] instanceof String ? (String) f[S_TOKEN] : null);
+    }
+
+    private static int intAt(Object[] f, int i, int had) {
+        return f[i] instanceof Number ? ((Number) f[i]).intValue() : had;
+    }
+
+    private static long longAt(Object[] f, int i, long had) {
+        return f[i] instanceof Number ? ((Number) f[i]).longValue() : had;
+    }
+
+    private static float floatAt(Object[] f, int i, float had) {
+        return f[i] instanceof Number ? ((Number) f[i]).floatValue() : had;
+    }
+
+    private static boolean boolAt(Object[] f, int i, boolean had) {
+        return f[i] instanceof Boolean ? (Boolean) f[i] : had;
+    }
+
+    /**
+     * The rest of the adoption, on the main thread: the R8 names read back off the engine it
+     * was handed, the texture's size put back where the dimension hook looks, and then the
+     * cold-start registration path. No reload is asked for - the texture already shows the
+     * cover, and re-running onSurfaceCreated would only upload the same picture again.
+     */
+    static void adoptMain(Context ctx) {
+        if (ctx != null) sCtx = ctx.getApplicationContext();
+        Object eng = sKeyguardEngine != null ? sKeyguardEngine : sDesktopEngine;
+        if (eng != null) {
+            try {
+                EngineNames.resolve(eng);
+            } catch (Throwable t) {
+                Xp.w(TAG + "engine names not resolved after the reload: " + t);
+            }
+        }
+        if (sKeyguardTexture != null && sReportedW > 0 && sReportedH > 0) {
+            sTexSizes.put(sKeyguardTexture,
+                    new android.graphics.Rect(0, 0, sReportedW, sReportedH));
+        }
+        if (sCtx == null) {
+            Xp.w(TAG + "no context after the reload; the receivers wait for a cold start");
+            return;
+        }
+        register(sCtx);
+        if (sKeepAt != 0L) startKeepPump();
+        Xp.log(TAG + "adopted art=" + describe(sArt) + " card=" + sCardMode
+                + " blur=" + sLyricBlur + "/" + sLyricBlurWant
+                + " engine=" + (sKeyguardEngine == null ? "none" : "yes"));
+    }
+
+    /**
+     * What retirement takes back besides the ledger's registrations. The cover itself is
+     * handed over, so it is not touched; everything here is a cache this generation was the
+     * last holder of.
+     */
+    static void retireForReload() {
+        sKeepPumping = false;
+        KEEP_MAIN.removeCallbacks(KEEP_PUMP);
+        WallpaperVideo.retire();
+        sComposed = null;
+        sFitted = null;
+        sFittedOf = null;
+        dropFrosted();
+        sScreenArts.clear();
+        sScreenArtOf = null;
+        sShadeFitted = null;
+        sShadeFitOf = null;
+        // The two fade buffers are screen-sized each; the check section has already said no
+        // fade is running, so nothing is reading them.
+        sFadeBuf = null;
+        sFadeBuf2 = null;
+        sKeptShown = null;
+        sFadeFrom = null;
+        Xp.log(TAG + "retired: cover handed over, caches let go");
+    }
+
+    /**
+     * The rehearsal: the retirement steps, the ledger sweep and the adoption path, in this
+     * generation and with no code swapped. `op retire_dryrun`, the probe only.
+     */
+    static String dryRun(Context ctx) {
+        if (Looper.myLooper() != Looper.getMainLooper()) return "not on the main thread";
+        String busy = busyReason();
+        if (busy != null) return "deferred: " + busy;
+        Object[] state = save();
+        String before = Gen.report();
+        String swept;
+        Gen.quiescing = true;
+        try {
+            retireForReload();
+            swept = Gen.sweepForDryRun(2000L) ? Gen.report() : "sweep timed out";
+        } catch (Throwable t) {
+            swept = "failed: " + t;
+        } finally {
+            Gen.quiescing = false;
+        }
+        sRegistered = false;
+        adoptState(state);
+        adoptMain(ctx);
+        return "retire_dryrun before{" + before + "} swept{" + swept
+                + "} after{" + Gen.report() + "}";
     }
 
     /**
@@ -2890,10 +3134,14 @@ public class WallpaperProbe {
                                           final boolean cardMode, final String preKey) {
         final int seq = ++sSrcSeq;
         final long t0 = SystemClock.uptimeMillis();
+        sComposing.incrementAndGet();
         composer().post(new Runnable() {
             @Override
             public void run() {
-                if (seq != sSrcSeq) return;
+                if (seq != sSrcSeq) {
+                    sComposing.decrementAndGet();
+                    return;
+                }
                 final Bitmap b;
                 final long read, composed;
                 final boolean kept;
@@ -2901,11 +3149,15 @@ public class WallpaperProbe {
                     CoverCompose.Source s = CoverCompose.readSource(new File(path));
                     if (s == null) {
                         Xp.log(TAG + "source at " + path + " is not one this build reads");
+                        sComposing.decrementAndGet();
                         return;
                     }
                     read = SystemClock.uptimeMillis();
                     sTmRead = read;
-                    if (seq != sSrcSeq) return;
+                    if (seq != sSrcSeq) {
+                        sComposing.decrementAndGet();
+                        return;
+                    }
                     long key = CoverCompose.sourceKey(s, cardMode);
                     Composed hit = composedFor(key);
                     kept = hit != null;
@@ -2935,22 +3187,29 @@ public class WallpaperProbe {
                     saveSourceLater(c, s, cardMode);
                 } catch (Throwable t) {
                     Xp.w(TAG + "composing from the source failed: " + t);
+                    sComposing.decrementAndGet();
                     return;
                 }
+                // Still counted until the picture is up: the check section must not let the
+                // process retire between the composition and the thread that applies it.
                 Gen.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (seq != sSrcSeq) {
-                            Xp.log(TAG + "composed cover overtaken by a newer one, dropped");
-                            return;
+                        try {
+                            if (seq != sSrcSeq) {
+                                Xp.log(TAG + "composed cover overtaken by a newer one, dropped");
+                                return;
+                            }
+                            Xp.log(TAG + "composed from the source: read " + (read - t0)
+                                    + "ms, compose " + (composed - read) + "ms"
+                                    + (kept ? " (kept)" : "") + ", to the main thread "
+                                    + (SystemClock.uptimeMillis() - composed) + "ms");
+                            applyArt(b, reload, fade);
+                            // The JPEG from the old path is now older than what is on screen.
+                            new File(c.getFilesDir(), ART_FILE).delete();
+                        } finally {
+                            sComposing.decrementAndGet();
                         }
-                        Xp.log(TAG + "composed from the source: read " + (read - t0)
-                                + "ms, compose " + (composed - read) + "ms"
-                                + (kept ? " (kept)" : "") + ", to the main thread "
-                                + (SystemClock.uptimeMillis() - composed) + "ms");
-                        applyArt(b, reload, fade);
-                        // The JPEG from the old path is now older than what is on screen.
-                        new File(c.getFilesDir(), ART_FILE).delete();
                     }
                 });
             }
@@ -3082,11 +3341,12 @@ public class WallpaperProbe {
      */
     private static void precompose(final String path, final boolean cardMode,
                                    final String preKey) {
+        sComposing.incrementAndGet();
         composer().post(new Runnable() {
             @Override
             public void run() {
-                if (sArt != null) return;
                 try {
+                    if (sArt != null) return;
                     long t0 = SystemClock.uptimeMillis();
                     CoverCompose.Source s = CoverCompose.readSource(new File(path));
                     if (s == null) return;
@@ -3103,6 +3363,8 @@ public class WallpaperProbe {
                             + (SystemClock.uptimeMillis() - t0) + "ms");
                 } catch (Throwable t) {
                     Xp.w(TAG + "precompose failed: " + t);
+                } finally {
+                    sComposing.decrementAndGet();
                 }
             }
         });
@@ -3111,6 +3373,9 @@ public class WallpaperProbe {
     /** This process's own copy of the source, for its next cold start. Low priority, later. */
     private static void saveSourceLater(final Context c, final CoverCompose.Source s,
                                         final boolean cardMode) {
+        // Counted with the JPEG write: both are what a later cold start restores, and the
+        // check section must not let this generation go before one of them has landed.
+        sArtSaving.incrementAndGet();
         Gen.thread("mc-src-save", () -> {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
             try {
@@ -3121,6 +3386,8 @@ public class WallpaperProbe {
                 else marker.delete();
             } catch (Throwable t) {
                 Xp.w(TAG + "saving the source failed: " + t);
+            } finally {
+                sArtSaving.decrementAndGet();
             }
         });
     }
