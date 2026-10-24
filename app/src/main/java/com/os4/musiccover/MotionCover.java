@@ -64,8 +64,7 @@ final class MotionCover {
     /** Copies to the shared directory; never queued behind a lookup on the network. */
     private static synchronized Handler io() {
         if (sIo == null) {
-            sIoThread = new HandlerThread("MCMotionIO");
-            sIoThread.start();
+            sIoThread = Gen.handlerThread("MCMotionIO");
             sIo = new Handler(sIoThread.getLooper());
         }
         return sIo;
@@ -73,8 +72,7 @@ final class MotionCover {
 
     private static synchronized Handler work() {
         if (sWork == null) {
-            sThread = new HandlerThread("MCMotion");
-            sThread.start();
+            sThread = Gen.handlerThread("MCMotion");
             sWork = new Handler(sThread.getLooper());
         }
         return sWork;

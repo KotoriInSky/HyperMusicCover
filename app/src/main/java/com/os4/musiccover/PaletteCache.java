@@ -195,7 +195,9 @@ final class PaletteCache {
     }
 
     private static synchronized void dropLater() {
-        if (sDropper == null) sDropper = new android.os.Handler(android.os.Looper.getMainLooper());
+        // Gen's handler: retirement clears what is still queued on it, so the decoded copy of
+        // the wallpaper is not held by a message that would run old code later.
+        if (sDropper == null) sDropper = Gen.handler();
         sDropper.removeCallbacks(DROP_DECODED);
         sDropper.postDelayed(DROP_DECODED, DECODE_KEEP_MS);
     }

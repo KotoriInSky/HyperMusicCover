@@ -1,9 +1,3 @@
 # Module files still making raw lifecycle/thread/listener calls.
-# Step 2 removes one group at a time; a file not listed must not contain
-# any of the calls GenRulesTest forbids.
-CardVideo.java
-MotionArt.java
-MotionCover.java
-MotionTrace.java
-WallpaperProbe.java
-WallpaperVideo.java
+# Empty: every module file now goes through Gen. A new file that makes a raw call
+# fails immediately, and a file that has moved must not creep back.

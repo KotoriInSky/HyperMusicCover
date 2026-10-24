@@ -173,7 +173,7 @@ final class WallpaperVideo {
         final SurfaceTexture st = sTexture;
         if (st != null) {
             sPendingTexture = st;
-            new Handler(Looper.getMainLooper()).post(() -> attachPlayer(st));
+            Gen.post(() -> attachPlayer(st));
         }
         // The SurfaceTexture has to be made in the engine's GL context, so the first frame
         // request is what creates it; the player is started once it exists.
@@ -201,6 +201,18 @@ final class WallpaperVideo {
         }
     }
 
+    /**
+     * Retirement: the player let go and the receiver forgotten, so the next generation's
+     * registerScreen() puts a fresh one on (Gen takes the one registered here back out). The
+     * GL objects are already gone - a live video is refused before retirement, see
+     * WallpaperProbe.busyReason().
+     */
+    static void retire() {
+        stop("hot reload");
+        sScreen = null;
+        sApp = null;
+    }
+
     private static void registerScreen(Context ctx) {
         if (sScreen != null) return;
         sScreen = new BroadcastReceiver() {
@@ -223,7 +235,7 @@ final class WallpaperVideo {
         };
         IntentFilter f = new IntentFilter(Intent.ACTION_SCREEN_OFF);
         f.addAction(Intent.ACTION_SCREEN_ON);
-        ctx.registerReceiver(sScreen, f);
+        Gen.receiver(ctx, sScreen, f);
     }
 
     /** Main thread: point the player at a SurfaceTexture the GL thread has just made. */
@@ -439,7 +451,7 @@ final class WallpaperVideo {
             return sFullTex;
         } catch (Throwable t) {
             Xp.w(TAG + "GL failed, turning off: " + android.util.Log.getStackTraceString(t));
-            new Handler(Looper.getMainLooper()).post(() -> stop("GL failure"));
+            Gen.post(() -> stop("GL failure"));
             return 0;
         }
     }
@@ -468,7 +480,7 @@ final class WallpaperVideo {
             WallpaperProbe.videoFrame();
         }, new Handler(Looper.getMainLooper()));
         sPendingTexture = st;
-        new Handler(Looper.getMainLooper()).post(() -> attachPlayer(st));
+        Gen.post(() -> attachPlayer(st));
 
         sProgMirror = program(VS, FS_MIRROR);
         sProgBlur = program(VS, FS_BLUR);

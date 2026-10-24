@@ -601,7 +601,7 @@ public class WallpaperProbe {
     private static boolean sKeepPumping;
     /** The pump's own frame request, on the main thread. */
     private static final long KEEP_PUMP_MS = 24L;
-    private static final Handler KEEP_MAIN = new Handler(Looper.getMainLooper());
+    private static final Handler KEEP_MAIN = Gen.watchHandler(new Handler(Looper.getMainLooper()));
     private static final Object KEEP_LOCK = new Object();
     /** Diagnostics: messages received, drawn changes, and the last few drawn values. */
     private static int sKeepMsgs;
@@ -1474,10 +1474,7 @@ public class WallpaperProbe {
     }
 
     private static void saveArtLater(final Context ctx, final byte[] jpg) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() { saveArt(ctx, jpg); }
-        }, "mc-art-save").start();
+        Gen.thread("mc-art-save", () -> saveArt(ctx, jpg));
     }
 
     private static void saveArt(Context ctx, byte[] jpg) {
@@ -1588,8 +1585,7 @@ public class WallpaperProbe {
         final long[] spent = {0L, 0L, 0L};  // blend ms, frames, frames waited out
         sFrostSkipping = sSkipFrost;
         sFadeInFlight = false;
-        final Handler h = new Handler(Looper.getMainLooper());
-        h.post(new Runnable() {
+        final Runnable step = new Runnable() {
             @Override
             public void run() {
                 // A newer fade has taken over - a track changed while this one was in the air.
@@ -1600,7 +1596,7 @@ public class WallpaperProbe {
                 // compose over the top of it - see sFadeInFlight.
                 if (sFadeInFlight && now - sFadeSentAt < FADE_ACK_MS) {
                     spent[2]++;
-                    h.postDelayed(this, 2L);
+                    Gen.postDelayed(this, 2L);
                     return;
                 }
                 long el = now - t0;
@@ -1630,7 +1626,7 @@ public class WallpaperProbe {
                 Bitmap dst = pickFadeBuf(fw, fh);
                 if (dst == null) {
                     spent[2]++;
-                    h.postDelayed(this, 2L);
+                    Gen.postDelayed(this, 2L);
                     return;
                 }
                 long b0 = SystemClock.uptimeMillis();
@@ -1645,9 +1641,10 @@ public class WallpaperProbe {
                 // Kept alive between frames: T(false) finishes rendering after every frame,
                 // which throws the EGL context away for the next one to rebuild.
                 reloadEngine(lockEngine(), true);
-                h.postDelayed(this, FADE_STEP_MS);
+                Gen.postDelayed(this, FADE_STEP_MS);
             }
-        });
+        };
+        Gen.post(step);
     }
 
     /**
@@ -1818,8 +1815,8 @@ public class WallpaperProbe {
         } else {
             f = startFreshGpuFade(from, to, done, durMs);
         }
-        final android.view.Choreographer ch = android.view.Choreographer.getInstance();
-        ch.postFrameCallback(new android.view.Choreographer.FrameCallback() {
+        android.view.Choreographer.FrameCallback loop =
+                new android.view.Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
                 if (sGpuFade != f) return;
@@ -1836,9 +1833,10 @@ public class WallpaperProbe {
                     return;
                 }
                 requestFrame(true);
-                ch.postFrameCallback(this);
+                Gen.frame(this);
             }
-        });
+        };
+        Gen.frame(loop);
     }
 
     /** A fade from `from` to `to` from the start: one reload uploads `to` underneath. */
@@ -1881,7 +1879,7 @@ public class WallpaperProbe {
     /** Any thread. Ends a fade that cannot continue, with a plain reload so nothing is stranded. */
     private static void abortGpuFade(final GpuFade f) {
         f.finished = true;
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
+        Gen.post(new Runnable() {
             @Override
             public void run() {
                 if (sGpuFade != f) return;
@@ -1957,7 +1955,7 @@ public class WallpaperProbe {
             holding = true;
             if (!f.swapPosted) {
                 f.swapPosted = true;
-                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                Gen.post(new Runnable() {
                     @Override
                     public void run() {
                         if (sGpuFade != f) return;
@@ -1976,7 +1974,7 @@ public class WallpaperProbe {
                 sGlTexFor = null;
                 sGlTexCtx = null;
             }
-            new Handler(Looper.getMainLooper()).post(new Runnable() {
+            Gen.post(new Runnable() {
                 @Override
                 public void run() {
                     sLastFade = "done in " + (SystemClock.uptimeMillis() - f.startedAt) + "ms, "
@@ -2546,12 +2544,12 @@ public class WallpaperProbe {
         // it comes as the keyguard locks, which is at the screen going off, not at the wake.
         try {
             IntentFilter screen = new IntentFilter(Intent.ACTION_USER_PRESENT);
-            ctx.registerReceiver(new android.content.BroadcastReceiver() {
+            Gen.receiver(ctx, new android.content.BroadcastReceiver() {
                 @Override
                 public void onReceive(Context c, Intent i) {
                     sDesktopKgShown = false;
                     if (!sSharedLock) return;
-                    new Handler(Looper.getMainLooper()).post(WallpaperProbe::syncSharedLock);
+                    Gen.post(WallpaperProbe::syncSharedLock);
                 }
             }, screen, Context.RECEIVER_EXPORTED);
         } catch (Throwable t) {
@@ -2684,8 +2682,7 @@ public class WallpaperProbe {
                 Bitmap sharp = videoPath() ? null : sharpFittedArt();
                 if (on && sharp != null) frostedOf(sharp);
                 final long t0 = SystemClock.uptimeMillis();
-                final Handler h = new Handler(Looper.getMainLooper());
-                h.post(new Runnable() {
+                final Runnable settle = new Runnable() {
                     @Override
                     public void run() {
                         // Overtaken while this one was waiting out a fade. The wait re-posts,
@@ -2700,7 +2697,7 @@ public class WallpaperProbe {
                         }
                         if ((sFade != null || sGpuFade != null)
                                 && SystemClock.uptimeMillis() - t0 < 1500L) {
-                            h.postDelayed(this, 30L);
+                            Gen.postDelayed(this, 30L);
                             return;
                         }
                         // The lyrics wait for this before they come in, so that the two come in
@@ -2726,7 +2723,8 @@ public class WallpaperProbe {
                         if (from != null && to != null) startFade(from, to, null);
                         else reloadTexture();
                     }
-                });
+                };
+                Gen.post(settle);
             }
         });
     }
@@ -2836,9 +2834,8 @@ public class WallpaperProbe {
 
     private static synchronized Handler composer() {
         if (sComposer == null) {
-            android.os.HandlerThread t = new android.os.HandlerThread("mc-compose",
+            android.os.HandlerThread t = Gen.handlerThread("mc-compose",
                     android.os.Process.THREAD_PRIORITY_DISPLAY);
-            t.start();
             sComposer = new Handler(t.getLooper());
         }
         return sComposer;
@@ -2902,7 +2899,7 @@ public class WallpaperProbe {
                     Xp.w(TAG + "composing from the source failed: " + t);
                     return;
                 }
-                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                Gen.post(new Runnable() {
                     @Override
                     public void run() {
                         if (seq != sSrcSeq) {
@@ -3076,21 +3073,18 @@ public class WallpaperProbe {
     /** This process's own copy of the source, for its next cold start. Low priority, later. */
     private static void saveSourceLater(final Context c, final CoverCompose.Source s,
                                         final boolean cardMode) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
-                try {
-                    CoverCompose.writeSource(new File(c.getFilesDir(), SRC_FILE),
-                            s.src, s.w, s.h, s.bias);
-                    File marker = new File(c.getFilesDir(), "mc_card_mode");
-                    if (cardMode) marker.createNewFile();
-                    else marker.delete();
-                } catch (Throwable t) {
-                    Xp.w(TAG + "saving the source failed: " + t);
-                }
+        Gen.thread("mc-src-save", () -> {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+            try {
+                CoverCompose.writeSource(new File(c.getFilesDir(), SRC_FILE),
+                        s.src, s.w, s.h, s.bias);
+                File marker = new File(c.getFilesDir(), "mc_card_mode");
+                if (cardMode) marker.createNewFile();
+                else marker.delete();
+            } catch (Throwable t) {
+                Xp.w(TAG + "saving the source failed: " + t);
             }
-        }, "mc-src-save").start();
+        });
     }
 
     /**
@@ -3251,7 +3245,7 @@ public class WallpaperProbe {
             // the desktop's own picture.
             Xp.log(TAG + "the desktop was handed a cover as the lock screen went; reloading it");
             final Object eng = sDesktopEngine;
-            new Handler(Looper.getMainLooper()).post(() -> {
+            Gen.post(() -> {
                 if (!desktopOnLockWanted()) reloadEngine(eng);
             });
         }
@@ -3283,7 +3277,7 @@ public class WallpaperProbe {
                 + " desktop engine while locked" : "the lock screen has a wallpaper of its own again"));
         // Whatever was remembered belonged to the other arrangement's lock wallpaper.
         sOrig = null;
-        new Handler(Looper.getMainLooper()).post(() -> {
+        Gen.post(() -> {
             // The picture the first cover fades in from is learnt from a desktop upload with no
             // cover on it. One now, of the picture already on screen, so that first fade is not
             // a cut.
@@ -3297,7 +3291,7 @@ public class WallpaperProbe {
      */
     private static void onDesktopKeyguard(boolean showing) {
         sDesktopKgShown = showing;
-        new Handler(Looper.getMainLooper()).post(WallpaperProbe::syncSharedLock);
+        Gen.post(WallpaperProbe::syncSharedLock);
     }
 
     /**
@@ -3516,7 +3510,7 @@ public class WallpaperProbe {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             requestFrame(true);
         } else {
-            new Handler(Looper.getMainLooper()).post(() -> requestFrame(true));
+            Gen.post(() -> requestFrame(true));
         }
     }
 
@@ -3810,8 +3804,13 @@ public class WallpaperProbe {
     private static volatile long sCurrentArtChecksum;
     private static final String COVER_VIDEO_FILE = "mc_cover.mp4";
     private static final String COVER_VIDEO_BLUR_FILE = "mc_cover_blur.mp4";
-    private static final java.util.concurrent.ExecutorService sVideoWorker =
-            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static java.util.concurrent.ExecutorService sVideoWorker;
+
+    /** The cover video's encoder, built on first use so retirement owns it (Gen.retire). */
+    private static synchronized java.util.concurrent.ExecutorService videoWorker() {
+        if (sVideoWorker == null) sVideoWorker = Gen.executor("mc-wall-video");
+        return sVideoWorker;
+    }
     /**
      * Bumped by every takeover request, in either direction. An encode that finishes after the
      * cover was taken down - or after a newer track superseded it - must not switch the window to
@@ -4150,7 +4149,7 @@ public class WallpaperProbe {
             return;
         }
         Xp.log(TAG + "video engine captured: " + n);
-        new Handler(Looper.getMainLooper()).post(() -> {
+        Gen.post(() -> {
             if (sActiveEngine == null && targetEngine() == self && videoPath() && sArt != null) {
                 Xp.log(TAG + "a cover is waiting, putting it on " + self.getClass().getSimpleName());
                 videoWindowTakeover(false);
@@ -4268,7 +4267,7 @@ public class WallpaperProbe {
     private static void onKeyguardSeen(boolean showing) {
         if (sKeyguardUp == showing) return;
         sKeyguardUp = showing;
-        new Handler(Looper.getMainLooper()).post(() -> {
+        Gen.post(() -> {
             if (!showing) {
                 Object active = sActiveEngine;
                 if (sCoverVideoActive && active != null && active == sDesktopVideoEngine) {
@@ -4559,7 +4558,7 @@ public class WallpaperProbe {
         final String lockPath = sLockVideoPath;
         final long savedPos = sSavedVideoPosMs;
 
-        sVideoWorker.submit(() -> {
+        videoWorker().submit(() -> {
             try {
                 File videoFile = new File(ctx.getFilesDir(),
                         lyricBlur ? COVER_VIDEO_BLUR_FILE : COVER_VIDEO_FILE);
@@ -4627,7 +4626,7 @@ public class WallpaperProbe {
     /** The encoded cover goes into the engine's window. From the video worker. */
     private static void putCoverVideo(final Object eng, final int gen, final String path,
                                       final boolean lyricBlur) {
-        new Handler(Looper.getMainLooper()).post(() -> {
+        Gen.post(() -> {
             if (gen != sTakeoverGen.get()) return;
             if (isDesktopEngine(eng) && !lockScreenUp()) {
                 // Unlocked while this encoded, on a shared video.
@@ -4648,8 +4647,7 @@ public class WallpaperProbe {
             reloadThen(eng, gen, fp -> {
                 tellSystemUi("videoreload", "the cover is on the window");
                 // Alive a few seconds past the first frame: this engine plays a cover.
-                new Handler(Looper.getMainLooper()).postDelayed(
-                        WallpaperProbe::clearTakeoverMark, TAKEOVER_SURVIVE_MS);
+                Gen.postDelayed(WallpaperProbe::clearTakeoverMark, TAKEOVER_SURVIVE_MS);
             });
         });
     }
@@ -4779,8 +4777,7 @@ public class WallpaperProbe {
      * object, so the player is looked up afresh on every poll. A newer takeover abandons the wait.
      */
     private static void reloadThen(final Object eng, final int gen, final AfterReload then) {
-        final Handler h = new Handler(Looper.getMainLooper());
-        h.post(() -> {
+        Gen.post(() -> {
             if (gen != sTakeoverGen.get()) return;
             final Object before = lockPlayer(eng);
             try {
@@ -4814,9 +4811,9 @@ public class WallpaperProbe {
                     then.run(fp);
                     return;
                 }
-                h.postDelayed(poll[0], FIRST_FRAME_POLL_MS);
+                Gen.postDelayed(poll[0], FIRST_FRAME_POLL_MS);
             };
-            h.postDelayed(poll[0], FIRST_FRAME_POLL_MS);
+            Gen.postDelayed(poll[0], FIRST_FRAME_POLL_MS);
             Xp.log(TAG + "reload asked of " + eng.getClass().getSimpleName());
         });
     }
@@ -4865,7 +4862,6 @@ public class WallpaperProbe {
         }
         final long want = target;
         final boolean parkIt = park;
-        final Handler h = new Handler(Looper.getMainLooper());
         // SystemUI is told now, with the first seek, not after it has been read back: the
         // cover view over the window starts its fade-out on this word, and its first frames are
         // still nearly opaque while the seek lands. Waiting for the read-back held the cover up
@@ -4880,7 +4876,7 @@ public class WallpaperProbe {
                 told[0] = true;
                 tellSystemUi("videoreload", "the wallpaper's video is back, seeking to " + want + "ms");
             }
-            h.postDelayed(() -> {
+            Gen.postDelayed(() -> {
                 if (gen != sTakeoverGen.get()) return;
                 Object now = lockPlayer(eng);
                 long at = playerPositionMs(now);
@@ -4889,7 +4885,7 @@ public class WallpaperProbe {
                 // the read-back never agreed and three more seeks held the SystemUI cover up for
                 // three quarters of a second longer on every exit.
                 if (!parkIt && at < want - SEEK_TOLERANCE_MS && ++tries[0] < 3) {
-                    h.post(step[0]);
+                    Gen.post(step[0]);
                     return;
                 }
                 if (parkIt) playerPause(now);
@@ -4897,7 +4893,7 @@ public class WallpaperProbe {
                 Xp.log(TAG + "restore: settled at " + at + "ms");
             }, SEEK_VERIFY_MS);
         };
-        h.post(step[0]);
+        Gen.post(step[0]);
     }
 
     /**
