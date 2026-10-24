@@ -76,6 +76,8 @@ public final class HotReload {
     private static final long PENDING_WINDOW_MS = 2 * 60 * 1000L;
     /** The build the last hot reload did not survive, or empty. For `op=gen`. */
     private static volatile String sBlocked = "";
+    /** How the last adoption in this process paired the hooks, or empty. For `op=gen`. */
+    private static volatile String sAdopted = "";
 
     // ---------------------------------------------------------------- module side
 
@@ -312,13 +314,14 @@ public final class HotReload {
             }
             int removed = store.unhookRemaining();
             oldIds.removeAll(store.newIds());
-            Xp.log(TAG + "HotReload adopted gen=" + sGen + " process=" + proc
-                    + " replaced=" + store.replacedCount()
+            sAdopted = "replaced=" + store.replacedCount()
                     + " added=" + store.addedCount()
                     + " removedOld=" + removed
                     + " failed=" + failed
+                    + " features=" + (state == null ? 0 : state.features.length)
                     + " missing=" + oldIds
-                    + " left=" + store.remainingLabels()
+                    + " left=" + store.remainingLabels();
+            Xp.log(TAG + "HotReload adopted gen=" + sGen + " process=" + proc + " " + sAdopted
                     + " new=" + store.newIds());
             if (failed) {
                 Gen.inert = true;
@@ -580,7 +583,8 @@ public final class HotReload {
     /** For `op=gen`: whether a previous hot reload left a build blocked. */
     static String status() {
         return "blocked=" + (sBlocked.isEmpty() ? "-" : sBlocked)
-                + " gen=" + sGen + " class=" + sClassId + " retired=" + sRetired;
+                + " gen=" + sGen + " class=" + sClassId + " retired=" + sRetired
+                + " adopted=" + (sAdopted.isEmpty() ? "-" : sAdopted);
     }
 
     // ---------------------------------------------------------------- hook installer
