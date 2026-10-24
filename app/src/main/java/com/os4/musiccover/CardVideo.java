@@ -119,6 +119,18 @@ final class CardVideo {
         CoverCardLayer.refresh();
     }
 
+    /**
+     * Retirement: the player unloaded, and the guards that say "already registered" cleared.
+     * The receiver itself is Gen's to unregister; left non-null here, registerScreen() would
+     * refuse to put it back on the next generation's first video.
+     */
+    static void retire() {
+        unload("hot reload");
+        sScreen = null;
+        sWanted = false;
+        sRun = false;
+    }
+
     static void unload(String why) {
         if (sPath == null) return;
         sSession++;

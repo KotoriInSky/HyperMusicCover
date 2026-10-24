@@ -764,8 +764,7 @@ public final class MediaCard {
     static void retire() {
         unlisten();
         releaseCardGuard();
-        CardVideo.want(false);
-        CardVideo.unload("hot reload");
+        CardVideo.retire();
         sHeard = null;
         sHeardValid = false;
     }
