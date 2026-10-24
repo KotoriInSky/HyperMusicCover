@@ -59,6 +59,14 @@ public final class Gen {
     static volatile boolean retired;
     /** Adoption failed: this generation answers nothing until the process restarts. */
     static volatile boolean inert;
+    /**
+     * Set while a retirement's teardown runs on the main thread. The teardown gives OEM state
+     * back through the same helpers the features use at runtime, and those are all refused once
+     * the gate is closed - which it already is by the time the teardown runs. So the teardown's
+     * own posts run in place instead: same work, on the main thread, before the sweep takes the
+     * views they touch.
+     */
+    private static volatile boolean tearingDown;
 
     /** Whether this generation may still do its work. */
     static boolean live() {
@@ -124,10 +132,13 @@ public final class Gen {
                 new java.util.concurrent.atomic.AtomicBoolean();
         boolean ran = onMain(timeoutMs, () -> {
             if (!tooLate.get() && beforeSweep != null) {
+                tearingDown = true;
                 try {
                     beforeSweep.run();
                 } catch (Throwable t) {
                     Xp.w("[MCGen] teardown before the sweep failed: " + t);
+                } finally {
+                    tearingDown = false;
                 }
             }
             sweep(false);
@@ -686,13 +697,33 @@ public final class Gen {
         return h;
     }
 
+    /**
+     * Runs [r] now when it belongs to a teardown on the main thread; true when it did. A
+     * teardown's steps are synchronous hand-backs - restoring the cut-out, the panel's
+     * presence, the glass - and queueing them would only let the sweep drop them.
+     */
+    private static boolean runInTeardown(Runnable r) {
+        if (!tearingDown || r == null) return false;
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) return false;
+        try {
+            r.run();
+        } catch (Throwable t) {
+            Xp.w("[MCGen] teardown action failed: " + t);
+        }
+        return true;
+    }
+
     /** Post to the module's main handler; refused once quiescing or inert. */
     public static void post(Runnable r) {
+        if (runInTeardown(r)) return;
         if (quiescing || inert) return;
         Main.main().post(mainGuarded(r));
     }
 
     public static void postDelayed(Runnable r, long ms) {
+        // Only an immediate step is a hand-back; a delayed one (a fade, a parked swap) is
+        // something the teardown is meant to cancel, not run in the middle of itself.
+        if (ms <= 0L && runInTeardown(r)) return;
         if (quiescing || inert) return;
         Main.main().postDelayed(mainGuarded(r), ms);
     }
@@ -715,21 +746,24 @@ public final class Gen {
 
     /** Post on a host view, and remember it so retirement can take it back out. */
     public static void postOn(View view, Runnable r) {
-        if (view == null || quiescing || inert) return;
+        if (view == null || runInTeardown(r)) return;
+        if (quiescing || inert) return;
         Runnable g = remember(view, r);
         view.post(g);
     }
 
     /** As {@link #postOn}, after [ms] on the view's own handler. */
     public static void postDelayedOn(View view, Runnable r, long ms) {
-        if (view == null || quiescing || inert) return;
+        if (view == null || (ms <= 0L && runInTeardown(r))) return;
+        if (quiescing || inert) return;
         Runnable g = remember(view, r);
         view.postDelayed(g, ms);
     }
 
     /** As {@link #postOn}, on the view's next animation frame. Retirement removes both alike. */
     public static void postOnAnimation(View view, Runnable r) {
-        if (view == null || quiescing || inert) return;
+        if (view == null || runInTeardown(r)) return;
+        if (quiescing || inert) return;
         Runnable g = remember(view, r);
         view.postOnAnimation(g);
     }
