@@ -157,6 +157,23 @@ internal object AmapImmerse {
         } catch (t: Throwable) {
             Xp.w(TAG + "service hooks failed: " + t)
         }
+        registerCurrent()
+    }
+
+    /**
+     * A hot reload runs this again in a process that already has its Application, and
+     * callApplicationOnCreate will never fire a second time - so the new generation registers
+     * against the running one. On a cold start this is null (install runs before the
+     * Application exists) and the hook above does it.
+     */
+    private fun registerCurrent() {
+        val app = runCatching {
+            Class.forName("android.app.ActivityThread")
+                .getMethod("currentApplication").invoke(null) as? Application
+        }.getOrNull() ?: return
+        runCatching {
+            if (Application.getProcessName() == PKG) register(app)
+        }.onFailure { Xp.w(TAG + "probe registration from the running process failed: " + it) }
     }
 
     /**

@@ -239,6 +239,23 @@ internal object MetroCodeIsland {
         } catch (t: Throwable) {
             Xp.w(TAG + "router hook failed: $t")
         }
+        registerCurrent()
+    }
+
+    /**
+     * A hot reload runs install() again in a process that already has its Application, and
+     * callApplicationOnCreate will never fire a second time - so the new generation registers
+     * against the running one (the ride-code island's receivers were unregistered by the old
+     * generation's retirement). On a cold start this is null and the hook above does it.
+     */
+    private fun registerCurrent() {
+        val app = runCatching {
+            Class.forName("android.app.ActivityThread")
+                .getMethod("currentApplication").invoke(null) as? Application
+        }.getOrNull() ?: return
+        runCatching {
+            if (Application.getProcessName() == PKG) register(app)
+        }.onFailure { Xp.w(TAG + "registration from the running process failed: $it") }
     }
 
     @Synchronized
