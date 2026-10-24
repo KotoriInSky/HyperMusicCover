@@ -42,6 +42,8 @@ public final class HotReload {
 
     /** The package onPackageLoaded last reported in this process. */
     private static volatile String sProcess = "?";
+    /** The process itself, which is what the supported list names; a package has several. */
+    private static volatile String sProcessName;
     /** Every package onPackageLoaded named; more than one per process (see status's log). */
     private static final Set<String> sPkgs = ConcurrentHashMap.newKeySet();
     /** The host loader the first package reported, a hint only; adoption still validates it. */
@@ -77,12 +79,27 @@ public final class HotReload {
         sProcess = pkg;
         sPkgs.add(pkg);
         if (cl != null && sHostLoader == null) sHostLoader = cl;
-        if (!sBootCheckPosted && HotReloadPolicy.SUPPORTED.contains(pkg)) {
+        if (sProcessName == null) sProcessName = processName();
+        if (!sBootCheckPosted && HotReloadPolicy.SUPPORTED.contains(sProcessName)) {
             sBootCheckPosted = true;
             // The Application does not exist yet at onPackageLoaded; a second later it does.
             // A process that came up through Main.boot checks again there - whichever runs
             // first clears the marker, and the other finds nothing.
             Gen.postDelayed(() -> onBoot(appContext(null)), 1000L);
+        }
+    }
+
+    /**
+     * The process name, not the package: 高德's :locationservice and :widgetProvider report the
+     * same package in onPackageLoaded and own their own copies of the hooks, but neither has an
+     * installer. Matching them would retire them and then fail to adopt, leaving inert
+     * processes - a restart fixes them, but refusing up front is better.
+     */
+    private static String processName() {
+        try {
+            return android.app.Application.getProcessName();
+        } catch (Throwable t) {
+            return null;
         }
     }
 
@@ -96,6 +113,7 @@ public final class HotReload {
         Xp.log(TAG + "onHotReloading thread=" + Thread.currentThread().getName()
                 + " main=" + (Looper.myLooper() == Looper.getMainLooper())
                 + " process=" + sProcess + " pkgs=" + sPkgs
+                + " proc=" + sProcessName
                 + " gen=" + sGen + " class=" + sClassId + " build=" + build);
 
         int protocol = extras == null
@@ -142,12 +160,16 @@ public final class HotReload {
 
     private static boolean refuse(String reason) {
         Xp.w(TAG + "HotReload deferred: " + reason + " process=" + sProcess + " pkgs=" + sPkgs
-                + " gen=" + sGen);
+                + " proc=" + sProcessName + " gen=" + sGen);
         return false;
     }
 
-    /** The package this process is supported under, or null. See HotReloadPolicy.SUPPORTED. */
+    /** The process this module is supported under, or null. See HotReloadPolicy.SUPPORTED. */
     private static String supportedProcess() {
+        String name = sProcessName;
+        if (name != null) return HotReloadPolicy.SUPPORTED.contains(name) ? name : null;
+        // Without a process name, the package is the best available answer; every supported
+        // process's main package equals its process name.
         for (String p : HotReloadPolicy.SUPPORTED) {
             if (sPkgs.contains(p)) return p;
         }
@@ -188,6 +210,7 @@ public final class HotReload {
         // where it is. Without it the next hot reload is refused with "not supported (?)".
         sProcess = proc;
         sPkgs.add(proc);
+        sProcessName = proc;
         Bundle extras = param.getExtras();
         String build = extras == null ? "?" : extras.getString(HotReloadPolicy.KEY_BUILD, "?");
 

@@ -1,6 +1,7 @@
 package com.os4.musiccover.app
 import com.os4.musiccover.LogLevel
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
 import io.github.libxposed.service.HookedTarget
 import io.github.libxposed.service.XposedService
@@ -71,7 +72,15 @@ object LsposedService {
      * call into the framework, so not on the main thread.
      */
     fun runningTargets(): List<HookedTarget>? =
-        bound.value?.let { runCatching { it.runningTargets }.getOrNull() }
+        bound.value?.let {
+            runCatching { it.runningTargets }.getOrNull()?.also { list ->
+                // What the framework says it can reload, for a bug report and for testing a
+                // process whose automatic reload did not arrive.
+                Log.d("MCHotReloadApp", "targets: " + list.joinToString { t ->
+                    "${t.processName}/${t.pid}/${t.state}/${t.loadedVersionCode}"
+                })
+            }
+        }
 
     /**
      * Those of [runningTargets] still on a build older than the one installed, or whose hot
