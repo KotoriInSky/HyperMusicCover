@@ -5,6 +5,9 @@ import android.os.Bundle;
 import android.os.Looper;
 
 import com.os4.musiccover.lyrics.AppleLyrics;
+import com.os4.musiccover.pickup.RearScreen;
+import com.os4.musiccover.transit.AmapImmerse;
+import com.os4.musiccover.transit.MetroCodeIsland;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -125,11 +128,12 @@ public final class HotReload {
             return refuse("could not save state: " + t);
         }
 
-        // Commit. From here the old hookers pass through and nothing new is posted. Apple owns
-        // no threads, receivers or views of its own, so its hooks are the whole of its ledger;
-        // a process with more is quiesced feature by feature before this point.
-        Gen.quiescing = true;
-        Gen.retired = true;
+        // Commit. From here the old hookers pass through and nothing new is posted; the ledger
+        // takes back the receivers, observers, listeners, posts, threads and views it recorded.
+        // Two seconds is generous for those processes: the work is unregistration, not drawing.
+        if (!Gen.retire(2000L)) {
+            Xp.w(TAG + "retirement sweep did not finish in time; guarded callbacks are inert");
+        }
         sRetired = true;
         Xp.log(TAG + "HotReload retired gen=" + sGen + " process=" + proc + " build=" + build
                 + " hooks=" + Gen.hooks.size() + " class=" + sClassId);
@@ -152,7 +156,8 @@ public final class HotReload {
 
     /** The feature that cannot be interrupted right now, or null. Filled in with the features. */
     private static String busy() {
-        return null;
+        int io = Gen.ioInFlight();
+        return io > 0 ? "a background request is still open (" + io + ")" : null;
     }
 
     /**
@@ -268,6 +273,14 @@ public final class HotReload {
             Main.installSystemUi(cl);
         } else if (AppleLyrics.PKG.equals(proc)) {
             AppleLyrics.handle(cl);
+        } else if ("com.xiaomi.subscreencenter".equals(proc)) {
+            RearScreen.handle(cl);
+        } else if ("com.autonavi.minimap".equals(proc)) {
+            AmapImmerse.handle(cl);
+        } else if ("com.miui.aod".equals(proc)) {
+            HyperTweaks.aod(cl);
+        } else if ("com.miui.personalassistant".equals(proc)) {
+            MetroCodeIsland.INSTANCE.install(cl);
         } else {
             throw new IllegalStateException("no installer for " + proc);
         }
@@ -475,6 +488,9 @@ public final class HotReload {
         if ("com.android.systemui".equals(proc)) {
             return "com.android.systemui.keyguard.KeyguardService";
         }
+        // 背屏's classes are obfuscated, and the other three processes' entry points change with
+        // their apps. The Application's loader is the first candidate anyway, and the old-handle
+        // candidate that once misled us is last; taking the first loader is right by construction.
         return null;
     }
 

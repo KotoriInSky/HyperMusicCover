@@ -19,11 +19,19 @@ object HotReloadPolicy {
 
     /**
      * Processes whose retirement and adoption are implemented and have passed the on-device
-     * matrix. Apple Music is first: three hooks, no threads, no receivers, and Step 0 proved
-     * the mechanism there.
+     * matrix. Apple Music first (three hooks, no threads), then the two that own receivers or
+     * an observer, which the ledger's sweep takes back.
+     *
+     * <p>高德 and AOD have installers and join this list once their process can be reloaded on
+     * the test phone: LSPosed's automatic pass never targeted 高德's main process (only its
+     * :widgetProvider, which died), and the AOD process did not run outside the editor.
      */
     @JvmField
-    val SUPPORTED: Set<String> = setOf("com.apple.android.music")
+    val SUPPORTED: Set<String> = setOf(
+        "com.apple.android.music",
+        "com.xiaomi.subscreencenter",
+        "com.miui.personalassistant",
+    )
 
     /**
      * Loaded version codes whose retirement is known to be broken, so the app restarts them

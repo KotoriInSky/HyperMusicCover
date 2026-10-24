@@ -34,12 +34,11 @@ import io.github.libxposed.api.XposedInterface;
  *
  * <p>Hot reload needs one place that knows what the retiring code still holds - hooks, main
  * thread messages, threads, receivers, listeners, animations, views, the host state it wrote -
- * because the framework only hands over hooks. This is that ledger. Nothing is retired yet;
- * Step 2 is about routing the installs through it, so the counts already describe the process.
+ * because the framework only hands over hooks. This is that ledger: [retire] takes all of it
+ * back, on the main thread, when a generation commits to stepping down.
  *
  * <p>The guard is the one behavioural edge: every hooker is wrapped so that once this
- * generation is retired or inert it proceeds untouched. Today neither flag is ever set, so the
- * wrapper costs a boolean and changes nothing.
+ * generation is retired or inert it proceeds untouched.
  *
  * <p>Rules that GenRulesTest will enforce, once the migration is finished: module code does not
  * call registerReceiver, start threads or executors, post frame callbacks or register host
@@ -61,6 +60,201 @@ public final class Gen {
     /** Whether this generation may still do its work. */
     static boolean live() {
         return !retired && !inert;
+    }
+
+    // ---------------------------------------------------------------- retirement
+
+    /** Runs [task] on the main thread and waits for it; false when it could not be run in time. */
+    static boolean onMain(long timeoutMs, Runnable task) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            task.run();
+            return true;
+        }
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        if (!Main.main().post(() -> {
+            try {
+                task.run();
+            } finally {
+                latch.countDown();
+            }
+        })) {
+            return false;
+        }
+        try {
+            return latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /**
+     * Take back everything this generation registered. Called from the commit step of a hot
+     * reload, after which nothing here may call into this generation again.
+     *
+     * <p>The hooks are not touched: the next generation replaces or unhooks them through
+     * HotReload, and until then they pass through because [retired] is set. What is left is the
+     * callbacks and posts that would keep invoking our classes from the host: receivers,
+     * observers, preference and display listeners, media-session callbacks, view listeners,
+     * queued messages and frame callbacks, our threads, and our views.
+     *
+     * <p>Best effort on purpose: this runs after retirement is committed, when refusing is no
+     * longer possible. Every step is independent and a failure is left for the next one.
+     */
+    static boolean retire(long timeoutMs) {
+        quiescing = true;
+        retired = true;
+        return onMain(timeoutMs, Gen::retireOnMain);
+    }
+
+    private static void retireOnMain() {
+        for (java.util.Map.Entry<Runnable, Runnable> e : MAIN_POSTED.entrySet()) {
+            try {
+                Main.main().removeCallbacks(e.getValue());
+            } catch (Throwable ignored) {
+            }
+        }
+        MAIN_POSTED.clear();
+
+        for (PostedOn p : postedOn) {
+            try {
+                p.view.removeCallbacks(p.runnable);
+            } catch (Throwable ignored) {
+            }
+        }
+        postedOn.clear();
+
+        for (java.util.Map.Entry<Choreographer.FrameCallback, Frame> e : frames.entrySet()) {
+            try {
+                Choreographer.getInstance().removeFrameCallback(e.getValue());
+            } catch (Throwable ignored) {
+            }
+        }
+        frames.clear();
+
+        for (HandlerThread t : handlerThreads) {
+            try {
+                t.quitSafely();
+                t.join(200L);
+            } catch (Throwable ignored) {
+            }
+        }
+        handlerThreads.clear();
+
+        for (ExecutorService e : executors) {
+            try {
+                e.shutdownNow();
+            } catch (Throwable ignored) {
+            }
+        }
+        executors.clear();
+
+        for (ReceiverReg r : receivers) {
+            try {
+                r.context.unregisterReceiver(r.receiver);
+            } catch (Throwable ignored) {
+            }
+        }
+        receivers.clear();
+
+        for (ObserverReg o : observers) {
+            try {
+                o.resolver.unregisterContentObserver(o.observer);
+            } catch (Throwable ignored) {
+            }
+        }
+        observers.clear();
+
+        for (PrefReg p : prefListeners) {
+            try {
+                p.prefs.unregisterOnSharedPreferenceChangeListener(p.listener);
+            } catch (Throwable ignored) {
+            }
+        }
+        prefListeners.clear();
+
+        for (SessionReg s : sessionCallbacks) {
+            try {
+                s.controller.unregisterCallback(s.callback);
+            } catch (Throwable ignored) {
+            }
+        }
+        sessionCallbacks.clear();
+
+        for (PreDrawReg p : preDraws) {
+            try {
+                if (p.view != null) {
+                    p.view.getViewTreeObserver().removeOnPreDrawListener(p.listener);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        preDraws.clear();
+
+        for (AttachReg a : attachStates) {
+            try {
+                a.view.removeOnAttachStateChangeListener(a.listener);
+            } catch (Throwable ignored) {
+            }
+        }
+        attachStates.clear();
+
+        for (DisplayReg d : displayListeners) {
+            try {
+                d.manager.unregisterDisplayListener(d.listener);
+            } catch (Throwable ignored) {
+            }
+        }
+        displayListeners.clear();
+
+        for (Animator a : animators) {
+            try {
+                a.cancel();
+            } catch (Throwable ignored) {
+            }
+        }
+        animators.clear();
+
+        for (Swap s : swaps) {
+            try {
+                if (s.restore != null) s.restore.run();
+            } catch (Throwable ignored) {
+            }
+        }
+        swaps.clear();
+
+        for (OwnedView v : ownViews) {
+            try {
+                v.parent.removeView(v.view);
+            } catch (Throwable ignored) {
+            }
+        }
+        ownViews.clear();
+
+        for (OwnedWindow w : ownWindows) {
+            try {
+                w.manager.removeViewImmediate(w.view);
+            } catch (Throwable ignored) {
+            }
+        }
+        ownWindows.clear();
+
+        // The host listeners recorded as opaque objects (treeListener) have no type to remove
+        // them by; the feature that registered one removes it in its own retire. Anything left
+        // is named in the log rather than silently called into a retired generation.
+        int trees = treeListeners.size();
+        treeListeners.clear();
+
+        for (Thread t : threads) {
+            try {
+                t.join(20L);
+            } catch (Throwable ignored) {
+            }
+        }
+        threads.clear();
+
+        ioExecutor.shutdownNow();
+        Xp.log("[MCGen] retired: registrations taken back, treeListeners=" + trees);
     }
 
     // ---------------------------------------------------------------- what we own
