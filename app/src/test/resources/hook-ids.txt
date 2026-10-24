@@ -134,6 +134,9 @@ sysui.numstate.exit
 sysui.numstate.switch_stack
 sysui.palette.manager_ctor
 sysui.palette.throttle
+# The pickup card's family: the island's hooks are installed on demand, and the hot reload
+# re-arms them by this prefix (HotReload.backfill), so the prefix itself is a literal.
+sysui.pickup*
 sysui.pickup.icon
 sysui.pickup.icon_async
 sysui.pickup.icon_visibility

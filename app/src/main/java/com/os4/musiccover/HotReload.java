@@ -7,6 +7,7 @@ import android.os.Looper;
 import com.os4.musiccover.immersive.ImmersiveHost;
 import com.os4.musiccover.island.MiniPlayerRuntime;
 import com.os4.musiccover.lyrics.AppleLyrics;
+import com.os4.musiccover.pickup.PickupIsland;
 import com.os4.musiccover.pickup.RearScreen;
 import com.os4.musiccover.shade.ShadeLayer;
 import com.os4.musiccover.transit.AmapFocus;
@@ -489,10 +490,29 @@ public final class HotReload {
                 Xp.w(TAG + "amap-focus backfill from " + l + " failed: " + t);
             }
         }
+        // 取餐码's card picture is watched through ImageView itself - a framework class, so the
+        // loader test above cannot see it. The card outlives the reload, and its hooks are only
+        // installed again when the next code arrives; put them back now if one was ever there.
+        if (hasIdPrefix(old, "sysui.pickup.")) {
+            try {
+                PickupIsland.INSTANCE.install();
+                Xp.log(TAG + "pickup island hooks re-armed");
+            } catch (Throwable t) {
+                Xp.w(TAG + "pickup backfill failed: " + t);
+            }
+        }
         if (!others.isEmpty()) {
             Xp.log(TAG + "delayed hooks re-armed from " + others.size()
                     + " secondary class loader(s)");
         }
+    }
+
+    private static boolean hasIdPrefix(List<XposedInterface.HookHandle> old, String prefix) {
+        for (XposedInterface.HookHandle h : old) {
+            String id = h.getId();
+            if (id != null && id.startsWith(prefix)) return true;
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------- circuit breaker
