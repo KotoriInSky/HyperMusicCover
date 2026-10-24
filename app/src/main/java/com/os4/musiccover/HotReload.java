@@ -182,6 +182,11 @@ public final class HotReload {
     static String busy() {
         int io = Gen.ioInFlight();
         if (io > 0) return "a background request is still open (" + io + ")";
+        // Everything below is SystemUI's: the display and keyguard reads come from Main's
+        // cached sys reads, which only that process initialises (boot). In the lightweight
+        // processes they answer "off" and refused every update - measured 2026-10-25, all five
+        // supported processes failed with "the screen is off" after an install.
+        if (!"com.android.systemui".equals(sProcessName)) return null;
         // The user never taps "update" while looking at the lock screen; anything on it is
         // someone using the phone, and every one of those transitions has a view mid-flight.
         if (Main.keyguardShowing() && Main.screenOn()) return "the lock screen is up and lit";
