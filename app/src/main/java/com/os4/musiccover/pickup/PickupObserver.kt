@@ -1,5 +1,6 @@
 package com.os4.musiccover.pickup
 import com.os4.musiccover.Main
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.content.Context
 import android.content.Intent
@@ -312,7 +313,7 @@ internal object PickupObserver {
      * one every Android phone reports. NaN when it cannot be read, which, as there, never trips the gate.
      */
     private fun temperature(ctx: Context): Float = runCatching {
-        val i = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val i = Gen.stickyReceiver(ctx, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val t = i?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
         if (t == Int.MIN_VALUE) Float.NaN else t / 10f
     }.getOrDefault(Float.NaN)

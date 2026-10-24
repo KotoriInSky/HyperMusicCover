@@ -3,6 +3,7 @@ import com.os4.musiccover.CoverCompose;
 import com.os4.musiccover.island.LockIslands;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.PageSpring;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.content.res.Resources;
@@ -943,8 +944,7 @@ public final class CountdownScene implements ImmersiveScene {
             if (sBusy) return;
             sBusy = true;
             final int wantId = id;
-            final Handler main = new Handler(Looper.getMainLooper());
-            new Thread(() -> {
+            Gen.thread("mc-countdown-ground", () -> {
                 long t0 = SystemClock.uptimeMillis();
                 android.graphics.Bitmap made = null;
                 try {
@@ -959,7 +959,7 @@ public final class CountdownScene implements ImmersiveScene {
                 }
                 final android.graphics.Bitmap done = made;
                 final long ms = SystemClock.uptimeMillis() - t0;
-                main.post(() -> {
+                Gen.post(() -> {
                     sBusy = false;
                     sBitmap = done;
                     sId = wantId;
@@ -970,7 +970,7 @@ public final class CountdownScene implements ImmersiveScene {
                     sWaiting = null;
                     if (v != null && done != null) v.setBitmap(done);
                 });
-            }, "mc-countdown-ground").start();
+            });
         }
 
         /** The lock slot's picture, else the home slot's, decoded at a quarter: it is to be blurred. */

@@ -1,6 +1,7 @@
 package com.os4.musiccover.pickup
 import com.os4.musiccover.Main
 import com.os4.musiccover.R
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.app.ActivityManager
 import android.app.Notification
@@ -446,7 +447,7 @@ internal object PickupIsland {
                 }
             }
         }
-        ctx.registerReceiver(r, IntentFilter().apply {
+        Gen.receiver(ctx, r, IntentFilter().apply {
             addAction(ACTION_OPEN)
             addAction(ACTION_GONE)
             addAction(ACTION_PICKED)

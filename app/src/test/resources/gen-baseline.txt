@@ -20,9 +20,3 @@ Prefetch.java
 ProbeReceiver.java
 WallpaperProbe.java
 WallpaperVideo.java
-immersive/CountdownScene.java
-immersive/ImmersiveHost.java
-pickup/PickupIsland.kt
-pickup/PickupObserver.kt
-shade/ShadeBackdrop.java
-transit/AmapTransitScene.java

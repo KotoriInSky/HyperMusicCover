@@ -1,4 +1,5 @@
 package com.os4.musiccover.shade;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -292,7 +293,7 @@ final class ShadeBackdrop {
     private static final class Renderer implements SurfaceHolder.Callback,
             Choreographer.FrameCallback {
 
-        private final HandlerThread mThread = new HandlerThread("MCBackdropGL");
+        private HandlerThread mThread;
         private final Handler mHandler;
         private final float mAspectValue;
 
@@ -333,7 +334,7 @@ final class ShadeBackdrop {
             // The fixed size, so the first frame has a viewport before surfaceChanged lands.
             mBw = bw;
             mBh = bh;
-            mThread.start();
+            mThread = Gen.handlerThread("MCBackdropGL");
             mHandler = new Handler(mThread.getLooper());
         }
 
@@ -354,9 +355,8 @@ final class ShadeBackdrop {
                     mRunning = true;
                     mLastFrameNs = 0;
                     mShownAtNs = 0;
-                    final Choreographer ch = Choreographer.getInstance();
-                    ch.removeFrameCallback(Renderer.this);
-                    ch.postFrameCallback(Renderer.this);
+                    Gen.unframe(Renderer.this);
+                    Gen.frame(Renderer.this);
                 }
             });
         }
@@ -415,7 +415,7 @@ final class ShadeBackdrop {
                             throw new RuntimeException("eglCreateWindowSurface");
                         }
                         EGL14.eglMakeCurrent(mDisplay, mSurface, mSurface, mContext);
-                        if (mRunning) Choreographer.getInstance().postFrameCallback(Renderer.this);
+                        if (mRunning) Gen.frame(Renderer.this);
                     } catch (Throwable t) {
                         Xp.w(TAG + "GL surface failed: " + t);
                     }
@@ -463,7 +463,7 @@ final class ShadeBackdrop {
         @Override
         public void doFrame(long frameTimeNanos) {
             if (!mRunning) return;
-            Choreographer.getInstance().postFrameCallback(this);
+            Gen.frame(this);
             if (mSurface == EGL14.EGL_NO_SURFACE) return;
             // 60fps is plenty for motion this slow, and halves the work on a 120Hz panel.
             if (mLastFrameNs != 0 && frameTimeNanos - mLastFrameNs < 14_000_000L) return;

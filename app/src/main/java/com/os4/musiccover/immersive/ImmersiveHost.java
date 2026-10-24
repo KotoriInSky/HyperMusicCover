@@ -4,6 +4,7 @@ import com.os4.musiccover.EdgeBlurView;
 import com.os4.musiccover.island.LockIslands;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.island.MiniPlayerRuntime;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import com.os4.musiccover.transit.AmapNavScene;
 import com.os4.musiccover.transit.AmapTransitScene;
@@ -784,7 +785,7 @@ public final class ImmersiveHost {
         sVeil = veil;
         sShown = false;
         sVto = root.getViewTreeObserver();
-        sVto.addOnPreDrawListener(PRE_DRAW);
+        Gen.preDraw(root, PRE_DRAW);
         Xp.log(TAG + "slot in the lock screen window");
         root.invalidate();
     }
@@ -795,7 +796,7 @@ public final class ImmersiveHost {
         sPrepared.clear();
         sLetGo.clear();
         for (ImmersiveScene s : prepared) s.release();
-        if (sVto != null && sVto.isAlive()) sVto.removeOnPreDrawListener(PRE_DRAW);
+        if (sVto != null && sVto.isAlive()) Gen.unpreDraw(sVto, PRE_DRAW);
         sVto = null;
         if (sSlot != null) {
             ViewGroup parent = (ViewGroup) sSlot.getParent();
@@ -1448,7 +1449,7 @@ public final class ImmersiveHost {
         if (sDisplayWatched) return;
         try {
             DisplayManager dm = ctx.getSystemService(DisplayManager.class);
-            dm.registerDisplayListener(new DisplayManager.DisplayListener() {
+            Gen.displayListener(dm, new DisplayManager.DisplayListener() {
                 @Override
                 public void onDisplayAdded(int id) {
                 }

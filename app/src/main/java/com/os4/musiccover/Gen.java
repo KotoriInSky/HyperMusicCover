@@ -367,6 +367,14 @@ public final class Gen {
         return sticky;
     }
 
+    /**
+     * A sticky query, not a registration: a null receiver returns what is there and leaves
+     * nothing to unregister. Kept here so no call site has to spell registerReceiver itself.
+     */
+    public static Intent stickyReceiver(Context c, IntentFilter f) {
+        return c.registerReceiver(null, f);
+    }
+
     public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, String permission,
                            Handler handler) {
         Intent sticky = c.registerReceiver(r, f, permission, handler);
@@ -421,6 +429,12 @@ public final class Gen {
     public static void unpreDraw(View v, ViewTreeObserver.OnPreDrawListener l) {
         v.getViewTreeObserver().removeOnPreDrawListener(l);
         preDraws.removeIf(r -> r.view == v && r.listener == l);
+    }
+
+    /** For a call site that only kept the observer it added through, not the view. */
+    public static void unpreDraw(ViewTreeObserver vto, ViewTreeObserver.OnPreDrawListener l) {
+        vto.removeOnPreDrawListener(l);
+        preDraws.removeIf(r -> r.listener == l);
     }
 
     public static void attachState(View v, View.OnAttachStateChangeListener l) {
