@@ -1023,8 +1023,8 @@ object ModuleBridge {
     }
 
     /**
-     * Only the targets still on the old build - the set the home page's card counted when it
-     * offered this.
+     * Only the targets still on the old build, or whose hot reload failed - the set the home
+     * page's card counted when it offered this.
      *
      * [restartScope] takes everything the module is loaded into and stays for the top bar's own
      * entry, but an update leaves most of those processes already up to date, and killing a

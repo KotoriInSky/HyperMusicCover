@@ -74,15 +74,21 @@ object LsposedService {
         bound.value?.let { runCatching { it.runningTargets }.getOrNull() }
 
     /**
-     * Those of [runningTargets] still on a build older than the one installed; null without the
-     * service. The home page counts these and its restart kills these, so one definition serves
-     * both: the number the card shows cannot end up describing a different set from the one the
-     * tap acts on. Null and empty are not the same answer - null is no service, empty is nothing
-     * stale - which is what lets the restart tell them apart. See
-     * [ModuleBridge.restartStale].
+     * Those of [runningTargets] still on a build older than the one installed, or whose hot
+     * reload failed; null without the service. The home page counts these and its restart kills
+     * these, so one definition serves both: the number the card shows cannot end up describing
+     * a different set from the one the tap acts on. Null and empty are not the same answer -
+     * null is no service, empty is nothing stale - which is what lets the restart tell them
+     * apart. See [ModuleBridge.restartStale].
+     *
+     * FAILED is included for the same reason: a process whose reload failed is no more current
+     * than one that was never asked, and leaving it out would make the card disappear without
+     * anything having changed.
      */
     fun staleTargets(): List<HookedTarget>? =
-        runningTargets()?.filter { it.state == HookedTarget.State.STALE }
+        runningTargets()?.filter {
+            it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED
+        }
 
     /** How many of those still run a build older than the one installed; 0 without the service. */
     fun staleCount(): Int = staleTargets()?.size ?: 0

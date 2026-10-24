@@ -27,6 +27,10 @@
     <string name="restart_wallpaper">重启壁纸</string>
     <string name="restart_confirm_summary">确认重启吗？</string>
     <string name="restart_stale">重启更新的作用域</string>
+    <string name="restart_apply">重启生效</string>
+    <string name="apply_title">让新版本生效</string>
+    <string name="apply_summary">先不重启进程；失败再重启，重启会短暂黑屏</string>
+    <string name="apply_now">立即生效</string>
 
     <string name="tab_home">主页</string>
     <string name="tab_settings">设置</string>
@@ -118,7 +122,7 @@
     <string name="home_status_inactive_hint">请在 LSPosed 中启用并重启系统界面</string>
     <string name="home_stale_title">模块已更新</string>
     <string name="home_stale_summary">%1$d 个进程还在运行旧版本</string>
-    <string name="home_stale_action">点击重启更新的作用域</string>
+    <string name="home_stale_action">点击立即生效</string>
     <string name="home_device_name">设备名称</string>
     <string name="home_device_model">设备型号</string>
     <string name="home_hyperos_version">HyperOS 版本</string>
