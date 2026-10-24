@@ -159,8 +159,12 @@ public final class HotReload {
         // hidden print, the card's listeners, the islands - on the main thread, while our views
         // are still in the tree. The other processes only unregister, which takes a moment.
         sRetired = true;
-        Runnable teardown = "com.android.systemui".equals(proc)
-                ? SystemUiRetire::retireForReload : null;
+        // The two processes with state to give back run their own main-thread step first; the
+        // wallpaper's hands its caches and the cover-video player over, the cover itself is
+        // handed to the next generation through the saved state instead.
+        Runnable teardown = null;
+        if ("com.android.systemui".equals(proc)) teardown = SystemUiRetire::retireForReload;
+        else if ("com.miui.miwallpaper".equals(proc)) teardown = WallpaperProbe::retireForReload;
         if (!Gen.retire(teardown == null ? 2000L : 4000L, teardown)) {
             Xp.w(TAG + "retirement sweep did not finish in time; guarded callbacks are inert");
         }
@@ -198,6 +202,7 @@ public final class HotReload {
         // cached sys reads, which only that process initialises (boot). In the lightweight
         // processes they answer "off" and refused every update - measured 2026-10-25, all five
         // supported processes failed with "the screen is off" after an install.
+        if ("com.miui.miwallpaper".equals(sProcessName)) return WallpaperProbe.busyReason();
         if (!"com.android.systemui".equals(sProcessName)) return null;
         // The user never taps "update" while looking at the lock screen; anything on it is
         // someone using the phone, and every one of those transitions has a view mid-flight.
@@ -241,6 +246,11 @@ public final class HotReload {
             out.add(new Object[]{"clock", Main.sContainer});
             out.add(new Object[]{"mediacard", MediaCard.save()});
             out.add(new Object[]{"island", MiniPlayerRuntime.save()});
+        }
+        if ("com.miui.miwallpaper".equals(proc)) {
+            // The other side of SystemUI's token, the cover on the texture and the wallpaper it
+            // fades back to, the engines, and the sizes and flags the drawing paths read.
+            out.add(new Object[]{"wall", WallpaperProbe.save()});
         }
         return out.toArray(new Object[0][]);
     }
@@ -294,6 +304,12 @@ public final class HotReload {
                 throw new IllegalStateException("no host class loader can load the process's classes");
             }
             adoptAppleState(state);
+            // Before the hooks go in: the wallpaper's upload path is live as soon as it is
+            // installed, and an upload that found no cover would hand the OEM's own decode of
+            // the wallpaper to the texture - the cover gone for the rest of the track.
+            if ("com.miui.miwallpaper".equals(proc)) {
+                WallpaperProbe.adoptState(feature(state, "wall"));
+            }
             install(proc, cl);
             if ("com.android.systemui".equals(proc)) {
                 // Arming here rather than from the attach path: the container may be gone
@@ -360,9 +376,22 @@ public final class HotReload {
             HyperTweaks.aod(cl);
         } else if ("com.miui.personalassistant".equals(proc)) {
             MetroCodeIsland.INSTANCE.install(cl);
+        } else if ("com.miui.miwallpaper".equals(proc)) {
+            WallpaperProbe.install(cl);
         } else {
             throw new IllegalStateException("no installer for " + proc);
         }
+    }
+
+    /** One feature's handover value, or null. */
+    private static Object[] feature(HotReloadState.State state, String key) {
+        if (state == null) return null;
+        for (Object[] f : state.features) {
+            if (f.length > 1 && key.equals(f[0]) && f[1] instanceof Object[]) {
+                return (Object[]) f[1];
+            }
+        }
+        return null;
     }
 
     /**
@@ -396,6 +425,22 @@ public final class HotReload {
      * puts everything up then.
      */
     private static void adoptFeatures(String proc, HotReloadState.State state, ClassLoader host) {
+        if ("com.miui.miwallpaper".equals(proc)) {
+            // The rest of the cold-start path, on the main thread: the engine names are re-read
+            // off the engine that was handed over, the receivers go back on, and the process
+            // says hello with the token it inherited. No reload is asked for - the texture is
+            // already the cover.
+            final Context wallCtx = state != null && state.context != null
+                    ? state.context : appContext(state);
+            Gen.post(() -> {
+                try {
+                    WallpaperProbe.adoptMain(wallCtx);
+                } catch (Throwable t) {
+                    Xp.w(TAG + "wallpaper adoption on the main thread failed: " + t);
+                }
+            });
+            return;
+        }
         if (!"com.android.systemui".equals(proc)) return;
         Object[][] features = state == null ? new Object[0][] : state.features;
         sAdoptingBoot = true;
@@ -680,6 +725,9 @@ public final class HotReload {
         }
         if ("com.android.systemui".equals(proc)) {
             return "com.android.systemui.keyguard.KeyguardService";
+        }
+        if ("com.miui.miwallpaper".equals(proc)) {
+            return "com.miui.miwallpaper.wallpaperservice.impl.keyguard.KeyguardImageEngineImpl";
         }
         // 背屏's classes are obfuscated, and the other three processes' entry points change with
         // their apps. The Application's loader is the first candidate anyway, and the old-handle

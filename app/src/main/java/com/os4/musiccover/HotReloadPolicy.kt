@@ -19,14 +19,16 @@ object HotReloadPolicy {
 
     /**
      * Processes (not packages) whose retirement and adoption are implemented and have passed
-     * the on-device matrix: Apple Music, 背屏, 高德, AOD, 小爱 and SystemUI. The module matches
-     * the exact process name - 高德's :locationservice and :widgetProvider report the same
-     * package and carry their own copies of the hooks, but have no installer of their own.
+     * the on-device matrix: Apple Music, 背屏, 高德, AOD, 小爱, SystemUI and the wallpaper
+     * process. The module matches the exact process name - 高德's :locationservice and
+     * :widgetProvider report the same package and carry their own copies of the hooks, but have
+     * no installer of their own.
      *
      * SystemUI is the one with views to put back: its retirement runs SystemUiRetire's groups
      * on the main thread, and its adoption boots and re-attaches the keyguard container the old
-     * generation handed over. A failed adoption leaves that generation inert and the app's
-     * existing 「需要重启」 path restarts the process.
+     * generation handed over. The wallpaper process hands over the cover it is drawing instead
+     * of putting it back: the texture is the OEM's and stays as it is. A failed adoption leaves
+     * that generation inert and the app's existing 「需要重启」 path restarts the process.
      */
     @JvmField
     val SUPPORTED: Set<String> = setOf(
@@ -36,6 +38,7 @@ object HotReloadPolicy {
         "com.miui.aod",
         "com.miui.personalassistant",
         "com.android.systemui",
+        "com.miui.miwallpaper",
     )
 
     /**

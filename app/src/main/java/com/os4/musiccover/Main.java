@@ -1626,6 +1626,16 @@ public class Main extends XposedModule {
         // answer. A build that predates the question never answers, which is the answer.
         try {
             ProbeGuard.send(ctx, CoverPush.wallpaperIntent("hello"));
+            // Once more, shortly after: a wallpaper process hot reloaded in the same install
+            // batch is between its retire and its new receiver for a moment, and this is where
+            // it learns the token it answers with. One retry, not a loop.
+            Gen.postDelayed(() -> {
+                try {
+                    ProbeGuard.send(ctx, CoverPush.wallpaperIntent("hello"));
+                } catch (Throwable t) {
+                    Xp.w(TAG + "hello retry to the wallpaper process failed: " + t);
+                }
+            }, 1500L);
         } catch (Throwable t) {
             Xp.w(TAG + "hello to the wallpaper process failed: " + t);
         }

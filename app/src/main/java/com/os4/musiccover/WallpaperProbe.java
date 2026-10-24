@@ -595,7 +595,8 @@ public class WallpaperProbe {
     private static volatile float sKeepDim;
     private static float sKeepFrom;
     private static float sKeepTo;
-    private static long sKeepAt;
+    /** Written under KEEP_LOCK; volatile because the hot reload's check section reads it. */
+    private static volatile long sKeepAt;
     private static int sKeepDurMs = 100;
     private static boolean sKeepPumping;
     /** The pump's own frame request, on the main thread. */
@@ -2713,11 +2714,13 @@ public class WallpaperProbe {
         sShadeAt = longAt(f, S_SHADE_AT, sShadeAt);
         sLockIsVideo = f[S_LOCK_VIDEO] instanceof Boolean ? (Boolean) f[S_LOCK_VIDEO] : null;
         sFrameReq = intAt(f, S_FRAME_REQ, sFrameReq);
-        sKeepDim = floatAt(f, S_KEEP_DIM, sKeepDim);
-        sKeepFrom = floatAt(f, S_KEEP_FROM, sKeepFrom);
-        sKeepTo = floatAt(f, S_KEEP_TO, sKeepTo);
-        sKeepAt = longAt(f, S_KEEP_AT, sKeepAt);
-        sKeepDurMs = intAt(f, S_KEEP_MS, sKeepDurMs);
+        synchronized (KEEP_LOCK) {
+            sKeepDim = floatAt(f, S_KEEP_DIM, sKeepDim);
+            sKeepFrom = floatAt(f, S_KEEP_FROM, sKeepFrom);
+            sKeepTo = floatAt(f, S_KEEP_TO, sKeepTo);
+            sKeepAt = longAt(f, S_KEEP_AT, sKeepAt);
+            sKeepDurMs = intAt(f, S_KEEP_MS, sKeepDurMs);
+        }
         sKeyguardGlTid = intAt(f, S_GL_TID, sKeyguardGlTid);
         sAsks = intAt(f, S_ASKS, sAsks);
         sTexShowsCover = sArt != null;
