@@ -752,11 +752,47 @@ public final class MediaCard {
      * runs first, inside the setter, and the hook skips the data it has already heard.
      */
     private static volatile Object sListened;
+    /** The proxy added to sListened's topMediaListeners; the OEM holds it until we take it out. */
+    private static Object sListener;
     private static Object sHeard;
     private static boolean sHeardValid;
 
+    /**
+     * Retirement: the card listener out of the OEM's set, the guard and the listeners off the
+     * card, and the video surface released. The card itself is the OEM's and stays as it is.
+     */
+    static void retire() {
+        unlisten();
+        releaseCardGuard();
+        CardVideo.want(false);
+        CardVideo.unload("hot reload");
+        sHeard = null;
+        sHeardValid = false;
+    }
+
+    /** Takes our proxy out of the controller we added it to. Silent: every step is best effort. */
+    private static void unlisten() {
+        Object controller = sListened;
+        Object listener = sListener;
+        sListened = null;
+        sListener = null;
+        if (controller == null || listener == null) return;
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.Set<Object> set =
+                    (java.util.Set<Object>) Xp.getObjectField(controller, "topMediaListeners");
+            set.remove(listener);
+            Xp.log(Main.TAG + "media card listener removed");
+        } catch (Throwable t) {
+            Xp.w(Main.TAG + "media card listener could not be removed: " + t);
+        }
+    }
+
     private static void listenTo(Object controller, ClassLoader cl) {
         if (controller == null || sListened == controller) return;
+        // A new card controller: the previous one keeps every listener it was given, and ours
+        // holds this class loader. Removed rather than abandoned.
+        unlisten();
         try {
             @SuppressWarnings("unchecked")
             java.util.Set<Object> set =
@@ -788,6 +824,7 @@ public final class MediaCard {
                         }
                     });
             set.add(listener);
+            sListener = listener;
             sListened = controller;
             Xp.log(Main.TAG + "media card listener registered");
         } catch (Throwable t) {

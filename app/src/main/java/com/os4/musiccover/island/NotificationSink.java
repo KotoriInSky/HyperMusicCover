@@ -10,10 +10,30 @@ import java.util.List;
 /** Adds the module's policy to the OEM combine's inputs, so it emits through its own coroutine. */
 public final class NotificationSink {
     private final List<WeakReference<Object>> policies = new ArrayList<>();
+    /**
+     * The 7-element arrays this sink replaced with its 8-element ones. The OEM's own consumer is
+     * behind one of our hooks, so a retiring generation has to put the original back: the
+     * injected policy is a host object, but the array's shape is not something the OEM built.
+     */
+    private final List<Injected> injected = new ArrayList<>();
     private int requestedMode;
     private long emissions;
     private final List<String> history = new ArrayList<>();
     private String hookStatus = "not installed";
+
+    private static final class Injected {
+        final WeakReference<Object> owner;
+        final Field field;
+        final Object original;
+        final Object[] replaced;
+
+        Injected(Object owner, Field field, Object original, Object[] replaced) {
+            this.owner = new WeakReference<>(owner);
+            this.field = field;
+            this.original = original;
+            this.replaced = replaced;
+        }
+    }
 
     public synchronized void hookStatus(String status) {
         hookStatus = status;
@@ -30,6 +50,25 @@ public final class NotificationSink {
             history.add(state);
             if (history.size() > 8) history.remove(0);
         }
+    }
+
+    /**
+     * Retirement: put back the array the OEM had, where it still holds ours. Checked rather than
+     * written blind - the OEM may have replaced it since, and an old array put back over a newer
+     * one would lose a state change rather than restore a shape.
+     */
+    public synchronized void restore() {
+        for (Injected i : injected) {
+            Object owner = i.owner.get();
+            if (owner == null) continue;
+            try {
+                if (i.field.get(owner) == i.replaced) i.field.set(owner, i.original);
+            } catch (Throwable ignored) {
+            }
+        }
+        injected.clear();
+        policies.clear();
+        requestedMode = 0;
     }
 
     public synchronized String describe() {
@@ -59,6 +98,7 @@ public final class NotificationSink {
             inputs[7] = policy;
             field.set(combinedFlow, inputs);
             policies.add(new WeakReference<>(policy));
+            injected.add(new Injected(combinedFlow, field, original, inputs));
             return true;
         }
         return false;

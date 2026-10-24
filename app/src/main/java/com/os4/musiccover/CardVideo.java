@@ -112,8 +112,7 @@ final class CardVideo {
         sPath = path;
         final int session = ++sSession;
         resetStats();
-        sThread = new HandlerThread("MCCardVideo");
-        sThread.start();
+        sThread = Gen.handlerThread("mc-card-video");
         sGl = new Handler(sThread.getLooper());
         sGl.post(() -> glLoad(path, session));
         registerScreen(ctx);
@@ -179,7 +178,7 @@ final class CardVideo {
         };
         IntentFilter f = new IntentFilter(Intent.ACTION_SCREEN_OFF);
         f.addAction(Intent.ACTION_SCREEN_ON);
-        ctx.registerReceiver(sScreen, f);
+        Gen.receiver(ctx, sScreen, f);
     }
 
     /** Main thread: a frame has been drawn into the reader. */

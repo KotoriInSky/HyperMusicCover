@@ -5,6 +5,7 @@ import android.content.Context;
 import android.os.Looper;
 import android.os.SystemClock;
 
+import com.os4.musiccover.island.NumState;
 import com.os4.musiccover.lyrics.LockLyrics;
 import com.os4.musiccover.lyrics.LyriconSource;
 
@@ -133,20 +134,35 @@ final class SystemUiRetire {
 
     // Filled in with their features: batches 2 and 3.
 
-    /** 4. NumState's default, the sink's injected policy, the presence answer. */
+    /**
+     * 4. The default notification state the islands moved, the 8-element arrays the sink put in
+     * the OEM's combine, and the presence answer (which the OEM takes back by itself once its
+     * hook passes through).
+     */
     private static void retireNotifications() {
+        NumState.release();
+        Main.sNotificationSink.restore();
+        NotifPresence.recheck(true);
     }
 
     /** 5. The hidden print, its replayed frames and the quick-open bubbles. */
     private static void retireFingerprint() {
+        Fingerprint.retire();
+        FingerprintQuick.retire();
     }
 
-    /** 6. The depth layer and the wallpaper dim. */
+    /**
+     * 6. The cut-out back where the wallpaper put it. setDepthHidden(false) is the same door
+     * cover mode uses, and it also releases the guard and the live wallpaper's surfaces.
+     */
     private static void retireDepth() {
+        Main.setDepthHidden(false);
+        Main.releaseDepthGuard();
     }
 
-    /** 7. The card guard, its title tap, the page button and the video surface. */
+    /** 7. The card listener out of the OEM's set, the guard off the card, the video released. */
     private static void retireMediaCard() {
+        MediaCard.retire();
     }
 
     /** 8. The mini player, its rows and scenes, and DateStatus' segments. */

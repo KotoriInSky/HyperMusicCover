@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Bundle;
 import android.os.Looper;
 
+import com.os4.musiccover.immersive.ImmersiveHost;
 import com.os4.musiccover.lyrics.AppleLyrics;
 import com.os4.musiccover.pickup.RearScreen;
 import com.os4.musiccover.transit.AmapImmerse;
@@ -188,6 +189,9 @@ public final class HotReload {
                 || CoverPush.sOwedSwap != null) {
             return "a cover push is in flight";
         }
+        // A page has the lock screen: the clock is small and the cut-out gone for it, and the
+        // depth group would be refused by the hold if it tried to give them back.
+        if (ImmersiveHost.holdsClock()) return "an immersive page has the lock screen";
         return null;
     }
 

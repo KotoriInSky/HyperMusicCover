@@ -337,6 +337,16 @@ internal object NumState {
         Xp.getObjectField(Xp.getObjectField(repo, "defaultState"), "\$\$delegate_0")
     }.getOrNull()
 
+    /**
+     * Retirement: the OEM's default state flow gets the value the setting names, if an island
+     * ever moved it. The listeners stay - they are installed once, with the hooks, and a dry run
+     * does not reinstall - and folding is LockIslands' to give back.
+     */
+    @JvmStatic
+    fun release() {
+        forceDefault(false)
+    }
+
     private fun forceDefault(on: Boolean) {
         runCatching {
             val flow = defaultFlow() ?: return

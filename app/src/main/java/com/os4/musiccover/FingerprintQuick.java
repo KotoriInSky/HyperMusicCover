@@ -716,6 +716,24 @@ final class FingerprintQuick {
         }
     }
 
+    /**
+     * Retirement: the honeycomb's views and the selection disc out of the OEM's group. The quick
+     * menu is rebuilt on every open, so nothing else of it has to be put back; the OEM's own
+     * item list was emptied for the honeycomb and is rebuilt there too.
+     */
+    static void retire() {
+        if (sDisc != null && sDisc.getParent() instanceof ViewGroup) {
+            ((ViewGroup) sDisc.getParent()).removeView(sDisc);
+        }
+        sDisc = null;
+        for (Bubble b : sBubbles) {
+            if (b.getParent() instanceof ViewGroup) ((ViewGroup) b.getParent()).removeView(b);
+        }
+        sBubbles.clear();
+        sChosen = null;
+        sCustom.clear();
+    }
+
     private static void replaceItems(Object qv) throws Exception {
         if (sGenerate == null || !sOn) return;
         List<JSONObject> items = sItems;
@@ -749,6 +767,7 @@ final class FingerprintQuick {
         FrameLayout.LayoutParams discLp = new FrameLayout.LayoutParams(discPx, discPx);
         discLp.gravity = 51;
         g.addView(sDisc, 0, discLp);
+        Gen.ownView(g, sDisc);
 
         // One entry per cell, in CELLS order: {"t":"empty"} keeps a place open, and an item
         // this phone cannot show (an app since uninstalled) leaves its place open too, so
@@ -793,6 +812,7 @@ final class FingerprintQuick {
             lp.leftMargin = (int) rect.left;
             lp.topMargin = (int) rect.top;
             g.addView(v, lp);
+            Gen.ownView(g, v);
             v.setVisibility(View.VISIBLE);
             if (v instanceof Bubble) {
                 ((Bubble) v).place(x, y, cx - x, cy - y, (int) CELLS[i][2]);

@@ -3258,7 +3258,7 @@ public class Main extends XposedModule {
         Xp.log(TAG + "depth guard installed");
     }
 
-    private static void releaseDepthGuard() {
+    static void releaseDepthGuard() {
         View d = sDepthGuarded;
         ViewTreeObserver.OnPreDrawListener g = sDepthGuard;
         sDepthGuarded = null;

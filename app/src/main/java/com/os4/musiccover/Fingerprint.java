@@ -303,6 +303,36 @@ final class Fingerprint {
     }
 
     /**
+     * Retirement: every frame the hide has suppressed is drawn again, and every icon the hook
+     * has seen is invalidated so the print comes back without a restart.
+     *
+     * <p>Not applyHideFp(): that follows the user's switch, and while the switch is on it
+     * deliberately does not replay. The setting is the user's and is read again by the next
+     * generation; what has to end here is this generation's drawing.
+     */
+    static void retire() {
+        sFodFrames.restore((animation, resource) -> {
+            try {
+                if (!fodForKeyguard(fodViewOf(animation))) return;
+                Xp.callMethod(animation, "draw", resource);
+                sFodFramesReplayed++;
+            } catch (Throwable t) {
+                Xp.log(Main.TAG + "fingerprint frame restore failed: " + t);
+            }
+        });
+        java.util.List<View> views;
+        synchronized (sFodIcons) {
+            views = new java.util.ArrayList<>(sFodIcons.keySet());
+        }
+        for (View v : views) {
+            try {
+                v.invalidate();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    /**
      * Whether the under-screen print is showing for the lock screen or the always-on display, as
      * opposed to an app's own fingerprint prompt - a payment, a password manager. The same views
      * draw all three, so hiding them outright hid the print where an app asked for it too.
