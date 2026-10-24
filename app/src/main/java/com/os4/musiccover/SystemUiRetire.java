@@ -51,6 +51,12 @@ final class SystemUiRetire {
             Xp.w(HotReload.TAG + "dry run deferred: " + busy);
             return "deferred: " + busy;
         }
+        // Without the container there is no attach path to put the module back up: this must
+        // refuse rather than leave a torn-down generation behind.
+        if (Main.sContainer == null) {
+            Xp.w(HotReload.TAG + "dry run deferred: no clock container attached");
+            return "deferred: no clock container attached";
+        }
 
         String before = Gen.report();
         String swept = "not run";

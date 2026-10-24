@@ -104,6 +104,11 @@ public final class ShadeLayer {
         return sRoot;
     }
 
+    /** How far either panel is open, 0 shut. For the hot-reload busy check. */
+    public static float expansion() {
+        return Math.max(sExpansion, sCentreExpansion);
+    }
+
     /**
      * Retirement: both panels' progress forgotten and the backdrop's window, GL thread and mesh
      * released. The hooks are the ledger's and stay; sRoot is the OEM's own view.

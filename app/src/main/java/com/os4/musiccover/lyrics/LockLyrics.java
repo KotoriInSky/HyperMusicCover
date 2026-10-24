@@ -1318,6 +1318,15 @@ public final class LockLyrics {
         // reachable through the keyguard's tree.
         LyricWindow.remove();
         sCard = null;
+        // The blur is a value in the wallpaper process, not a view that goes with the page. The
+        // next generation asks for it again from refresh().
+        try {
+            long blur = setBlurSent(false);
+            CoverPush.sendToWallpaper("lyricblur", false, blur >>> 1);
+            CoverPush.updateVideoCoverBlur(false);
+        } catch (Throwable t) {
+            Xp.w(TAG + "blur release failed: " + t);
+        }
     }
 
     /** HDR on: the lyrics' own window, so the colour mode is theirs and not the media card's. */

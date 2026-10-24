@@ -356,6 +356,12 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
      * <p>sPending is kept: it is the artwork already prepared for the square, and a dry run
      * puts the square straight back up. A real retirement (Step 7) clears it with the cache.
      */
+    /** Whether the square is being drawn frame by frame (an entrance, a track change, a swipe). */
+    static boolean animating() {
+        CoverCardLayer v = sView;
+        return v != null && v.ticking;
+    }
+
     static void retire() {
         ++sGeneration;
         CoverCardLayer v = sView;

@@ -153,6 +153,17 @@ public final class Gen {
      *               see sweepForDryRun.
      */
     private static void sweep(boolean dryRun) {
+        // A real retirement calls this from the main thread through Gen.onMain: anything that
+        // escaped here would be an uncaught exception in SystemUI, and the commit step may not
+        // throw. The steps are independent anyway, so one failure must not stop the rest.
+        try {
+            sweepNow(dryRun);
+        } catch (Throwable t) {
+            Xp.w("[MCGen] sweep failed: " + t);
+        }
+    }
+
+    private static void sweepNow(boolean dryRun) {
         for (java.util.Map.Entry<Runnable, Runnable> e : MAIN_POSTED.entrySet()) {
             try {
                 Main.main().removeCallbacks(e.getValue());
@@ -160,6 +171,14 @@ public final class Gen {
             }
         }
         MAIN_POSTED.clear();
+        // The wrapper map only knows what Gen posted. Direct main().post() calls made by the
+        // features are on the same Handler and would otherwise run after the teardown - one
+        // queued card-gone timer would call into the generation that just let go. This Handler
+        // is the module's own; no OEM message is on it.
+        try {
+            Main.main().removeCallbacksAndMessages(null);
+        } catch (Throwable ignored) {
+        }
 
         for (PostedOn p : postedOn) {
             try {
@@ -336,10 +355,13 @@ public final class Gen {
 
             ioExecutor.shutdownNow();
         } else {
-            // The one-shot threads are not ours to stop in a dry run, but their records are:
-            // every lookup during a run added one, and 50 runs left 64 of them in a ledger that
-            // is supposed to be a count of what is held now.
+            // Threads are not ours to stop in a dry run, but their records are: every lookup and
+            // every card video added one, and 50 runs left 64 of them in a ledger that is
+            // supposed to be a count of what is held now. Only the finished ones go - the
+            // module's long-lived threads and pools are still alive and still theirs.
             threads.removeIf(t -> !t.isAlive());
+            handlerThreads.removeIf(t -> !t.isAlive());
+            executors.removeIf(ExecutorService::isShutdown);
         }
         Xp.log("[MCGen] " + (dryRun ? "dry-run swept" : "retired")
                 + ": registrations taken back, treeListeners=" + trees);

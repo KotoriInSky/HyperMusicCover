@@ -152,6 +152,10 @@ object MiniPlayerRuntime {
         aodDimArgs = null
         dressedViews.clear()
         notificationDressedViews.clear()
+        // Rows the transient-removal hook is holding for a morph: with the controllers gone the
+        // morph will not land, and the map must not keep telling the stack to keep them.
+        heldTransients.clear()
+        passTransient = false
     }
 
     /**

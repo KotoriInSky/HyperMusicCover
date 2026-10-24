@@ -7,6 +7,7 @@ import android.os.Looper;
 import com.os4.musiccover.immersive.ImmersiveHost;
 import com.os4.musiccover.lyrics.AppleLyrics;
 import com.os4.musiccover.pickup.RearScreen;
+import com.os4.musiccover.shade.ShadeLayer;
 import com.os4.musiccover.transit.AmapImmerse;
 import com.os4.musiccover.transit.MetroCodeIsland;
 
@@ -188,6 +189,8 @@ public final class HotReload {
         // would be measuring a teardown that nobody is looking at.
         if (!Main.screenOn()) return "the screen is off";
         if (CoverMorphLayer.active()) return "a cover morph is running";
+        if (CoverCardLayer.animating()) return "the cover card is animating";
+        if (ShadeLayer.expansion() > 0.01f) return "the shade is open";
         if (CoverPush.sCoverFadeWaiting || CoverPush.sCoverFadingOut != null
                 || CoverPush.sOwedSwap != null) {
             return "a cover push is in flight";
