@@ -395,8 +395,11 @@ public class WallpaperProbe {
      * stalling the fade instead.
      */
     private static Bitmap sFadeBuf2;
-    /** The buffer the GL thread is copying right now, or null. Guarded by FADE_LOCK. */
-    private static Bitmap sUploading;
+    /**
+     * The buffer the GL thread is copying right now, or null. Guarded by FADE_LOCK, and
+     * volatile because the hot reload's check section reads it from a binder thread.
+     */
+    private static volatile Bitmap sUploading;
     private static final Object FADE_LOCK = new Object();
     /**
      * True from the moment a blended frame is handed to the engine until the GL thread has
@@ -570,8 +573,11 @@ public class WallpaperProbe {
     private static volatile Bitmap sUploadOverride;
     private static volatile Object sKeyguardRenderer;
     private static Class<?> sPlainProgram;
-    /** GL-thread state: our texture, the fade it belongs to and the context it was made in. */
-    private static int sGlTex;
+    /**
+     * GL-thread state: our texture, the fade it belongs to and the context it was made in.
+     * sGlTex is volatile because the hot reload's check section reads it from a binder thread.
+     */
+    private static volatile int sGlTex;
     private static GpuFade sGlTexFor;
     private static android.opengl.EGLContext sGlTexCtx;
     private static final int[] sGlInts = new int[4];
