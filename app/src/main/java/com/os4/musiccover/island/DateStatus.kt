@@ -583,10 +583,17 @@ internal object DateStatus {
                         h.offset.snap(0f)
                         later()
                     }
+
                     override fun onViewDetachedFromWindow(view: View) {
                         h.layout = null
                         h.offset.snap(0f)
                         later()
+                        // The keyguard is rebuilt and this view goes with it. Left registered,
+                        // this listener and the host would keep the whole old tree reachable
+                        // and the ledger one entry longer per rebuild; a view that comes back
+                        // is measured again and gets a new host in the same cleared state.
+                        Gen.unattachState(view, this)
+                        hosts.remove(view)
                     }
                 })
             }

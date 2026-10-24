@@ -67,7 +67,12 @@ public final class Gen {
 
     static final List<XposedInterface.HookHandle> hooks = new CopyOnWriteArrayList<>();
     private static final List<PostedOn> postedOn = new CopyOnWriteArrayList<>();
-    private static final List<Frame> frames = new CopyOnWriteArrayList<>();
+    /**
+     * One entry per callback, not one per post. An animation re-posts itself from inside its
+     * own frame until it lands, so a list of posts grew by a frame's worth per animation.
+     */
+    private static final java.util.Map<Choreographer.FrameCallback, Frame> frames =
+            new java.util.concurrent.ConcurrentHashMap<>();
     private static final List<HandlerThread> handlerThreads = new CopyOnWriteArrayList<>();
     private static final List<ExecutorService> executors = new CopyOnWriteArrayList<>();
     private static final List<Thread> threads = new CopyOnWriteArrayList<>();
@@ -98,13 +103,23 @@ public final class Gen {
         }
     }
 
-    private static final class Frame {
+    /** The wrapper posted on the caller's behalf; see frame(). */
+    private static final class Frame implements Choreographer.FrameCallback {
         final Choreographer.FrameCallback callback;
-        final Choreographer.FrameCallback wrapped;
 
-        Frame(Choreographer.FrameCallback callback, Choreographer.FrameCallback wrapped) {
+        Frame(Choreographer.FrameCallback callback) {
             this.callback = callback;
-            this.wrapped = wrapped;
+        }
+
+        @Override
+        public void doFrame(long frameTimeNanos) {
+            try {
+                if (live()) callback.doFrame(frameTimeNanos);
+            } finally {
+                // Only still ours if the callback did not re-post: a finished loop leaves
+                // nothing behind, and an in-flight one was replaced by frame() already.
+                frames.remove(callback, this);
+            }
         }
     }
 
@@ -268,25 +283,17 @@ public final class Gen {
         view.post(g);
     }
 
-    /** Wrappers posted for each frame callback, so unframe can find the one the caller holds. */
-    private static final java.util.Map<Choreographer.FrameCallback, Choreographer.FrameCallback>
-            FRAME_WRAPPED = new java.util.concurrent.ConcurrentHashMap<>();
-
+    /** Post a frame callback, and remember the wrapper so retirement (or unframe) can take it back. */
     public static void frame(Choreographer.FrameCallback cb) {
         if (quiescing || inert) return;
-        Choreographer c = Choreographer.getInstance();
-        Choreographer.FrameCallback wrapped = FRAME_WRAPPED.computeIfAbsent(cb, key -> t -> {
-            FRAME_WRAPPED.remove(key);
-            if (live()) key.doFrame(t);
-        });
-        frames.add(new Frame(cb, wrapped));
-        c.postFrameCallback(wrapped);
+        Frame wrapped = new Frame(cb);
+        frames.put(cb, wrapped);
+        Choreographer.getInstance().postFrameCallback(wrapped);
     }
 
     public static void unframe(Choreographer.FrameCallback cb) {
-        Choreographer.FrameCallback wrapped = FRAME_WRAPPED.remove(cb);
+        Frame wrapped = frames.remove(cb);
         Choreographer.getInstance().removeFrameCallback(wrapped == null ? cb : wrapped);
-        frames.removeIf(f -> f.callback == cb);
     }
 
     // ---------------------------------------------------------------- threads

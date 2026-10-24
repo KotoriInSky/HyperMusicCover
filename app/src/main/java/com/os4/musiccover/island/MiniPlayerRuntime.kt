@@ -45,7 +45,8 @@ import org.json.JSONObject
 
 /** Owns one mini player for each live keyguard shortcut host. */
 object MiniPlayerRuntime {
-    private data class Held(val left: View, val right: View, val controller: MiniPlayerController)
+    private data class Held(val left: View, val right: View, val controller: MiniPlayerController,
+                            val listener: View.OnAttachStateChangeListener? = null)
 
     /** One thread for scaling artwork, so a track change never decodes on the main thread. */
     internal val artWorker: java.util.concurrent.ExecutorService =
@@ -1034,6 +1035,7 @@ object MiniPlayerRuntime {
         val old = synchronized(controllers) { controllers[host] }
         if (!config.getBoolean(MiniPlayerConfig.ENABLED)) {
             old?.controller?.destroy()
+            old?.listener?.let { Gen.unattachState(host, it) }
             synchronized(controllers) { controllers.remove(host) }
             return
         }
@@ -1044,10 +1046,13 @@ object MiniPlayerRuntime {
             return
         }
         old?.controller?.destroy()
+        // The row can be rebuilt under the same root (the keyguard keeps its window), and the
+        // old listener only leaves on detach - which then never comes. Take it back here, or
+        // every rebuild leaves one behind and pins the views it holds.
+        old?.listener?.let { Gen.unattachState(host, it) }
         val controller = MiniPlayerController(host, left, right, prefs(root.context),
             loader ?: root.context.classLoader)
-        synchronized(controllers) { controllers[host] = Held(left, right, controller) }
-        Gen.attachState(host, object : View.OnAttachStateChangeListener {
+        val listener = object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) = Unit
             override fun onViewDetachedFromWindow(v: View) {
                 synchronized(controllers) {
@@ -1056,7 +1061,11 @@ object MiniPlayerRuntime {
                 controller.destroy()
                 Gen.unattachState(host, this)
             }
-        })
+        }
+        synchronized(controllers) {
+            controllers[host] = Held(left, right, controller, listener)
+        }
+        Gen.attachState(host, listener)
     }
 
     private fun resolveShortcuts(controller: Any?): Pair<View, View>? = runCatching {
