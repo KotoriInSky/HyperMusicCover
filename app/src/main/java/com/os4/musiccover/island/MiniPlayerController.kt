@@ -7254,11 +7254,10 @@ internal class MiniPlayerController(
         morph?.cancel()
         if (piles.isNotEmpty() || pileMoving) finishPile(true)
         // Each of these ends itself once its own state has, but some wait on a frame of a tree
-        // this runtime no longer watches: gone with it, not left asking for vsyncs.
-        Choreographer.getInstance().let { c ->
-            listOf(pulseFrame, smallNudgeFrame, swapFrame, rowFrame, appearFrame, smallGrowFrame,
-                pileSettle, spreadFrame, switchWait, rowWait).forEach(c::removeFrameCallback)
-        }
+        // this runtime no longer watches: gone with it, not left asking for vsyncs. Through Gen,
+        // because what is queued on the Choreographer is its wrapper, not the callback itself.
+        listOf(pulseFrame, smallNudgeFrame, swapFrame, rowFrame, appearFrame, smallGrowFrame,
+            pileSettle, spreadFrame, switchWait, rowWait).forEach { Gen.unframe(it) }
         // The waits for a row would otherwise go on to open it, on a controller already gone;
         // and a card still pinned is the stack's again, drawn where the stack has it.
         rowWaitKey = null
