@@ -22,7 +22,6 @@ import android.util.Log;
 import java.lang.reflect.Method;
 
 import io.github.libxposed.api.XposedInterface;
-import io.github.libxposed.api.XposedModuleInterface;
 import java.lang.reflect.Modifier;
 
 
@@ -740,8 +739,15 @@ public class WallpaperProbe {
         return art;
     }
 
-    public static void handle(XposedModuleInterface.PackageLoadedParam param) {
-        sCl = param.getDefaultClassLoader();
+    /**
+     * Everything this process hooks, in the cold-start order.
+     *
+     * The class loader comes from the caller rather than from a PackageLoadedParam so a hot
+     * reload can run the very same sequence in a process that has been up for hours; the
+     * adoption validates that loader against the process's own classes first.
+     */
+    static void install(ClassLoader cl) {
+        sCl = cl;
         Xp.log(TAG + "loaded into " + PKG);
         // The lock clock's palette read off the cover while the cover is up. Its own hook, failing
         // on its own: nothing else here depends on it.
@@ -1267,15 +1273,22 @@ public class WallpaperProbe {
             Xp.w(TAG + "keep-dim uniform hook failed (the KEEP look keeps no dim): " + t);
         }
 
-        Xp.hook("wall.app.create", Xp.findMethodExact(Application.class, "onCreate"), chain -> {
-            Object result = chain.proceed();
-            try {
-                register((Application) chain.getThisObject());
-            } catch (Throwable t) {
-                Xp.w(TAG + "register failed: " + t);
-            }
-            return result;
-        });
+        // Its own block like every other: a build where this name moved must not take the whole
+        // process's adoption down - the receiver is also installed by the hot reload's own
+        // main-thread step, which does not depend on this hook.
+        try {
+            Xp.hook("wall.app.create", Xp.findMethodExact(Application.class, "onCreate"), chain -> {
+                Object result = chain.proceed();
+                try {
+                    register((Application) chain.getThisObject());
+                } catch (Throwable t) {
+                    Xp.w(TAG + "register failed: " + t);
+                }
+                return result;
+            });
+        } catch (Throwable t) {
+            Xp.w(TAG + "application hook failed (a cold start still registers): " + t);
+        }
     }
 
     private static final String ART_FILE = "mc_art.jpg";
@@ -2174,7 +2187,9 @@ public class WallpaperProbe {
         sRegistered = true;
         sCtx = ctx.getApplicationContext();
         checkTakeoverCrash(ctx);
-        loadArt(ctx);
+        // A hot reload hands the cover over instead, and re-reading it from disk would compose
+        // it again on this thread for a picture the texture already shows.
+        if (sArt == null) loadArt(ctx);
         // Restored from disk or not: either way the cover that belongs on screen is the one
         // SystemUI holds, and SystemUI has no way to learn ours is missing.
         //
@@ -2503,6 +2518,12 @@ public class WallpaperProbe {
                         sSkipFrost = i.getBooleanExtra("on", !sSkipFrost);
                         Xp.log(TAG + "frosting during a fade is "
                                 + (sSkipFrost ? "skipped" : "kept"));
+                    } else if ("gen".equals(op)) {
+                        // This generation's ledger and where it is drawing from. The mirror of
+                        // SystemUI's `op gen`; also what a hot reload is judged by.
+                        String report = genReport();
+                        Xp.log(TAG + "gen " + report);
+                        setResultData(report);
                     } else if ("state".equals(op)) {
                         Xp.log(TAG + "art=" + describe(sArt)
                                 + " orig=" + describe(sOrig)
@@ -2558,6 +2579,23 @@ public class WallpaperProbe {
         // Unprompted as well as when asked: a restart of this process alone would otherwise
         // leave SystemUI on whatever it last heard, which may be nothing.
         sayHello(ctx);
+    }
+
+    /**
+     * What this generation holds in the wallpaper process, and where it is drawing from.
+     * `adb shell am broadcast -a com.os4.musiccover.WPROBE --es op gen`.
+     */
+    private static String genReport() {
+        return Gen.report() + " " + HotReload.status()
+                + " art=" + describe(sArt) + " orig=" + describe(sOrig)
+                + " card=" + sCardMode + " blur=" + sLyricBlur + "/" + sLyricBlurWant
+                + " tex=" + sReportedW + "x" + sReportedH + "@" + sSurfaceW + "x" + sSurfaceH
+                + " engine=" + (sKeyguardEngine == null ? "none" : "yes")
+                + " fade=" + (sFade != null || sGpuFade != null)
+                + " gpu=" + sGpuFadeOn + "/" + sDrawHooked + "/" + sGpuFadeBroken
+                + " glTex=" + sGlTex + " video=" + (sLockIsVideo == null ? "?" : sLockIsVideo)
+                + " takeover=" + sCoverVideoActive + " texfit=" + sTexFit
+                + " keep=" + sKeepDim;
     }
 
     /**

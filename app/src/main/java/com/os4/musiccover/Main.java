@@ -812,7 +812,7 @@ public class Main extends XposedModule {
         // extras - so this is where the process remembers what it was asked to do.
         HotReload.onPackageLoaded(pkg, param.getDefaultClassLoader());
         if ("com.miui.miwallpaper".equals(pkg)) {
-            WallpaperProbe.handle(param);
+            WallpaperProbe.install(param.getDefaultClassLoader());
             return;
         }
         // The lock screen editor and the always-on display, which judge a wallpaper's depth with
