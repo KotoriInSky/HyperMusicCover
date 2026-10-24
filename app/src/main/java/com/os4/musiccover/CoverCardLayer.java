@@ -363,7 +363,9 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
     }
 
     static void retire() {
-        ++sGeneration;
+        // NOT ++sGeneration: the kept sPending is stamped with the current one, and adoptPending
+        // is what puts the square straight back up on the rebuild. The queued adopts the bump
+        // used to invalidate are gone with Main's messages, which the sweep clears.
         CoverCardLayer v = sView;
         sView = null;
         if (v == null) return;

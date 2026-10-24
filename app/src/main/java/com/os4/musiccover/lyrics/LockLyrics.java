@@ -1304,6 +1304,16 @@ public final class LockLyrics {
     public static void retire() {
         Main.main().removeCallbacks(TICK);
         Main.main().removeCallbacks(WATCH);
+        // The display listener is Gen's and goes with the sweep; this latch is what would stop
+        // the next generation from registering its own.
+        sDisplayWatched = false;
+        cancelStillWake();
+        if (sDrawLock != null && sDrawLock.isHeld()) {
+            try {
+                sDrawLock.release();
+            } catch (Throwable ignored) {
+            }
+        }
         LyricView v = sView;
         sView = null;
         if (v != null) {

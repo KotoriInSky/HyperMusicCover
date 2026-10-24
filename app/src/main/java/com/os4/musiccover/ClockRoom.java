@@ -220,6 +220,20 @@ public final class ClockRoom {
     };
 
     /**
+     * Retirement: a walk that was in flight ends here. Its frame callback is Gen's and the sweep
+     * removes it, and sRoomEasing is what would keep the next ease from ever arming another.
+     * The shown/raw pair is cleared so the next generation seeds from where the clock now is.
+     */
+    static void retire() {
+        Gen.unframe(ROOM_FRAME);
+        sRoomEasing = false;
+        sRoomSoft = 0f;
+        sRoomShown = Float.NaN;
+        sRoomRaw = Float.NaN;
+        sRoomUnobstructed = false;
+    }
+
+    /**
      * Re-evaluate room through the clock's animation channel, with the source Y left intact.
      * A small nudge passes its equal-value early-out; roomForRows supplies the current boundary.
      */

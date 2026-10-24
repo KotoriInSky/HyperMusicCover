@@ -1,4 +1,5 @@
 package com.os4.musiccover.pickup
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Main
 import com.os4.musiccover.Xp
 import android.graphics.PixelFormat
@@ -48,7 +49,7 @@ internal object PickupPark {
     /** OPPO's own interval for an order being made, the shortest of its three. */
     const val EVERY = 30_000L
 
-    private val bg: Handler by lazy { Handler(HandlerThread("mc-pickup-park").apply { start() }.looper) }
+    private val bg: Handler by lazy { Handler(Gen.handlerThread("mc-pickup-park").looper) }
 
     // All below on [bg], but for [parked], which anyone may read: a copy is swapped in whole.
     private var vd: VirtualDisplay? = null

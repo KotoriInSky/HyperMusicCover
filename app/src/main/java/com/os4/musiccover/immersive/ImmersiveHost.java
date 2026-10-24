@@ -824,6 +824,18 @@ public final class ImmersiveHost {
         sMain.removeCallbacks(LEAVE_CHECK);
         sMain.removeCallbacks(LET_GO_EXPIRED);
         sMain.removeCallbacks(RELEASE_UNLOCKED);
+        sMain.removeCallbacks(LIFT_RELEASE);
+        // The display listener is Gen's and the sweep takes it; the latch must not stay on.
+        sDisplayWatched = false;
+        sLiftView = null;
+        sLiftUp = false;
+        sLiftDrawnUp = false;
+        if (sDrawLock != null && sDrawLock.isHeld()) {
+            try {
+                sDrawLock.release();
+            } catch (Throwable ignored) {
+            }
+        }
         if (sFadeAnim != null) {
             try {
                 sFadeAnim.cancel();

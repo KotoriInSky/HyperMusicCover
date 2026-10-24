@@ -197,6 +197,7 @@ public final class CountdownScene implements ImmersiveScene {
 
     @Override
     public void release() {
+        Ground.reset();
         CountdownView v = mView;
         if (v == null) return;
         mView = null;
@@ -922,6 +923,16 @@ public final class CountdownScene implements ImmersiveScene {
         private static java.lang.ref.WeakReference<GroundSurface> sWaiting;
 
         private Ground() {
+        }
+
+        /**
+         * Retirement: the build's own Gen.post is what clears sBusy, and during a teardown that
+         * post is refused (quiescing) or swept - leaving the flag set for the rest of the
+         * process. Nothing is held any more, so the gate opens with the page gone.
+         */
+        static void reset() {
+            sBusy = false;
+            sWaiting = null;
         }
 
         /** Main thread. Hands the view the picture now, or when it is made. */

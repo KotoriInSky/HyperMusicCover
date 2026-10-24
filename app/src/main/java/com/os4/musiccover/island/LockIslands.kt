@@ -414,6 +414,9 @@ internal object LockIslands {
         // The receiver itself is in Gen's ledger and the sweep takes it. This guard is what
         // would keep the next pipeline run from registering it again.
         screenWatch = false
+        // The unlock watch clears itself when its loop ends; the sweep deletes the continuation
+        // instead, so the flag has to be cleared here or no later unlock ever watches.
+        unlockWatch = false
     }
 
     fun install(classLoader: ClassLoader) {

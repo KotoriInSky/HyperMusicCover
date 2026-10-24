@@ -135,6 +135,7 @@ final class SystemUiRetire {
         CoverMorphLayer.retire();
         CoverCardLayer.retire();
         CoverPush.releaseCoverGuard();
+        MotionCover.retire();
         Main.detachCover();
     }
 
@@ -142,6 +143,7 @@ final class SystemUiRetire {
     private static void retireClock() {
         ClockMove.detach();
         ClockCollapse.release("hot reload");
+        ClockRoom.retire();
         ClockRoom.reassertClockRoom();
         ClockGlass.restoreGlass();
         ClockViews.sClockTargets.clear();

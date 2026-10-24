@@ -47,6 +47,13 @@ import android.os.SystemClock
  */
 internal object PickupObserver {
 
+    /** Retirement: the camera availability callback, and the latch that keeps it one-shot. */
+    @JvmStatic
+    fun retire() {
+        PickupCamera.retire()
+    }
+
+
     private const val TAG = "MCPickupObs: "
 
     /** ColorOS's `execution_duration` for a pickup code (observe-config.json). */
@@ -327,18 +334,39 @@ internal object PickupObserver {
 private object PickupCamera {
     private val taken = java.util.Collections.synchronizedSet(HashSet<String>())
     @Volatile private var watching = false
+    private var manager: android.hardware.camera2.CameraManager? = null
+    private var callback: android.hardware.camera2.CameraManager.AvailabilityCallback? = null
 
     fun inUse(ctx: Context): Boolean {
         if (!watching) {
             watching = true
             runCatching {
-                ctx.getSystemService(android.hardware.camera2.CameraManager::class.java)
-                    ?.registerAvailabilityCallback(object : android.hardware.camera2.CameraManager.AvailabilityCallback() {
+                val cm = ctx.getSystemService(android.hardware.camera2.CameraManager::class.java)
+                if (cm != null) {
+                    val cb = object : android.hardware.camera2.CameraManager.AvailabilityCallback() {
                         override fun onCameraAvailable(id: String) { taken.remove(id) }
                         override fun onCameraUnavailable(id: String) { taken.add(id) }
-                    }, PickupCodeIsland.bg)
-            }.onFailure { Xp.log("MCPickupObs: camera not watched: $it") }
+                    }
+                    manager = cm
+                    callback = cb
+                    Gen.cameraCallback(cm, cb, PickupCodeIsland.bg)
+                }
+            }.onFailure {
+                watching = false
+                Xp.log("MCPickupObs: camera not watched: $it")
+            }
         }
         return taken.isNotEmpty()
+    }
+
+    /** Retirement: the callback is a host registration; Gen takes it back. */
+    fun retire() {
+        val cm = manager
+        val cb = callback
+        manager = null
+        callback = null
+        if (cm != null && cb != null) runCatching { Gen.uncameraCallback(cm, cb) }
+        watching = false
+        taken.clear()
     }
 }

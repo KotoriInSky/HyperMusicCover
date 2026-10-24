@@ -137,6 +137,8 @@ object MiniPlayerRuntime {
      */
     @JvmStatic
     fun retire() {
+        installTask?.let { Gen.removeCallbacks(it) }
+        installTask = null
         val all = synchronized(controllers) {
             val held = controllers.entries.map { it.key to it.value }
             controllers.clear()
@@ -146,6 +148,27 @@ object MiniPlayerRuntime {
             runCatching { Gen.unattachState(host, h.listener) }
             runCatching { h.controller.destroy() }
         }
+        // The OEM's full-AOD controller is a singleton and holds the proxy directly. Left
+        // there, it is a host reference into this class loader - and `added` was a local, so
+        // the next generation could never add its own listener to that controller.
+        val c = aodController?.get()
+        val l = aodListener
+        val remove = aodRemove
+        aodController = null
+        aodListener = null
+        aodRemove = null
+        aodListenerAdded = false
+        if (c != null && l != null && remove != null) {
+            runCatching { remove.invoke(c, l) }
+                .onFailure { Xp.log("MCMini: full-AOD listener not removed: $it") }
+        }
+        aodDimFrames = 0
+        aodDimLook = null
+        aodDimDepth = -1f
+        aodDimFlat = false
+        blendMethod = null
+        glassMethod = null
+        blurOpenedMethod = null
         // The AOD dressing belongs to the views that just went; left here it would hand the
         // next run a listener per orphaned view.
         aodDimHandler.removeCallbacks(aodDimSettle)
@@ -825,6 +848,10 @@ object MiniPlayerRuntime {
      */
     private var aodDimFlat = false
     private var aodController: WeakReference<Any>? = null
+    /** The proxy the OEM's full-AOD controller holds, and the way back out of it. */
+    private var aodListener: Any? = null
+    private var aodListenerAdded = false
+    private var aodRemove: Method? = null
     private var aodDimFrames = 0
     private var blendMethod: Method? = null
     private var glassMethod: Method? = null
@@ -848,6 +875,13 @@ object MiniPlayerRuntime {
                 .getDeclaredMethod("isBackgroundBlurOpened", Context::class.java).apply { isAccessible = true }
         }.getOrNull()
         val add = controller.getDeclaredMethod("addCallback", listener).apply { isAccessible = true }
+        aodRemove = runCatching { controller.getDeclaredMethod("removeCallback", listener) }
+            .getOrElse {
+                controller.declaredMethods.firstOrNull {
+                    it.name == "removeCallback" && it.parameterTypes.size == 1
+                } ?: throw NoSuchMethodException("removeCallback")
+            }
+            .apply { isAccessible = true }
         val ours = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(listener)) { self, m, args ->
             when (m.name) {
                 "updateFullAodAnimState" -> { runCatching { onAodDim(args!!) }; null }
@@ -859,8 +893,8 @@ object MiniPlayerRuntime {
                 else -> null
             }
         }
+        aodListener = ours
         // The controller is SystemUI's own singleton; the first listener it takes brings us in.
-        var added = false
         Xp.hookAll("sysui.mini.session_callback", controller, "addCallback") { chain ->
             val result = chain.proceed()
             val firstController = aodController?.get() == null
@@ -869,8 +903,9 @@ object MiniPlayerRuntime {
                 materialGeneration++
                 refresh()
             }
-            if (!added) {
-                added = true
+            if (!aodListenerAdded) {
+                aodListenerAdded = true
+                aodListener = ours
                 runCatching { add.invoke(chain.thisObject, ours) }
                     .onFailure { Xp.log("MCMini: full-AOD listener not added: $it") }
             }
@@ -1057,15 +1092,25 @@ object MiniPlayerRuntime {
     /** The last effect whose empty recording was thrown away, for `op mini`. */
     @Volatile private var emptyEffect = "none"
 
+    /** The pending retries of scheduleInstall, so a retirement can take them back. */
+    private var installTask: Runnable? = null
+
     /** The shortcut row has just been built: the pill goes between its two buttons. */
     private fun scheduleInstall(root: View, shortcutController: Any?) {
         lastRoot = WeakReference(root)
         lastShortcutController = shortcutController?.let(::WeakReference)
-        fun doInstall() = runCatching { attach(root, shortcutController) }
-            .onFailure { Xp.w("MCMini: attach failed: $it") }
-        doInstall()
-        root.post { doInstall() }
-        root.postDelayed({ doInstall() }, 250L)
+        // Through Gen, not root.post: a retry left on the OEM view's handler runs after the
+        // sweep and builds a controller into a generation that has let go. Removing the old
+        // task first also keeps two dry runs from queueing four attaches between them.
+        installTask?.let { Gen.removeCallbacks(it) }
+        val task = Runnable {
+            runCatching { attach(root, shortcutController) }
+                .onFailure { Xp.w("MCMini: attach failed: $it") }
+        }
+        installTask = task
+        task.run()
+        Gen.post(task)
+        Gen.postDelayed(task, 250L)
     }
 
     private fun attach(root: View, shortcutController: Any?) {

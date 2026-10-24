@@ -441,6 +441,7 @@ internal object PickupIsland {
     @JvmStatic
     fun retire() {
         receivers = false
+        PickupObserver.retire()
     }
 
     private fun receivers(ctx: Context) {

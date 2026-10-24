@@ -753,6 +753,7 @@ internal class MiniPlayerController(
             smallIsland = it
             // Right after the lock screen's layer, which puts it just under the pill.
             host.addView(it, lockScreenLayerIndex(), ViewGroup.LayoutParams(frame, discFrame(d)))
+            Gen.ownView(host, it)
         }
         val frameHeight = discFrame(d)
         if (!smallWide && (view.layoutParams.width != frame || view.layoutParams.height != frameHeight))
@@ -1540,6 +1541,7 @@ internal class MiniPlayerController(
         val view = ghostPill ?: MiniPlayerView(context).also {
             ghostPill = it
             host.addView(it, ghostIndex(), ViewGroup.LayoutParams(1, 1))
+            Gen.ownView(host, it)
         }
         val w = from.w.roundToInt().coerceAtLeast(1)
         val h = from.h.roundToInt().coerceAtLeast(1)
@@ -1624,6 +1626,7 @@ internal class MiniPlayerController(
         val disc = ghostDisc ?: ShortcutDisc(context).also {
             ghostDisc = it
             host.addView(it, ghostIndex(), ViewGroup.LayoutParams(frame, frameHeight))
+            Gen.ownView(host, it)
         }
         if (disc.layoutParams.width != frame || disc.layoutParams.height != frameHeight) {
             disc.layoutParams = disc.layoutParams.apply { this.width = frame; height = frameHeight }
@@ -2321,6 +2324,7 @@ internal class MiniPlayerController(
         val view = spare ?: traced("MC sv.new") { MiniPlayerView(context) }
         if (spare == null) {
             traced("MC sv.add") { host.addView(view, lockScreenLayerIndex(), ViewGroup.LayoutParams(w, h)) }
+            Gen.ownView(host, view)
         } else view.layoutParams.takeIf { it.width != w || it.height != h }?.let {
             it.width = w
             it.height = h
@@ -5935,6 +5939,7 @@ internal class MiniPlayerController(
             flight = it
             // Under the pill in the host; a morph lifts it above everything with translationZ.
             host.addView(it, lockScreenLayerIndex(), ViewGroup.LayoutParams(1, 1))
+            Gen.ownView(host, it)
         }
         val w = pill.layoutParams.width.coerceAtLeast(1)
         val h = pill.layoutParams.height.coerceAtLeast(1)
@@ -6911,6 +6916,7 @@ internal class MiniPlayerController(
             if (!discInPlace(disc, parent)) {
                 (disc.parent as? ViewGroup)?.removeView(disc)
                 parent.addView(disc, layerSlot(parent), ViewGroup.LayoutParams(frame, frame))
+                Gen.ownView(parent, disc)
             }
             if (disc.layoutParams.width != frame || disc.layoutParams.height != frame)
                 resizeSmallIsland(disc, frame, frame)
@@ -8076,6 +8082,7 @@ internal class MiniPlayerController(
         val view = player ?: MiniPlayerView(context).also {
             player = it
             host.addView(it, lockScreenLayerIndex(), ViewGroup.LayoutParams(1, 1))
+            Gen.ownView(host, it)
         }
         if (music != null) trackMusic(music)
         // A notification let out and on its way home to the pill is not among the notes yet - nor

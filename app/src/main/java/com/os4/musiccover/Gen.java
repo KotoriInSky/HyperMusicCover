@@ -8,9 +8,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.ContentObserver;
+import android.hardware.camera2.CameraManager;
 import android.hardware.display.DisplayManager;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
+import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -136,6 +138,8 @@ public final class Gen {
         INSTALL_KEPT.addAll(prefListeners);
         INSTALL_KEPT.addAll(sessionCallbacks);
         INSTALL_KEPT.addAll(activeSessions);
+        INSTALL_KEPT.addAll(cameraCallbacks);
+        INSTALL_KEPT.addAll(networkCallbacks);
         INSTALL_KEPT.addAll(preDraws);
         INSTALL_KEPT.addAll(attachStates);
         INSTALL_KEPT.addAll(layoutChanges);
@@ -263,6 +267,24 @@ public final class Gen {
             }
         }
         retain(dryRun, activeSessions);
+
+        for (CameraReg c : cameraCallbacks) {
+            if (kept(dryRun, c)) continue;
+            try {
+                c.manager.unregisterAvailabilityCallback(c.callback);
+            } catch (Throwable ignored) {
+            }
+        }
+        retain(dryRun, cameraCallbacks);
+
+        for (NetworkReg n : networkCallbacks) {
+            if (kept(dryRun, n)) continue;
+            try {
+                n.manager.unregisterNetworkCallback(n.callback);
+            } catch (Throwable ignored) {
+            }
+        }
+        retain(dryRun, networkCallbacks);
 
         for (PreDrawReg p : preDraws) {
             if (kept(dryRun, p)) continue;
@@ -395,6 +417,8 @@ public final class Gen {
     private static final List<PrefReg> prefListeners = new CopyOnWriteArrayList<>();
     private static final List<SessionReg> sessionCallbacks = new CopyOnWriteArrayList<>();
     private static final List<ActiveSessionsReg> activeSessions = new CopyOnWriteArrayList<>();
+    private static final List<CameraReg> cameraCallbacks = new CopyOnWriteArrayList<>();
+    private static final List<NetworkReg> networkCallbacks = new CopyOnWriteArrayList<>();
     private static final List<TreeReg> treeListeners = new CopyOnWriteArrayList<>();
     private static final List<PreDrawReg> preDraws = new CopyOnWriteArrayList<>();
     private static final List<AttachReg> attachStates = new CopyOnWriteArrayList<>();
@@ -498,6 +522,26 @@ public final class Gen {
                           MediaSessionManager.OnActiveSessionsChangedListener listener) {
             this.manager = manager;
             this.listener = listener;
+        }
+    }
+
+    private static final class CameraReg {
+        final CameraManager manager;
+        final CameraManager.AvailabilityCallback callback;
+
+        CameraReg(CameraManager manager, CameraManager.AvailabilityCallback callback) {
+            this.manager = manager;
+            this.callback = callback;
+        }
+    }
+
+    private static final class NetworkReg {
+        final ConnectivityManager manager;
+        final ConnectivityManager.NetworkCallback callback;
+
+        NetworkReg(ConnectivityManager manager, ConnectivityManager.NetworkCallback callback) {
+            this.manager = manager;
+            this.callback = callback;
         }
     }
 
@@ -775,6 +819,31 @@ public final class Gen {
         activeSessions.removeIf(r -> r.manager == m && r.listener == l);
     }
 
+    /** Which cameras are in use (the pickup card's video-call gate, PickupCamera). */
+    public static void cameraCallback(CameraManager m, CameraManager.AvailabilityCallback cb,
+                                      Handler h) {
+        m.registerAvailabilityCallback(cb, h);
+        cameraCallbacks.add(new CameraReg(m, cb));
+    }
+
+    public static void uncameraCallback(CameraManager m, CameraManager.AvailabilityCallback cb) {
+        m.unregisterAvailabilityCallback(cb);
+        cameraCallbacks.removeIf(r -> r.manager == m && r.callback == cb);
+    }
+
+    /** The process's default network (the motion-cover downloader's online gate). */
+    public static void networkCallback(ConnectivityManager m,
+                                       ConnectivityManager.NetworkCallback cb, Handler h) {
+        m.registerDefaultNetworkCallback(cb, h);
+        networkCallbacks.add(new NetworkReg(m, cb));
+    }
+
+    public static void unnetworkCallback(ConnectivityManager m,
+                                         ConnectivityManager.NetworkCallback cb) {
+        m.unregisterNetworkCallback(cb);
+        networkCallbacks.removeIf(r -> r.manager == m && r.callback == cb);
+    }
+
     /**
      * A listener on a host view whose type varies (pre-draw, layout, attach). Recorded here so
      * retirement can find it; the typed removal is the caller's, by kind.
@@ -892,6 +961,8 @@ public final class Gen {
                 + " prefListeners=" + prefListeners.size()
                 + " sessionCallbacks=" + sessionCallbacks.size()
                 + " activeSessions=" + activeSessions.size()
+                + " cameraCallbacks=" + cameraCallbacks.size()
+                + " networkCallbacks=" + networkCallbacks.size()
                 + " treeListeners=" + treeListeners.size()
                 + " preDraws=" + preDraws.size()
                 + " attachStates=" + attachStates.size()
