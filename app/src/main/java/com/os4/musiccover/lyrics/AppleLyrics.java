@@ -156,7 +156,6 @@ public final class AppleLyrics {
         Method m = android.media.session.MediaSession.class
                 .getDeclaredMethod("setMetadata", MediaMetadata.class);
         Xp.hook("apple.lyrics.set_metadata", m, (XposedInterface.Hooker) chain -> {
-            HotReload.mark("apple.lyrics.set_metadata");
             try {
                 if (!sPublishing) {
                     onMetadata(chain.getThisObject(), chain.getArgs());
@@ -212,7 +211,6 @@ public final class AppleLyrics {
         List<XposedInterface.HookHandle> handles = Xp.hookAll("apple.lyrics.build",
                 vm, "buildTimeRangeToLyricsMap",
                 (XposedInterface.Hooker) chain -> {
-                    HotReload.mark("apple.lyrics.build");
                     Object result = chain.proceed();
                     try {
                         List<Object> args = chain.getArgs();
@@ -854,7 +852,6 @@ public final class AppleLyrics {
                 android.media.session.MediaSessionManager.RemoteUserInfo.class, String.class,
                 Bundle.class, android.os.ResultReceiver.class);
         Xp.hook("apple.lyrics.dispatch_command", m, (XposedInterface.Hooker) chain -> {
-            HotReload.mark("apple.lyrics.dispatch_command");
             List<Object> args = chain.getArgs();
             if (!LyricSource.CMD_LYRIC.equals(args.get(1))) {
                 return chain.proceed();

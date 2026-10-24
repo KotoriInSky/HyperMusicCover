@@ -63,12 +63,6 @@
     <string name="log_level_summary">Switch to Verbose and reproduce the problem before reporting it</string>
     <string name="log_level_normal">Normal</string>
     <string name="log_level_verbose">Verbose</string>
-    <string name="hot_reload_test">Hot reload Apple Music (test)</string>
-    <string name="hot_reload_test_summary">replaceHook: swap the old generation\'s hooks in place</string>
-    <string name="hot_reload_test_setid">Hot reload Apple Music (setId experiment)</string>
-    <string name="hot_reload_test_setid_summary">Keep the old hooks, see whether setId replaces them</string>
-    <string name="hot_reload_targets">Running targets</string>
-    <string name="hot_reload_targets_summary">Process, pid, state, versionCode, framework API</string>
     <string name="import_success">Import successful, restarting app</string>
     <string name="import_failed">Import failed, invalid file format</string>
     <string name="export_success">Export successful</string>

@@ -16,28 +16,20 @@ import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModuleInterface;
 
 /**
- * Step 0 of the hot-reload plan: the smallest implementation that answers the framework questions
- * in 热重载实现方案.md §2.3, in one process (Apple Music) and nowhere else.
+ * The hot-reload entry points' work for the one process Step 0 proved the mechanism in:
+ * Apple Music. Main forwards {@code onHotReloading}/{@code onHotReloaded} here; every other
+ * process refuses, so updating there still means a restart exactly as before.
  *
- * <p>What this is not: the real retirement/adoption path. There is no resource ledger, no
- * quiescing, no saved-state schema and no inert fallback. Apple Music has three hooks and no
- * threads or receivers of its own, so the only thing to hand over is AppleLyrics' session
- * state - and the only thing to prove is what the framework actually does.
+ * <p>The real retirement/adoption path comes in Step 4: no quiescing, no saved-state schema
+ * beyond the small Object[] below, no inert fallback, and the resource ledger lives in
+ * {@link Gen}. What is here is the part that does not depend on it - the generation handoff for
+ * AppleLyrics' session state, the host class loader validation, and the id/executable pairing
+ * that {@link Xp} uses to replace a hook in place.
  *
- * <p>Everything logs {@value #TAG}, so one filter answers U1-U3 from a single run:
- * <ul>
- *   <li>U1 - the thread {@code onHotReloading}/{@code onHotReloaded} run on, on the first line
- *       of each;</li>
- *   <li>U2 - every hook call logs its generation. Old hooks left installed while the new code
- *       takes over, so calls landing in that window are visible as {@code gen=<old> RETIRED};</li>
- *   <li>U3 - {@code hr_setid} makes adoption install by id without {@code replaceHook}; if the
- *       framework replaces instead of stacking, each call still logs once, otherwise twice.</li>
- * </ul>
- *
- * <p>The generation is also carried through {@code setSavedInstanceState}, so a successful
- * adoption numbers itself {@code old + 1}; the class identity is logged beside it because the
- * framework does not promise a saved state at all, and two class loaders both starting at 1
- * would otherwise be indistinguishable.
+ * <p>The generation is carried through {@code setSavedInstanceState}, so a successful adoption
+ * numbers itself {@code old + 1}; the class identity is logged beside it because the framework
+ * does not promise a saved state at all, and two class loaders both starting at 1 would
+ * otherwise be indistinguishable.
  */
 public final class HotReload {
 
@@ -50,10 +42,7 @@ public final class HotReload {
     public static final int PROTOCOL = 1;
 
     public static final String KEY_PROTOCOL = "hr_protocol";
-    public static final String KEY_SET_ID = "hr_setid";
     public static final String KEY_BUILD = "hr_build_mark";
-    /** Spike only: hold retirement open this long, so a hook call in the window is visible (U2). */
-    public static final String KEY_HOLD = "hr_hold_ms";
 
     /** The package onPackageLoaded last reported in this process. */
     private static volatile String sProcess = "?";
@@ -71,8 +60,6 @@ public final class HotReload {
     private static volatile boolean sRetired;
     /** True between onHotReloaded starting and its last old handle being dealt with. */
     private static volatile boolean sAdopting;
-    /** U3: install by id without replaceHook, and leave the old handles alone to observe. */
-    private static volatile boolean sSetIdOnly;
 
     /** Old handles not yet claimed by an id; whatever is left is logged and unhooked. */
     private static final List<XposedInterface.HookHandle> sOld = new ArrayList<>();
@@ -80,9 +67,6 @@ public final class HotReload {
     private static final List<XposedInterface.HookHandle> sNew = new ArrayList<>();
     private static final List<String> sReplacedIds = new ArrayList<>();
     private static final List<String> sAddedIds = new ArrayList<>();
-
-    /** First call per (generation, hook id), so a busy hook logs once at normal level. */
-    private static final Set<String> sSeen = ConcurrentHashMap.newKeySet();
 
     // ---------------------------------------------------------------- module side
 
@@ -125,18 +109,7 @@ public final class HotReload {
             return false;
         }
         sRetired = true;
-        // U2 spike: the framework has not frozen the old code yet, so holding here leaves the
-        // old hooks live. Any call landing in the hold logs RETIRED; no hold, no answer.
-        long hold = extras == null ? 0 : extras.getLong(KEY_HOLD, 0);
-        Xp.log(TAG + "retired gen=" + sGen + " process=" + sProcess + " class=" + sClassId
-                + (hold > 0 ? " holding=" + hold + "ms" : ""));
-        if (hold > 0) {
-            try {
-                Thread.sleep(hold);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
+        Xp.log(TAG + "retired gen=" + sGen + " process=" + sProcess + " class=" + sClassId);
         return true;
     }
 
@@ -154,12 +127,10 @@ public final class HotReload {
         sPkgs.add(proc);
         sApple = AppleLyrics.PKG.equals(proc);
         Bundle extras = param.getExtras();
-        sSetIdOnly = extras != null && extras.getBoolean(KEY_SET_ID, false);
         String build = extras == null ? "?" : extras.getString(KEY_BUILD, "?");
 
         Xp.log(TAG + "onHotReloaded thread=" + Thread.currentThread().getName()
-                + " main=" + main + " process=" + proc + " build=" + build + " class=" + sClassId
-                + (sSetIdOnly ? " mode=setid" : " mode=replace"));
+                + " main=" + main + " process=" + proc + " build=" + build + " class=" + sClassId);
 
         int gen = 1;
         Object saved = param.getSavedInstanceState();
@@ -212,18 +183,12 @@ public final class HotReload {
                 sNew.clear();
             }
             int removed = 0;
-            int kept = 0;
             List<String> remaining = new ArrayList<>();
             synchronized (sOld) {
                 for (XposedInterface.HookHandle h : sOld) {
                     remaining.add(label(h.getExecutable(), h.getId()));
-                    if (sSetIdOnly) {
-                        // U3: leave them installed, so a call logs the old generation too.
-                        kept++;
-                    } else {
-                        unhook(h);
-                        removed++;
-                    }
+                    unhook(h);
+                    removed++;
                 }
                 sOld.clear();
             }
@@ -234,7 +199,6 @@ public final class HotReload {
                     + " replaced=" + sReplacedIds.size()
                     + " added=" + sAddedIds.size()
                     + " removedOld=" + removed
-                    + (sSetIdOnly ? " setidKept=" + kept : "")
                     + " failed=" + failed
                     + " missing=" + oldIds
                     + " left=" + remaining
@@ -312,7 +276,7 @@ public final class HotReload {
      * adoption, or in the setId experiment where a new hook is installed instead.
      */
     static XposedInterface.HookHandle takeOld(String id, Executable target) {
-        if (!sAdopting || sSetIdOnly) return null;
+        if (!sAdopting) return null;
         synchronized (sOld) {
             for (int i = 0; i < sOld.size(); i++) {
                 XposedInterface.HookHandle h = sOld.get(i);
@@ -350,23 +314,7 @@ public final class HotReload {
         }
     }
 
-    // ---------------------------------------------------------------- hook generations
-
-    /**
-     * Called at the top of every Apple Lyrics hook: proves which generation's code ran. First
-     * call per generation at normal level, the rest only with 详细.
-     */
-    public static void mark(String id) {
-        int gen = sGen;
-        String line = TAG + "hook " + id + " gen=" + gen + " class=" + sClassId
-                + (sRetired ? " RETIRED" : "");
-        // Every call in the retirement window is the U2 answer, so those are never demoted.
-        if (sSeen.add(gen + "/" + id) || sRetired) {
-            Xp.log(line);
-        } else {
-            Xp.d(line);
-        }
-    }
+    // ---------------------------------------------------------------- labels
 
     private static String label(Executable e, String id) {
         if (e == null) return String.valueOf(id);

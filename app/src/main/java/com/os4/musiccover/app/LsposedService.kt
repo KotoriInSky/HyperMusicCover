@@ -1,10 +1,8 @@
 package com.os4.musiccover.app
 import com.os4.musiccover.LogLevel
 import android.content.Context
-import android.os.Bundle
 import androidx.core.content.edit
 import io.github.libxposed.service.HookedTarget
-import io.github.libxposed.service.HotReloadResult
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -88,28 +86,4 @@ object LsposedService {
 
     /** How many of those still run a build older than the one installed; 0 without the service. */
     fun staleCount(): Int = staleTargets()?.size ?: 0
-
-    /**
-     * The running target for one process name; null without the service or when it is not up.
-     * The plan's Step 0 spike (HotReloadTest) asks by name; the real orchestrator will deal in
-     * [runningTargets] directly.
-     */
-    fun target(processName: String): HookedTarget? =
-        runningTargets()?.firstOrNull { it.processName == processName }
-
-    /**
-     * Submits one hot reload. The framework answers asynchronously on a binder thread - the
-     * callback is handed to the caller untouched, and false means only that there was no
-     * service to submit to.
-     */
-    fun hotReload(target: HookedTarget, extras: Bundle,
-                  onResult: (HotReloadResult) -> Unit): Boolean {
-        val service = bound.value ?: return false
-        val callback = object : XposedService.HotReloadCallback {
-            override fun onHotReloadResult(target: HookedTarget, result: HotReloadResult) {
-                onResult(result)
-            }
-        }
-        return runCatching { service.hotReloadModule(target, extras, callback) }.isSuccess
-    }
 }

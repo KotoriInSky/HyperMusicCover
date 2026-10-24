@@ -104,15 +104,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Step 0 hot-reload spike only: lets the test script trigger one reload with
-             `am start`. Translucent and self-finishing; removed with the spike. -->
-        <activity
-            android:name=".app.HotReloadTestActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-
         <activity
             android:name=".app.LicenseActivity"
             android:exported="false"
