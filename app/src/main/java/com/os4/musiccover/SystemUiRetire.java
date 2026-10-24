@@ -126,7 +126,7 @@ final class SystemUiRetire {
 
     /** 2. The card layer, the morph copy, and the legacy cover view with its guard. */
     private static void retireCover() {
-        CoverMorphLayer.cancel();
+        CoverMorphLayer.retire();
         CoverCardLayer.retire();
         CoverPush.releaseCoverGuard();
         Main.detachCover();

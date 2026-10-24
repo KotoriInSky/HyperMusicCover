@@ -216,6 +216,29 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         else Main.main().post(new Runnable() { @Override public void run() { v.finish(); } });
     }
 
+    /**
+     * Retirement: the copy off the tree and the field cleared. cancel() keeps the view for the
+     * next morph - the sweep in a dry run takes it away instead, and a static still pointing at
+     * a detached view is what the next morph would find.
+     */
+    static void retire() {
+        CoverMorphLayer v = sView;
+        sView = null;
+        if (v == null) return;
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            v.finish();
+            if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+        } else {
+            Main.main().post(new Runnable() {
+                @Override
+                public void run() {
+                    v.finish();
+                    if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+                }
+            });
+        }
+    }
+
     @Override public void doFrame(long nowNs) { android.os.Trace.beginSection("MC coverMorphFrame"); try {
         if (!running) return;
         if (!isAttachedToWindow() || !Main.coverMorphStillEligible()

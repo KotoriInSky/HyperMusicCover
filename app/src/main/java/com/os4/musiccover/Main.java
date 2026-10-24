@@ -1772,6 +1772,13 @@ public class Main extends XposedModule {
         } catch (Throwable t) {
             Xp.w(TAG + "dry-run re-attach failed: " + t);
         }
+        // The mini player normally hangs off the shortcut row being built, and a dry run did
+        // not rebuild the keyguard - so the hook that builds its controller will not fire.
+        try {
+            MiniPlayerRuntime.reattach();
+        } catch (Throwable t) {
+            Xp.w(TAG + "dry-run mini player re-attach failed: " + t);
+        }
     }
 
     /**

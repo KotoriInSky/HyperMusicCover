@@ -7210,13 +7210,25 @@ internal class MiniPlayerController(
         return row ?: left.parent as? View
     }
 
+    /**
+     * The shortcut row's layout listeners, kept so destroy() can take them off. The row is the
+     * OEM's and outlives every controller; anonymous lambdas left on it called a destroyed
+     * controller and piled up one pair per rebuild.
+     */
+    private val leftLayoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        schedulePosition()
+    }
+    private val rightLayoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        schedulePosition()
+    }
+
     init {
         host.clipChildren = false
         host.clipToPadding = false
         Gen.prefListener(prefs, prefListener)
         Gen.preDraw(host, preDraw)
-        left.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> schedulePosition() }
-        right.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> schedulePosition() }
+        Gen.layoutChange(left, leftLayoutListener)
+        Gen.layoutChange(right, rightLayoutListener)
         runCatching { sessions?.addOnActiveSessionsChangedListener(sessionListener, null, handler) }
         LockIslands.addListener(islandListener)
         // Posted: run here, it came before the properties declared below this block were
@@ -7228,6 +7240,8 @@ internal class MiniPlayerController(
         destroyed = true
         Gen.unprefListener(prefs, prefListener)
         runCatching { Gen.unpreDraw(host, preDraw) }
+        runCatching { Gen.unlayoutChange(left, leftLayoutListener) }
+        runCatching { Gen.unlayoutChange(right, rightLayoutListener) }
         runCatching { sessions?.removeOnActiveSessionsChangedListener(sessionListener) }
         runCatching { controller?.unregisterCallback(mediaListener) }
         followLive(null)

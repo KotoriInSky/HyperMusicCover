@@ -146,6 +146,24 @@ object MiniPlayerRuntime {
             runCatching { Gen.unattachState(host, h.listener) }
             runCatching { h.controller.destroy() }
         }
+        // The AOD dressing belongs to the views that just went; left here it would hand the
+        // next run a listener per orphaned view.
+        aodDimHandler.removeCallbacks(aodDimSettle)
+        aodDimArgs = null
+        dressedViews.clear()
+        notificationDressedViews.clear()
+    }
+
+    /**
+     * Retirement's other half: a dry run does not rebuild the keyguard, so the shortcut hook
+     * that normally builds a controller never fires again. The row it hung off is still there;
+     * build on it the same way a config change does.
+     */
+    @JvmStatic
+    fun reattach() {
+        lastRoot?.get()?.let { root ->
+            if (root.isAttachedToWindow) scheduleInstall(root, lastShortcutController?.get())
+        }
     }
 
     @JvmStatic fun install(classLoader: ClassLoader) {
