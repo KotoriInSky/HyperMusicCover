@@ -209,6 +209,16 @@ public final class Gen {
             Main.main().removeCallbacksAndMessages(null);
         } catch (Throwable ignored) {
         }
+        // Handlers the features made for themselves (DateStatus, the shade's frame driver, the
+        // mini player's per-controller one...). Their messages are ours too, and the same rule
+        // applies: after retirement nothing of ours may still be queued on the main thread.
+        for (android.os.Handler h : mainHandlers) {
+            try {
+                h.removeCallbacksAndMessages(null);
+            } catch (Throwable ignored) {
+            }
+        }
+        mainHandlers.clear();
 
         for (PostedOn p : postedOn) {
             try {
@@ -429,6 +439,8 @@ public final class Gen {
 
     static final List<XposedInterface.HookHandle> hooks = new CopyOnWriteArrayList<>();
     private static final List<PostedOn> postedOn = new CopyOnWriteArrayList<>();
+    /** The main-looper Handlers the features made for themselves; see {@link #handler()}. */
+    private static final List<android.os.Handler> mainHandlers = new CopyOnWriteArrayList<>();
     /**
      * One entry per callback, not one per post. An animation re-posts itself from inside its
      * own frame until it lands, so a list of posts grew by a frame's worth per animation.
@@ -658,6 +670,21 @@ public final class Gen {
      */
     private static final java.util.Map<Runnable, Runnable> MAIN_POSTED =
             new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * A main-looper Handler of the module's own, for features that need their own queue rather
+     * than [post]'s. Registered so retirement can clear what is still waiting on it - a delayed
+     * refresh queued here runs on this generation's code, which by then must not run at all.
+     */
+    public static android.os.Handler handler() {
+        return watchHandler(new android.os.Handler(android.os.Looper.getMainLooper()));
+    }
+
+    /** A Handler the feature had to subclass (a Messenger's, say): same registration, handed back. */
+    public static android.os.Handler watchHandler(android.os.Handler h) {
+        if (h != null) mainHandlers.add(h);
+        return h;
+    }
 
     /** Post to the module's main handler; refused once quiescing or inert. */
     public static void post(Runnable r) {

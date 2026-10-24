@@ -144,7 +144,7 @@ public final class ImmersiveHost {
     /** The slot's Z in the window root: under anything the row lowers (MiniPlayerRuntime's -1). */
     private static final float SLOT_Z = -10f;
 
-    private static final Handler sMain = new Handler(Looper.getMainLooper());
+    private static final Handler sMain = Gen.handler();
 
     /**
      * Under every keyguard view: the scenes' pages, and the veil over them. Always VISIBLE itself:

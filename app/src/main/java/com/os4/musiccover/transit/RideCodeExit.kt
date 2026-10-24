@@ -1,4 +1,5 @@
 package com.os4.musiccover.transit
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Main
 import com.os4.musiccover.ProbeGuard
 import com.os4.musiccover.Xp
@@ -54,7 +55,7 @@ internal object RideCodeExit {
     /** A station's fare: 「<in> -> <out>：<amount>元」. Only the two stations are passed on. */
     private val FARE = Regex("(.+) -> (.+)[：:].*元")
 
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Gen.handler()
     private var lastTop: ComponentName? = null
 
     /** SystemUI's loader. Each hook stands on its own. */

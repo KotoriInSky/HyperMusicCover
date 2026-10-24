@@ -875,7 +875,7 @@ object MiniPlayerRuntime {
     private var blendMethod: Method? = null
     private var glassMethod: Method? = null
     private var blurOpenedMethod: Method? = null
-    private val aodDimHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+    private val aodDimHandler by lazy { Gen.handler() }
     private val aodDimSettle = Runnable { settleAodDim() }
 
     private fun installAodDim(classLoader: ClassLoader) {

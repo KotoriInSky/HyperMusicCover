@@ -60,7 +60,7 @@ internal class MiniPlayerController(
     private val loader: ClassLoader,
 ) {
     private val context = host.context
-    private val handler = Handler(Looper.getMainLooper())
+    private val handler = Gen.handler()
     private val sessions = context.getSystemService(MediaSessionManager::class.java)
     private val audio = context.getSystemService(AudioManager::class.java)
     private var player: MiniPlayerView? = null

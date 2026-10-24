@@ -99,7 +99,7 @@ public final class AmapTransitScene implements ImmersiveScene {
         return 30L * 60_000L;
     }
 
-    private final Handler mMain = new Handler(Looper.getMainLooper());
+    private final Handler mMain = Gen.handler();
 
     private AmapTransitCard.Trip mTrip;
     private AmapTransitCard.Card mCard;
@@ -645,7 +645,7 @@ public final class AmapTransitScene implements ImmersiveScene {
 
         private static final ExecutorService IO =
                 Gen.executor("mc-transit-art", Thread.NORM_PRIORITY, false);
-        private static final Handler MAIN = new Handler(Looper.getMainLooper());
+        private static final Handler MAIN = Gen.handler();
 
         /** Fetches [pick] and hands it to [done] on the main thread; nothing if nothing came. */
         static void request(Context ctx, Pick pick, Done done) {

@@ -98,7 +98,7 @@ final class ShadeBackdrop {
     private static boolean sShowing;
     private static Renderer sRenderer;
 
-    private static final Handler UI = new Handler(android.os.Looper.getMainLooper());
+    private static final Handler UI = Gen.handler();
 
     // ------------------------------------------------------------------ inputs
 

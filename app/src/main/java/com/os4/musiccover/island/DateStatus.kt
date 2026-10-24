@@ -64,7 +64,7 @@ internal object DateStatus {
     /** The segments in the order they stand after the date. */
     private val ORDER = listOf("zen", "charge", "trust", "owner")
 
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Gen.handler()
 
 
     /** Whether the islands are on: the placement is fixed (MiniPlayerRuntime.statusAtDate). */

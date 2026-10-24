@@ -27,7 +27,7 @@ internal object PaletteThrottle {
     private const val NAME = "triggerColorExtraction"
     private const val QUIET_MS = 300L
 
-    private val handler by lazy { Handler(Looper.getMainLooper()) }
+    private val handler by lazy { Gen.handler() }
     private var lastRun = 0L
     private var passing = false
     private var pending: Runnable? = null

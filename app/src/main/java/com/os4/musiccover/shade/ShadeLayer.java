@@ -1,4 +1,5 @@
 package com.os4.musiccover.shade;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.ModuleState;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.Xp;
@@ -41,7 +42,7 @@ public final class ShadeLayer {
     private static final String CLS_CENTRE_EXPAND =
             "com.miui.systemui.controlcenter.container.ControlCenterExpandControllerDelegate";
 
-    private static final Handler UI = new Handler(Looper.getMainLooper());
+    private static final Handler UI = Gen.handler();
 
     /** The shade window root, a NotificationShadeWindowView. Its context adds the window. */
     private static volatile View sRoot;

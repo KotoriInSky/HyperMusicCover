@@ -74,7 +74,7 @@ public final class CountdownScene implements ImmersiveScene {
 
     private static final String TAG = "MCImmersive: " + ID + ": ";
 
-    private final Handler mMain = new Handler(Looper.getMainLooper());
+    private final Handler mMain = Gen.handler();
 
     /** The countdown's notification, and its latest timer; null with none on the lock screen. */
     private String mKey;

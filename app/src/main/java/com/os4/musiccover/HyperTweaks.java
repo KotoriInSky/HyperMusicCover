@@ -657,7 +657,7 @@ final class HyperTweaks {
                 Object panel = sKgPanel;
                 if (panel != null && videoEnable.getBoolean(interactor)
                         && enableInner.getBoolean(interactor)) {
-                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    Gen.post(() -> {
                         try {
                             showDepth.invoke(panel);
                         } catch (Throwable t) {
@@ -859,8 +859,7 @@ final class HyperTweaks {
             Gen.observer(cr, 
                     android.provider.Settings.Global.getUriFor(GLOBAL_COLON),
                     false,
-                    new android.database.ContentObserver(
-                            new android.os.Handler(android.os.Looper.getMainLooper())) {
+                    new android.database.ContentObserver(Gen.handler()) {
                         @Override
                         public void onChange(boolean selfChange) {
                             sAodColon = android.provider.Settings.Global
