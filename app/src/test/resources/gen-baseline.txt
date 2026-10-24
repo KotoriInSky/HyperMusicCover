@@ -2,7 +2,6 @@
 # Step 2 removes one group at a time; a file not listed must not contain
 # any of the calls GenRulesTest forbids.
 CardVideo.java
-Main.java
 MotionArt.java
 MotionCover.java
 MotionTrace.java

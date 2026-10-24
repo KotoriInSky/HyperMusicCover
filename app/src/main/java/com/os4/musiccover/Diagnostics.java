@@ -27,7 +27,7 @@ import java.lang.reflect.Method;
  * ink reports, the geometry and transition traces, the AOD probe, the frame census and the
  * looper/queue dumps. Read-only by intent - nothing here is on the path of drawing the cover.
  *
- * The op dispatch that calls into it is still Main.registerReceiver.
+ * The op dispatch that calls into it is still Main.boot.
  *
  * Carved out of Main as it was (2026-10-14, after PreviewShots): every member moved whole with
  * its comments, references across the line prefixed with Main. or Diagnostics., nothing else

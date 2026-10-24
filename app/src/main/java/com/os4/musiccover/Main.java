@@ -851,8 +851,14 @@ public class Main extends XposedModule {
             return;
         }
         if (!"com.android.systemui".equals(pkg)) return;
+        installSystemUi(param.getDefaultClassLoader());
+    }
 
-        final ClassLoader cl = param.getDefaultClassLoader();
+    /**
+     * SystemUI's cold start, and a hot-reloaded generation's: everything this module installs
+     * in that process, given the host's loader. onPackageLoaded only dispatches.
+     */
+    static void installSystemUi(ClassLoader cl) {
         Xp.log(TAG + "loaded into SystemUI");
 
         // Before the clock container lookup below, which returns early when it fails: none of
@@ -943,85 +949,7 @@ public class Main extends XposedModule {
         try {
             Xp.hookAll("sysui.clock.container_attach", sContainerCls, "onAttachedToWindow", chain -> {
                 Object result = chain.proceed();
-                CoverMorphLayer.cancel();
-                sContainer = (View) chain.getThisObject();
-                captureScreenSize(sContainer);
-                // The clock container attach is the first reliably-fired event after both
-                // modules' onPackageLoaded, so arming the HyperLight counter-hook here - not
-                // from setGlassColor, which this build never calls on the all_in_one clock -
-                // guarantees it registers after HyperLight's own View.setMiGlass hook.
-                ClockGlass.armMiGlassGuard();
-                Xp.log(TAG + "clock container attached: " + sContainer);
-                try {
-                    registerReceiver(sContainer.getContext().getApplicationContext());
-                } catch (Throwable t) {
-                    Xp.w(TAG + "registerReceiver failed: " + t);
-                }
-                // An immersive page's slot, if a rebuilt keyguard came with a new window.
-                try {
-                    ImmersiveHost.onContainerAttached();
-                } catch (Throwable t) {
-                    Xp.log(TAG + "immersive slot not restored: " + t);
-                }
-                // The lyric bridge, from the same place and for the same reason: this is where
-                // the process first has a Context. It does nothing at all when no bridge is
-                // installed, and a second call is a no-op, so it rides along with the keyguard
-                // being rebuilt rather than needing a moment of its own.
-                try {
-                    LyriconSource.attach(sContainer.getContext().getApplicationContext());
-                } catch (Throwable t) {
-                    Xp.w(TAG + "Lyricon attach failed: " + t);
-                }
-                // The keyguard is rebuilt on some transitions, taking our cover with it, so
-                // re-attach rather than assume the view is still in the tree.
-                if (sCoverWanted) {
-                    sCover = null;
-                    attachCover();
-                }
-                // The video path's cover is a view, so a keyguard rebuild takes it - and the
-                // wallpaper it was covering is hidden, so losing it without putting it back
-                // leaves the lock screen blank. Re-compose rather than re-show the old view:
-                // the track may have moved on while the screen was off.
-                // ... and the shade's background has to be rebuilt for the same reason even on
-                // the image path, where nothing else would notice it had gone: it is static, so
-                // a restart takes it and only this puts it back.
-                if (sCoverMode && (sVideoWallpaper || !ShadeLayer.hasArt())) {
-                    if (sVideoWallpaper) sCover = null;
-                    CoverPush.pushArtAsync(true, false);
-                }
-                if (sCoverMode && sCoverCardStyle.mode == CoverCardStyle.CARD) {
-                    CoverCardLayer.attach(CoverPush.coverLayer());
-                    CoverCardLayer.style(sCoverCardStyle);
-                    CoverCardLayer.playback(sCoverCardPlaying);
-                }
-                // Re-apply on keyguard rebuild. Measured: the system never re-shows the
-                // cut-out on its own, so no per-call ownership hook is warranted - hooking
-                // View.setVisibility process-wide cost every visibility change in SystemUI and
-                // fired zero times. What actually lost the state was SystemUI restarting.
-                if (sDepthHidden) setDepthHidden(true);
-                else if (sVideoWpOwed) setDepthHidden(false);
-                // Same story for the card: the guard and the artwork's tap listener both live on
-                // the view, so a rebuild takes them.
-                if (sCoverMode || wantsArtTap()) MediaCard.applyMediaCard();
-                // A rebuilt keyguard can be a different clock style, so the nudge measured
-                // against the old one means nothing - and neither does the clock view we resolved.
-                ClockViews.sClockTargets.clear();
-                forgetClockRoots();
-                ClockViews.forgetGlyphBox();
-                ClockCollapse.onAttached();
-                // A rebuilt keyguard has a new foreground layer, and a restored cover mode came
-                // on before there was any keyguard to put the lyrics in. Posted: adding a view
-                // from inside the tree's own attach dispatch is not something to rely on.
-                main().post(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            LockLyrics.refresh();
-                        } catch (Throwable t) {
-                            Xp.w(TAG + "lyrics refresh failed: " + t);
-                        }
-                    }
-                });
+                onContainerAttached((View) chain.getThisObject());
                 return result;
             });
         } catch (Throwable t) {
@@ -1031,6 +959,92 @@ public class Main extends XposedModule {
             // of onPackageLoaded, which loses the message.
             Xp.log(TAG + "onAttachedToWindow hook FAILED, the module is inert in SystemUI: " + t);
         }
+    }
+
+    /**
+     * The keyguard clock container has just been attached. Also the hot-reload entry: a new
+     * generation runs this against the container it inherited from the old one.
+     */
+    static void onContainerAttached(View container) {
+        CoverMorphLayer.cancel();
+        sContainer = container;
+        captureScreenSize(sContainer);
+        // The clock container attach is the first reliably-fired event after both
+        // modules' onPackageLoaded, so arming the HyperLight counter-hook here - not
+        // from setGlassColor, which this build never calls on the all_in_one clock -
+        // guarantees it registers after HyperLight's own View.setMiGlass hook.
+        ClockGlass.armMiGlassGuard();
+        Xp.log(TAG + "clock container attached: " + sContainer);
+        try {
+            boot(sContainer.getContext().getApplicationContext());
+        } catch (Throwable t) {
+            Xp.w(TAG + "boot failed: " + t);
+        }
+        // An immersive page's slot, if a rebuilt keyguard came with a new window.
+        try {
+            ImmersiveHost.onContainerAttached();
+        } catch (Throwable t) {
+            Xp.log(TAG + "immersive slot not restored: " + t);
+        }
+        // The lyric bridge, from the same place and for the same reason: this is where
+        // the process first has a Context. It does nothing at all when no bridge is
+        // installed, and a second call is a no-op, so it rides along with the keyguard
+        // being rebuilt rather than needing a moment of its own.
+        try {
+            LyriconSource.attach(sContainer.getContext().getApplicationContext());
+        } catch (Throwable t) {
+            Xp.w(TAG + "Lyricon attach failed: " + t);
+        }
+        // The keyguard is rebuilt on some transitions, taking our cover with it, so
+        // re-attach rather than assume the view is still in the tree.
+        if (sCoverWanted) {
+            sCover = null;
+            attachCover();
+        }
+        // The video path's cover is a view, so a keyguard rebuild takes it - and the
+        // wallpaper it was covering is hidden, so losing it without putting it back
+        // leaves the lock screen blank. Re-compose rather than re-show the old view:
+        // the track may have moved on while the screen was off.
+        // ... and the shade's background has to be rebuilt for the same reason even on
+        // the image path, where nothing else would notice it had gone: it is static, so
+        // a restart takes it and only this puts it back.
+        if (sCoverMode && (sVideoWallpaper || !ShadeLayer.hasArt())) {
+            if (sVideoWallpaper) sCover = null;
+            CoverPush.pushArtAsync(true, false);
+        }
+        if (sCoverMode && sCoverCardStyle.mode == CoverCardStyle.CARD) {
+            CoverCardLayer.attach(CoverPush.coverLayer());
+            CoverCardLayer.style(sCoverCardStyle);
+            CoverCardLayer.playback(sCoverCardPlaying);
+        }
+        // Re-apply on keyguard rebuild. Measured: the system never re-shows the
+        // cut-out on its own, so no per-call ownership hook is warranted - hooking
+        // View.setVisibility process-wide cost every visibility change in SystemUI and
+        // fired zero times. What actually lost the state was SystemUI restarting.
+        if (sDepthHidden) setDepthHidden(true);
+        else if (sVideoWpOwed) setDepthHidden(false);
+        // Same story for the card: the guard and the artwork's tap listener both live on
+        // the view, so a rebuild takes them.
+        if (sCoverMode || wantsArtTap()) MediaCard.applyMediaCard();
+        // A rebuilt keyguard can be a different clock style, so the nudge measured
+        // against the old one means nothing - and neither does the clock view we resolved.
+        ClockViews.sClockTargets.clear();
+        forgetClockRoots();
+        ClockViews.forgetGlyphBox();
+        ClockCollapse.onAttached();
+        // A rebuilt keyguard has a new foreground layer, and a restored cover mode came
+        // on before there was any keyguard to put the lyrics in. Posted: adding a view
+        // from inside the tree's own attach dispatch is not something to rely on.
+        main().post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    LockLyrics.refresh();
+                } catch (Throwable t) {
+                    Xp.w(TAG + "lyrics refresh failed: " + t);
+                }
+            }
+        });
     }
 
     private static void hookContainerDetach() {
@@ -1570,7 +1584,13 @@ public class Main extends XposedModule {
         }
     }
 
-    private static synchronized void registerReceiver(Context ctx) {
+    /**
+     * What the process needs once it has a Context: the receivers, the state file, the first
+     * hello to the wallpaper process. Called when the keyguard first attaches, which is the
+     * first moment there is one - and again by a hot-reloaded generation, which starts with
+     * every static field empty.
+     */
+    private static synchronized void boot(Context ctx) {
         if (sReceiverRegistered) {
             return;
         }
