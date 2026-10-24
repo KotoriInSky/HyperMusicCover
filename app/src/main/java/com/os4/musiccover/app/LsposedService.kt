@@ -1,4 +1,5 @@
 package com.os4.musiccover.app
+import com.os4.musiccover.HotReloadPolicy
 import com.os4.musiccover.LogLevel
 import android.content.Context
 import android.util.Log
@@ -96,8 +97,22 @@ object LsposedService {
      */
     fun staleTargets(): List<HookedTarget>? =
         runningTargets()?.filter {
-            it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED
+            (it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED) &&
+                !auxiliaryOfSupported(it.processName)
         }
+
+    /**
+     * 高德's :locationservice and :widgetProvider report the same package and carry their own
+     * copies of the hooks, but have no installer: the module refuses them by process name (a
+     * package match would retire them and then fail to adopt, leaving an inert process), so a
+     * reload of one can only ever end FAILED. Their host app's restart is what brings them the
+     * new build; the card must not count them as something this module failed on.
+     */
+    private fun auxiliaryOfSupported(process: String?): Boolean {
+        val name = process ?: return false
+        val colon = name.indexOf(':')
+        return colon > 0 && HotReloadPolicy.SUPPORTED.contains(name.substring(0, colon))
+    }
 
     /** How many of those still run a build older than the one installed; 0 without the service. */
     fun staleCount(): Int = staleTargets()?.size ?: 0
