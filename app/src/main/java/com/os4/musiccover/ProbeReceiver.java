@@ -601,6 +601,12 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             String report = Gen.report() + " " + HotReload.status();
             Xp.log(Main.TAG + "gen " + report);
             setResultData(report);
+        } else if ("retire_dryrun".equals(op)) {
+            // Step 6's rehearsal: take every SystemUI feature down, sweep the ledger, and put
+            // the same generation back up. Hooks are not touched - see SystemUiRetire.
+            String report = SystemUiRetire.dryRun(c);
+            Xp.log(Main.TAG + "retire_dryrun " + report);
+            setResultData(report);
         } else if ("anim".equals(op)) {
             Diagnostics.dumpAnimConfigs();
         } else if ("hold".equals(op) || "release".equals(op)) {

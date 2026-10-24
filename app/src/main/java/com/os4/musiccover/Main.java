@@ -891,6 +891,8 @@ public class Main extends XposedModule {
             sContainerCls = Xp.findClass(CLS_CONTAINER, cl);
         } catch (Throwable t) {
             Xp.log(TAG + "KeyguardClockContainer not found, nothing to hook: " + t);
+            // Everything installed above is still here; it has to outlive a dry run too.
+            Gen.markInstallScope();
             return;
         }
         // Not fatal, and it used to be. A HyperOS 3 report had no class under the name the
@@ -944,6 +946,11 @@ public class Main extends XposedModule {
         // which fed getCurrentTextColor() back in, left it that way after cover mode ended.
 
         hookClockInteractor(cl);
+
+        // Everything above was installed once, before the keyguard was ever attached. A dry run
+        // takes back the attach path's registrations only, because it puts that path back up
+        // without running this method again; see Gen.markInstallScope.
+        Gen.markInstallScope();
     }
 
     private static void hookContainerAttach() {
@@ -1734,6 +1741,37 @@ public class Main extends XposedModule {
         // Last: a marker left by a hot-reloaded generation means this process did not survive
         // it, and this build must not be hot reloaded into again (see HotReload.onBoot).
         HotReload.onBoot(ctx);
+    }
+
+    /**
+     * Puts the module back up after a dry run took it down, in the same generation and without
+     * running installSystemUi - the hooks were never touched. This is the boot-time work plus
+     * the attach path, exactly what a keyguard rebuild does.
+     *
+     * <p>Only the guard that makes boot one-shot is cleared. The state file, the container and
+     * what the settings restored are still in memory on purpose: the dry run proves the
+     * teardown, and imitating a new generation's empty statics would be Step 7's adoption,
+     * which is a different test.
+     */
+    static void reenterAfterDryRun(Context ctx) {
+        View container = sContainer;
+        synchronized (Main.class) {
+            sReceiverRegistered = false;
+        }
+        try {
+            boot(ctx);
+        } catch (Throwable t) {
+            Xp.w(TAG + "dry-run boot failed: " + t);
+        }
+        if (container == null) {
+            Xp.w(TAG + "dry run took the module down with no container to re-attach to");
+            return;
+        }
+        try {
+            onContainerAttached(container);
+        } catch (Throwable t) {
+            Xp.w(TAG + "dry-run re-attach failed: " + t);
+        }
     }
 
     /**
@@ -3857,6 +3895,7 @@ public class Main extends XposedModule {
                         ((ViewGroup) layer).addView(iv, new ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT));
+                        Gen.ownView((ViewGroup) layer, iv);
                         sCover = iv;
                     }
                     iv.setImageBitmap(art);
@@ -3975,7 +4014,7 @@ public class Main extends XposedModule {
                         rebindSession();
                     }
                 };
-                sMsm.addOnActiveSessionsChangedListener(sSessionsCb, null, main());
+                Gen.activeSessionsListener(sMsm, sSessionsCb, main());
                 Xp.log(TAG + "active-session listener registered");
             }
         } catch (Throwable t) {
@@ -3999,7 +4038,7 @@ public class Main extends XposedModule {
         if (!same) {
             if (sWatched != null && sMediaCb != null) {
                 try {
-                    sWatched.unregisterCallback(sMediaCb);
+                    Gen.unsessionCallback(sWatched, sMediaCb);
                 } catch (Throwable ignored) {
                 }
             }
@@ -4032,7 +4071,7 @@ public class Main extends XposedModule {
                     }
                 };
                 try {
-                    c.registerCallback(sMediaCb, main());
+                    Gen.sessionCallback(c, sMediaCb, main());
                     Xp.log(TAG + "following " + c.getPackageName());
                 } catch (Throwable t) {
                     Xp.w(TAG + "registerCallback failed: " + t);
@@ -4044,6 +4083,31 @@ public class Main extends XposedModule {
         updateCoverCardPlayback(c == null ? null : c.getPlaybackState());
         MiniPlayerRuntime.refresh();
         onMediaUpdate();
+    }
+
+    /**
+     * Stops following the music. Retirement only: setAuto(false) keeps the listener because the
+     * cover's legacy view may still want a rebind, while a retiring generation must leave
+     * nothing behind that calls into it. Under the same lock as setAuto and worker().
+     */
+    static synchronized void retireSessions() {
+        if (sSessionsCb != null && sMsm != null) {
+            try {
+                Gen.unactiveSessionsListener(sMsm, sSessionsCb);
+            } catch (Throwable t) {
+                Xp.w(TAG + "session listener could not be removed: " + t);
+            }
+        }
+        sSessionsCb = null;
+        if (sWatched != null && sMediaCb != null) {
+            try {
+                Gen.unsessionCallback(sWatched, sMediaCb);
+            } catch (Throwable t) {
+                Xp.w(TAG + "media callback could not be removed: " + t);
+            }
+        }
+        sWatched = null;
+        sMediaCb = null;
     }
 
     private static final Runnable sRecheckPlayback = new Runnable() {
@@ -4467,7 +4531,7 @@ public class Main extends XposedModule {
         // dropping that view must not stop the module following the music.
         if (!sAuto && sWatched != null && sMediaCb != null) {
             try {
-                sWatched.unregisterCallback(sMediaCb);
+                Gen.unsessionCallback(sWatched, sMediaCb);
             } catch (Throwable ignored) {
             }
             sWatched = null;
@@ -4784,7 +4848,7 @@ public class Main extends XposedModule {
     }
 
     /** A keyguard rebuild re-inflates the clock containers; the pair above is stale from here. */
-    private static void forgetClockRoots() {
+    static void forgetClockRoots() {
         sRootsCache = null;
         sRootsFor = null;
     }

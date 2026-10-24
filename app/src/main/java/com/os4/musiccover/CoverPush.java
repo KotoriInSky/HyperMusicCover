@@ -362,6 +362,7 @@ public final class CoverPush {
                         layer.addView(iv, new ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT));
+                        Gen.ownView(layer, iv);
                         Main.sCover = iv;
                     }
                     if (Main.sCoverCardStyle.mode == CoverCardStyle.CARD) {

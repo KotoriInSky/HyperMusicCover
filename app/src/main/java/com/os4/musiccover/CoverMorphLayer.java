@@ -143,6 +143,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
             v = new CoverMorphLayer(root.getContext());
             root.addView(v, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView(root, v);
             sView = v;
         }
         // bringToFront lays the parent out again too: only when something has come above it.

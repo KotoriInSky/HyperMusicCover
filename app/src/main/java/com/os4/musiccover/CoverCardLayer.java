@@ -124,6 +124,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
             if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
             layer.addView(v, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView(layer, v);
         }
         // Called on every entry; bringToFront lays the layer out again, so only when needed.
         if (layer.getChildAt(layer.getChildCount() - 1) != v) v.bringToFront();
@@ -144,6 +145,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
             }
             host.addView(v.wash, host.indexOfChild(below), new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView(host, v.wash);
         }
         v.style = sStyle;
         v.playing = sPlayingState;
@@ -344,6 +346,32 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
                 if (v != null) v.start();
             }
         });
+    }
+
+    /**
+     * Retirement: the layer and its wash out of the tree, the frames stopped, the bitmaps
+     * released. clear() is the track-change path - it animates the square away and expects the
+     * view to come back; here the view's class is the one going away.
+     *
+     * <p>sPending is kept: it is the artwork already prepared for the square, and a dry run
+     * puts the square straight back up. A real retirement (Step 7) clears it with the cache.
+     */
+    static void retire() {
+        ++sGeneration;
+        CoverCardLayer v = sView;
+        sView = null;
+        if (v == null) return;
+        v.stop();
+        v.unwatchGeometry();
+        if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+        if (v.wash.getParent() instanceof ViewGroup) {
+            ((ViewGroup) v.wash.getParent()).removeView(v.wash);
+        }
+        Prepared hold = sPending;
+        if (v.previous != null && v.previous != hold) v.previous.recycle();
+        if (v.current != null && v.current != hold) v.current.recycle();
+        v.previous = null;
+        v.current = null;
     }
 
     public static void refresh() {

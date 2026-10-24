@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.database.ContentObserver;
 import android.hardware.display.DisplayManager;
 import android.media.session.MediaController;
+import android.media.session.MediaSessionManager;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -104,10 +105,54 @@ public final class Gen {
     static boolean retire(long timeoutMs) {
         quiescing = true;
         retired = true;
-        return onMain(timeoutMs, Gen::retireOnMain);
+        return onMain(timeoutMs, () -> sweep(false));
     }
 
-    private static void retireOnMain() {
+    /**
+     * What a dry run takes back: everything registered since the install step, plus the host
+     * state and views this generation wrote. What was registered by {@link #markInstallScope()}
+     * stays (the dry run does not reinstall), and so do the long-lived threads and executors -
+     * their owners are install-time code that is not run again, and some are static finals a
+     * second start could not revive. The generation stays live: the caller puts it back up
+     * immediately, which is the point of the exercise.
+     */
+    static boolean sweepForDryRun(long timeoutMs) {
+        return onMain(timeoutMs, () -> sweep(true));
+    }
+
+    /**
+     * Registrations made before the first container attach. A dry run re-runs boot and the
+     * attach path, not installSystemUi, so anything recorded here would otherwise be taken back
+     * and never put back.
+     */
+    private static final java.util.Set<Object> INSTALL_KEPT =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+
+    /** Called at the end of installSystemUi: from here on, these registrations outlive a dry run. */
+    static void markInstallScope() {
+        INSTALL_KEPT.clear();
+        INSTALL_KEPT.addAll(receivers);
+        INSTALL_KEPT.addAll(observers);
+        INSTALL_KEPT.addAll(prefListeners);
+        INSTALL_KEPT.addAll(sessionCallbacks);
+        INSTALL_KEPT.addAll(activeSessions);
+        INSTALL_KEPT.addAll(preDraws);
+        INSTALL_KEPT.addAll(attachStates);
+        INSTALL_KEPT.addAll(layoutChanges);
+        INSTALL_KEPT.addAll(displayListeners);
+        INSTALL_KEPT.addAll(swaps);
+        INSTALL_KEPT.addAll(ownViews);
+        INSTALL_KEPT.addAll(ownWindows);
+        INSTALL_KEPT.addAll(animators);
+        Xp.log("[MCGen] install scope marked, " + INSTALL_KEPT.size()
+                + " registrations outlive a dry run");
+    }
+
+    /**
+     * @param dryRun keep the install-scoped registrations and the long-lived infrastructure;
+     *               see sweepForDryRun.
+     */
+    private static void sweep(boolean dryRun) {
         for (java.util.Map.Entry<Runnable, Runnable> e : MAIN_POSTED.entrySet()) {
             try {
                 Main.main().removeCallbacks(e.getValue());
@@ -132,56 +177,76 @@ public final class Gen {
         }
         frames.clear();
 
-        for (HandlerThread t : handlerThreads) {
-            try {
-                t.quitSafely();
-                t.join(200L);
-            } catch (Throwable ignored) {
+        // Long-lived infrastructure. A real retirement quits it - the next generation builds its
+        // own - but a dry run has no next generation to build it: some of these are static
+        // finals (the lyric pool) and the rest are cached in statics that install-time code
+        // would have to be run again to replace.
+        if (!dryRun) {
+            for (HandlerThread t : handlerThreads) {
+                try {
+                    t.quitSafely();
+                    t.join(200L);
+                } catch (Throwable ignored) {
+                }
             }
-        }
-        handlerThreads.clear();
+            handlerThreads.clear();
 
-        for (ExecutorService e : executors) {
-            try {
-                e.shutdownNow();
-            } catch (Throwable ignored) {
+            for (ExecutorService e : executors) {
+                try {
+                    e.shutdownNow();
+                } catch (Throwable ignored) {
+                }
             }
+            executors.clear();
         }
-        executors.clear();
 
         for (ReceiverReg r : receivers) {
+            if (kept(dryRun, r)) continue;
             try {
                 r.context.unregisterReceiver(r.receiver);
             } catch (Throwable ignored) {
             }
         }
-        receivers.clear();
+        retain(dryRun, receivers);
 
         for (ObserverReg o : observers) {
+            if (kept(dryRun, o)) continue;
             try {
                 o.resolver.unregisterContentObserver(o.observer);
             } catch (Throwable ignored) {
             }
         }
-        observers.clear();
+        retain(dryRun, observers);
 
         for (PrefReg p : prefListeners) {
+            if (kept(dryRun, p)) continue;
             try {
                 p.prefs.unregisterOnSharedPreferenceChangeListener(p.listener);
             } catch (Throwable ignored) {
             }
         }
-        prefListeners.clear();
+        retain(dryRun, prefListeners);
 
         for (SessionReg s : sessionCallbacks) {
+            if (kept(dryRun, s)) continue;
             try {
                 s.controller.unregisterCallback(s.callback);
             } catch (Throwable ignored) {
             }
         }
-        sessionCallbacks.clear();
+        retain(dryRun, sessionCallbacks);
+
+        for (ActiveSessionsReg s : activeSessions) {
+            if (kept(dryRun, s)) continue;
+            try {
+                s.manager.removeOnActiveSessionsChangedListener(s.listener);
+            } catch (Throwable ignored) {
+            }
+        }
+        retain(dryRun, activeSessions);
 
         for (PreDrawReg p : preDraws) {
+            if (kept(dryRun, p)) continue;
             try {
                 if (p.view != null) {
                     p.view.getViewTreeObserver().removeOnPreDrawListener(p.listener);
@@ -189,55 +254,70 @@ public final class Gen {
             } catch (Throwable ignored) {
             }
         }
-        preDraws.clear();
+        retain(dryRun, preDraws);
 
         for (AttachReg a : attachStates) {
+            if (kept(dryRun, a)) continue;
             try {
                 a.view.removeOnAttachStateChangeListener(a.listener);
             } catch (Throwable ignored) {
             }
         }
-        attachStates.clear();
+        retain(dryRun, attachStates);
+
+        for (LayoutReg l : layoutChanges) {
+            if (kept(dryRun, l)) continue;
+            try {
+                l.view.removeOnLayoutChangeListener(l.listener);
+            } catch (Throwable ignored) {
+            }
+        }
+        retain(dryRun, layoutChanges);
 
         for (DisplayReg d : displayListeners) {
+            if (kept(dryRun, d)) continue;
             try {
                 d.manager.unregisterDisplayListener(d.listener);
             } catch (Throwable ignored) {
             }
         }
-        displayListeners.clear();
+        retain(dryRun, displayListeners);
 
         for (Animator a : animators) {
+            if (kept(dryRun, a)) continue;
             try {
                 a.cancel();
             } catch (Throwable ignored) {
             }
         }
-        animators.clear();
+        retain(dryRun, animators);
 
         for (Swap s : swaps) {
+            if (kept(dryRun, s)) continue;
             try {
                 if (s.restore != null) s.restore.run();
             } catch (Throwable ignored) {
             }
         }
-        swaps.clear();
+        retain(dryRun, swaps);
 
         for (OwnedView v : ownViews) {
+            if (kept(dryRun, v)) continue;
             try {
                 v.parent.removeView(v.view);
             } catch (Throwable ignored) {
             }
         }
-        ownViews.clear();
+        retain(dryRun, ownViews);
 
         for (OwnedWindow w : ownWindows) {
+            if (kept(dryRun, w)) continue;
             try {
                 w.manager.removeViewImmediate(w.view);
             } catch (Throwable ignored) {
             }
         }
-        ownWindows.clear();
+        retain(dryRun, ownWindows);
 
         // The host listeners recorded as opaque objects (treeListener) have no type to remove
         // them by; the feature that registered one removes it in its own retire. Anything left
@@ -245,16 +325,29 @@ public final class Gen {
         int trees = treeListeners.size();
         treeListeners.clear();
 
-        for (Thread t : threads) {
-            try {
-                t.join(20L);
-            } catch (Throwable ignored) {
+        if (!dryRun) {
+            for (Thread t : threads) {
+                try {
+                    t.join(20L);
+                } catch (Throwable ignored) {
+                }
             }
-        }
-        threads.clear();
+            threads.clear();
 
-        ioExecutor.shutdownNow();
-        Xp.log("[MCGen] retired: registrations taken back, treeListeners=" + trees);
+            ioExecutor.shutdownNow();
+        }
+        Xp.log("[MCGen] " + (dryRun ? "dry-run swept" : "retired")
+                + ": registrations taken back, treeListeners=" + trees);
+    }
+
+    /** Whether a dry run must leave this registration alone; see INSTALL_KEPT. */
+    private static boolean kept(boolean dryRun, Object registration) {
+        return dryRun && INSTALL_KEPT.contains(registration);
+    }
+
+    /** Drop the swept entries; a real retirement drops all of them. */
+    private static <T> void retain(boolean dryRun, List<T> list) {
+        list.removeIf(r -> !dryRun || !INSTALL_KEPT.contains(r));
     }
 
     // ---------------------------------------------------------------- what we own
@@ -274,9 +367,11 @@ public final class Gen {
     private static final List<ObserverReg> observers = new CopyOnWriteArrayList<>();
     private static final List<PrefReg> prefListeners = new CopyOnWriteArrayList<>();
     private static final List<SessionReg> sessionCallbacks = new CopyOnWriteArrayList<>();
+    private static final List<ActiveSessionsReg> activeSessions = new CopyOnWriteArrayList<>();
     private static final List<TreeReg> treeListeners = new CopyOnWriteArrayList<>();
     private static final List<PreDrawReg> preDraws = new CopyOnWriteArrayList<>();
     private static final List<AttachReg> attachStates = new CopyOnWriteArrayList<>();
+    private static final List<LayoutReg> layoutChanges = new CopyOnWriteArrayList<>();
     private static final List<DisplayReg> displayListeners = new CopyOnWriteArrayList<>();
     private static final List<Swap> swaps = new CopyOnWriteArrayList<>();
     private static final List<OwnedView> ownViews = new CopyOnWriteArrayList<>();
@@ -363,6 +458,27 @@ public final class Gen {
         final Object listener;
 
         TreeReg(View view, Object listener) {
+            this.view = view;
+            this.listener = listener;
+        }
+    }
+
+    private static final class ActiveSessionsReg {
+        final MediaSessionManager manager;
+        final MediaSessionManager.OnActiveSessionsChangedListener listener;
+
+        ActiveSessionsReg(MediaSessionManager manager,
+                          MediaSessionManager.OnActiveSessionsChangedListener listener) {
+            this.manager = manager;
+            this.listener = listener;
+        }
+    }
+
+    private static final class LayoutReg {
+        final View view;
+        final View.OnLayoutChangeListener listener;
+
+        LayoutReg(View view, View.OnLayoutChangeListener listener) {
             this.view = view;
             this.listener = listener;
         }
@@ -612,6 +728,26 @@ public final class Gen {
         sessionCallbacks.add(new SessionReg(c, cb));
     }
 
+    /** The other side of sessionCallback, for a rebind that moves to another controller. */
+    public static void unsessionCallback(MediaController c, MediaController.Callback cb) {
+        c.unregisterCallback(cb);
+        sessionCallbacks.removeIf(r -> r.controller == c && r.callback == cb);
+    }
+
+    /** The system's active-session list (which app is playing), not one controller's callbacks. */
+    public static void activeSessionsListener(MediaSessionManager m,
+                                              MediaSessionManager.OnActiveSessionsChangedListener l,
+                                              Handler h) {
+        m.addOnActiveSessionsChangedListener(l, null, h);
+        activeSessions.add(new ActiveSessionsReg(m, l));
+    }
+
+    public static void unactiveSessionsListener(MediaSessionManager m,
+                                                MediaSessionManager.OnActiveSessionsChangedListener l) {
+        m.removeOnActiveSessionsChangedListener(l);
+        activeSessions.removeIf(r -> r.manager == m && r.listener == l);
+    }
+
     /**
      * A listener on a host view whose type varies (pre-draw, layout, attach). Recorded here so
      * retirement can find it; the typed removal is the caller's, by kind.
@@ -654,6 +790,16 @@ public final class Gen {
         attachStates.removeIf(r -> r.view == v && r.listener == l);
     }
 
+    public static void layoutChange(View v, View.OnLayoutChangeListener l) {
+        v.addOnLayoutChangeListener(l);
+        layoutChanges.add(new LayoutReg(v, l));
+    }
+
+    public static void unlayoutChange(View v, View.OnLayoutChangeListener l) {
+        v.removeOnLayoutChangeListener(l);
+        layoutChanges.removeIf(r -> r.view == v && r.listener == l);
+    }
+
     public static void displayListener(DisplayManager dm, DisplayManager.DisplayListener l,
                                        Handler h) {
         dm.registerDisplayListener(l, h);
@@ -674,10 +820,14 @@ public final class Gen {
     }
 
     public static void ownView(ViewGroup parent, View v) {
+        // A view put back into a rebuilt tree would otherwise be recorded once per attach; the
+        // sweep only ever needs the latest parent.
+        ownViews.removeIf(o -> o.view == v);
         ownViews.add(new OwnedView(parent, v));
     }
 
     public static void ownWindow(WindowManager manager, View v) {
+        ownWindows.removeIf(o -> o.view == v);
         ownWindows.add(new OwnedWindow(manager, v));
     }
 
@@ -714,9 +864,11 @@ public final class Gen {
                 + " observers=" + observers.size()
                 + " prefListeners=" + prefListeners.size()
                 + " sessionCallbacks=" + sessionCallbacks.size()
+                + " activeSessions=" + activeSessions.size()
                 + " treeListeners=" + treeListeners.size()
                 + " preDraws=" + preDraws.size()
                 + " attachStates=" + attachStates.size()
+                + " layoutChanges=" + layoutChanges.size()
                 + " displayListeners=" + displayListeners.size()
                 + " postedOn=" + postedOn.size()
                 + " mainPosted=" + MAIN_POSTED.size()

@@ -231,6 +231,7 @@ final class LyricWindow {
             sHdr = LockLyrics.hdrWanted();
             colourMode(lp, sHdr);
             wm.addView(v, lp);
+            Gen.ownWindow(wm, v);
             sView = v;
             sWm = wm;
             sLp = lp;

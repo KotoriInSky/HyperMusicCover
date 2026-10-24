@@ -118,8 +118,8 @@ final class ClockMove {
         });
     }
 
-    /** Off the view it was installed on, whichever view that was. */
-    private static void detach() {
+    /** Off the view it was installed on, whichever view that was. Also the hot-reload teardown. */
+    static void detach() {
         View v = sTraced;
         sTraced = null;
         if (v == null) return;

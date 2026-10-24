@@ -1293,6 +1293,33 @@ public final class LockLyrics {
         }
     }
 
+    /**
+     * Retirement: the page comes out of wherever it lives, and the tick and the heartbeat stop.
+     *
+     * <p>Not setEnabled(false): that switch is the user's and is written to the state file, and
+     * the next generation reads it again. The lines and their cache stay - they are text, and a
+     * dry run puts the same page straight back up - so the rebuild does not have to go looking
+     * for the lyric again.
+     */
+    public static void retire() {
+        Main.main().removeCallbacks(TICK);
+        Main.main().removeCallbacks(WATCH);
+        LyricView v = sView;
+        sView = null;
+        if (v != null) {
+            if (sHolding) {
+                sHolding = false;
+                v.setKeepScreenOn(false);
+            }
+            watchProximity(false);
+            if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+        }
+        // The window last: it is a window of its own when the HDR switch is on, and it is not
+        // reachable through the keyguard's tree.
+        LyricWindow.remove();
+        sCard = null;
+    }
+
     /** HDR on: the lyrics' own window, so the colour mode is theirs and not the media card's. */
     private static LyricView inWindow(View anchor) {
         LyricView old = sView;
@@ -1321,6 +1348,7 @@ public final class LockLyrics {
             if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
             ((ViewGroup) layer).addView(v, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView((ViewGroup) layer, v);
             Xp.log(TAG + "view attached, " + sLines.size() + " lines");
         }
         return v;

@@ -177,9 +177,18 @@ public final class HotReload {
     }
 
     /** The feature that cannot be interrupted right now, or null. Filled in with the features. */
-    private static String busy() {
+    static String busy() {
         int io = Gen.ioInFlight();
-        return io > 0 ? "a background request is still open (" + io + ")" : null;
+        if (io > 0) return "a background request is still open (" + io + ")";
+        // The user never taps "update" while looking at the lock screen; anything on it is
+        // someone using the phone, and every one of those transitions has a view mid-flight.
+        if (Main.keyguardShowing() && Main.screenOn()) return "the lock screen is up and lit";
+        if (CoverMorphLayer.active()) return "a cover morph is running";
+        if (CoverPush.sCoverFadeWaiting || CoverPush.sCoverFadingOut != null
+                || CoverPush.sOwedSwap != null) {
+            return "a cover push is in flight";
+        }
+        return null;
     }
 
     /**
