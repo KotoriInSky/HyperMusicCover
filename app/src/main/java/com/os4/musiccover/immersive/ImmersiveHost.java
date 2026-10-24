@@ -774,6 +774,7 @@ public final class ImmersiveHost {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ((ViewGroup) root).addView(slot, 0, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        Gen.ownView((ViewGroup) root, slot);
         // First to draw by Z too, not only by index: the row puts an island headed for the small
         // island's place at Z -1 to pass under the pill, which drew it before this slot - and the
         // page's SurfaceView, punching its hole through the window here, erased it. The small
@@ -811,6 +812,38 @@ public final class ImmersiveHost {
         sPadP = 0f;
         sPadFrameAt = 0L;
         beat(false);
+    }
+
+    /**
+     * Retirement: the page, the slot and every scene's preparation. The busy check already
+     * refuses while a page holds the clock, so this normally finds the slot empty; the fades,
+     * the let-go counts and the touch gesture are cleared anyway, because they can be armed
+     * without a page being up.
+     */
+    public static void retire() {
+        sMain.removeCallbacks(LEAVE_CHECK);
+        sMain.removeCallbacks(LET_GO_EXPIRED);
+        sMain.removeCallbacks(RELEASE_UNLOCKED);
+        if (sFadeAnim != null) {
+            try {
+                sFadeAnim.cancel();
+            } catch (Throwable ignored) {
+            }
+            sFadeAnim = null;
+        }
+        sOpen = null;
+        sLeaving = null;
+        sSwapOut = null;
+        sYield = false;
+        sFadeInNext = false;
+        sShown = false;
+        sReleasePending = false;
+        sTapOwned = false;
+        sTapView = null;
+        sTapScene = null;
+        sTapPage = false;
+        dropSlot();
+        sLetGo.clear();
     }
 
     /**

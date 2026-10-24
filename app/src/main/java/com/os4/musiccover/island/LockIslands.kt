@@ -395,6 +395,24 @@ internal object LockIslands {
     /** The focus islands of the last run, before the stack island is put with them (publish). */
     private var focusShown: List<Note> = emptyList()
 
+    /**
+     * Retirement: the open page's island forgotten, the released set emptied, the spread and the
+     * fold given back. A controller's destroy() does most of this already; this is the same
+     * ground when no controller was alive to do it.
+     */
+    @JvmStatic
+    fun retire() {
+        if (spreading) setSpread(false, folded = true)
+        sceneKey = null
+        scene = null
+        sceneMissingSince = 0L
+        released.clear()
+        stackMembers = emptyList()
+        focusShown = emptyList()
+        setActive(false)
+        stopFolding()
+    }
+
     fun install(classLoader: ClassLoader) {
         focusCheck = runCatching {
             Xp.findClass("com.android.systemui.statusbar.notification.utils.FocusUtils", classLoader)

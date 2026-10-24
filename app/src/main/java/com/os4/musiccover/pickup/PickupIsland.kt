@@ -433,6 +433,16 @@ internal object PickupIsland {
         receivers(ctx)
     }
 
+    /**
+     * Retirement: the guard that keeps wake() from registering twice is the only thing that
+     * would keep the next generation from registering at all - the receiver itself is in Gen's
+     * ledger and the sweep takes it. The cards stay posted: they are the user's order.
+     */
+    @JvmStatic
+    fun retire() {
+        receivers = false
+    }
+
     private fun receivers(ctx: Context) {
         if (receivers) return
         receivers = true

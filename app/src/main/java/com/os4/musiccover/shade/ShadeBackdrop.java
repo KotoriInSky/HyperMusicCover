@@ -169,6 +169,34 @@ final class ShadeBackdrop {
         }
     };
 
+    /**
+     * Retirement: the window goes, the render thread finishes, and the art is dropped. hide()
+     * deliberately leaves the window up for the next cover; here the class loader is what is
+     * going away.
+     */
+    static void retire() {
+        UI.removeCallbacks(HIDE_NOW);
+        sShowing = false;
+        sAlpha = 0f;
+        final SurfaceView v = sView;
+        sView = null;
+        if (v != null) {
+            try {
+                ((WindowManager) v.getContext().getSystemService(Context.WINDOW_SERVICE))
+                        .removeViewImmediate(v);
+            } catch (Throwable t) {
+                Xp.log(TAG + "window remove failed: " + t);
+            }
+        }
+        final Renderer r = sRenderer;
+        sRenderer = null;
+        if (r != null) r.release();
+        sHasArt = false;
+        sPending = null;
+        sPendingAt = 0L;
+        sFailed = false;
+    }
+
     // ------------------------------------------------------------------ window
 
     private static SurfaceView ensureAdded() {
@@ -214,7 +242,9 @@ final class ShadeBackdrop {
                 Xp.w(TAG + "setTrustedOverlay unavailable, the backdrop is capped at 0.8: " + t);
             }
 
-            ((WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE)).addView(v, lp);
+            final WindowManager wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+            wm.addView(v, lp);
+            Gen.ownWindow(wm, v);
             sView = v;
             sRenderer = r;
             Xp.log(TAG + "window added");
@@ -368,6 +398,20 @@ final class ShadeBackdrop {
                 public void run() {
                     mShown = 0f;
                     if (mRunning) stop();
+                }
+            });
+        }
+
+        /** Retirement: the window has gone, and this GL thread has no next generation here. */
+        void release() {
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        stop();
+                    } catch (Throwable ignored) {
+                    }
+                    mThread.quitSafely();
                 }
             });
         }

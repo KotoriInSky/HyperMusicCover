@@ -151,6 +151,12 @@ internal object DateStatus {
             frame()
         }
 
+        /** Retirement: whatever it was moving towards does not arrive. */
+        fun cancel() {
+            anim?.cancel()
+            anim = null
+        }
+
         fun to(target: Float, response: Float, end: (() -> Unit)? = null) {
             anim?.cancel()
             anim = null
@@ -340,6 +346,42 @@ internal object DateStatus {
             }
         }
         if (Looper.myLooper() == Looper.getMainLooper()) reset() else Gen.post { reset() }
+    }
+
+    /**
+     * Retirement: the indications the date was holding go back to the OEM's controller, the
+     * segments stop moving, and every host gets its own matrix and width back. The hosts map is
+     * cleared so the next generation's first layout builds fresh ones - the map is what keeps a
+     * host from registering its layout listener a second time, and the sweep takes the listener.
+     */
+    @JvmStatic
+    fun retire() {
+        // Not alive any more: sync() then hands every withheld indication back.
+        lastAlive = false
+        lastActive = false
+        runCatching { sync() }
+        for (seg in shown) {
+            seg.alpha.cancel()
+            seg.shift.cancel()
+        }
+        shown.clear()
+        for (h in hosts.values) {
+            h.layout = null
+            h.base = 0
+            h.extra = 0
+            h.laidExtra = 0
+            h.offset.cancel()
+            h.offset.snap(0f)
+        }
+        hosts.clear()
+        indications.clear()
+        withheld.clear()
+        controllerRef = null
+        updateMethod = null
+        numStateRef = null
+        passing = false
+        ctx = null
+        switchRead = false
     }
 
     private fun later() {
@@ -562,7 +604,7 @@ internal object DateStatus {
         val host = hosts.getOrPut(v) {
             start(v.context)
             Host(v).also { h ->
-                v.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
+                Gen.layoutChange(v) { _, l, t, r, b, _, _, _, _ ->
                     val previous = h.layout
                     val current = DateStatusLayout(l, t, r - l, b - t,
                         (v.parent as? View)?.width ?: 0, h.extra, MiniPlayerScene.aodActive)

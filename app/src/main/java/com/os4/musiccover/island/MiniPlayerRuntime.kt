@@ -130,6 +130,24 @@ object MiniPlayerRuntime {
      * Each hook on its own: a build that renamed one class costs the feature that needed it,
      * not the rest of the mini player.
      */
+    /**
+     * Retirement: every controller's own teardown - its frames, rows, discs, host views, session
+     * listeners and LockIslands registration - and the attach listeners that would otherwise
+     * outlive them. The hooks are the ledger's, and stay.
+     */
+    @JvmStatic
+    fun retire() {
+        val all = synchronized(controllers) {
+            val held = controllers.entries.map { it.key to it.value }
+            controllers.clear()
+            held
+        }
+        for ((host, h) in all) {
+            runCatching { Gen.unattachState(host, h.listener) }
+            runCatching { h.controller.destroy() }
+        }
+    }
+
     @JvmStatic fun install(classLoader: ClassLoader) {
         loader = classLoader
         if (hooksInstalled) return

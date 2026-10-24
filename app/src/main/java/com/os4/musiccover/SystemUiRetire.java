@@ -5,9 +5,15 @@ import android.content.Context;
 import android.os.Looper;
 import android.os.SystemClock;
 
+import com.os4.musiccover.immersive.ImmersiveHost;
+import com.os4.musiccover.island.DateStatus;
+import com.os4.musiccover.island.LockIslands;
+import com.os4.musiccover.island.MiniPlayerRuntime;
 import com.os4.musiccover.island.NumState;
 import com.os4.musiccover.lyrics.LockLyrics;
 import com.os4.musiccover.lyrics.LyriconSource;
+import com.os4.musiccover.pickup.PickupIsland;
+import com.os4.musiccover.shade.ShadeLayer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -165,15 +171,27 @@ final class SystemUiRetire {
         MediaCard.retire();
     }
 
-    /** 8. The mini player, its rows and scenes, and DateStatus' segments. */
+    /**
+     * 8. Every mini player controller's own teardown, then the island state they were registered
+     * with, then the date line's segments and the indications it withheld from the OEM.
+     */
     private static void retireIslands() {
+        MiniPlayerRuntime.retire();
+        LockIslands.retire();
+        DateStatus.retire();
     }
 
-    /** 9. The shade's GL backdrop and its window. */
+    /** 9. The shade's GL backdrop, its window and thread, and both panels' progress. */
     private static void retireShade() {
+        ShadeLayer.retire();
     }
 
-    /** 10. 高德's immersive page, the pickup island and the ride cards. */
+    /**
+     * 10. 高德's page and the slot it is drawn in, and the pickup island's receiver guard. The
+     * ride cards are hooks and Gen-posted work, which the ledger has.
+     */
     private static void retireImmersive() {
+        ImmersiveHost.retire();
+        PickupIsland.retire();
     }
 }

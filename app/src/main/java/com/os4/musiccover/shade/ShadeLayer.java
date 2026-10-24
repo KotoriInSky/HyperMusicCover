@@ -104,6 +104,20 @@ public final class ShadeLayer {
         return sRoot;
     }
 
+    /**
+     * Retirement: both panels' progress forgotten and the backdrop's window, GL thread and mesh
+     * released. The hooks are the ledger's and stay; sRoot is the OEM's own view.
+     */
+    public static void retire() {
+        UI.removeCallbacks(DRIVE);
+        sExpansion = 0f;
+        sCentreExpansion = 0f;
+        sLastDriven = 0f;
+        sLastShade = 0f;
+        sLastCentre = 0f;
+        ShadeBackdrop.retire();
+    }
+
     // ------------------------------------------------------------------ driving
 
     /** The notification panel's expansion, 0 shut and 1 wide open. */
