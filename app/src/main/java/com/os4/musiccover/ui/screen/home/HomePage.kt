@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.os4.musiccover.BuildConfig
 import com.os4.musiccover.app.DonateActivity
-import com.os4.musiccover.app.HotReloader
 import com.os4.musiccover.app.LsposedService
 import com.os4.musiccover.app.ModuleBridge
 import com.os4.musiccover.R
@@ -386,57 +385,36 @@ fun HomePageView(
 
     WindowDialog(
         show = confirmRestart,
-        title = stringResource(R.string.apply_title),
-        summary = stringResource(R.string.apply_summary),
+        title = stringResource(R.string.restart_stale),
+        summary = stringResource(R.string.restart_confirm_summary),
         onDismissRequest = { confirmRestart = false },
     ) {
         val dismiss = LocalDismissState.current
-        Column {
-            // The safe choice first: it is what the card promised, and the only one that does
-            // not blank the screen. A refusal leaves the card up, and the restart below is
-            // then the only thing that can move the processes forward.
+        Row(horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = stringResource(R.string.apply_now),
+                modifier = Modifier.weight(1f),
+                text = stringResource(R.string.update_cancel),
+                onClick = { dismiss?.invoke() },
+            )
+            Spacer(Modifier.width(20.dp))
+            TextButton(
+                modifier = Modifier.weight(1f),
+                text = stringResource(R.string.restart_menu),
                 onClick = {
                     confirmRestart = false
-                    val service = LsposedService.service.value
-                    if (service != null) scope.launch {
-                        val report = withContext(Dispatchers.IO) {
-                            val targets = runCatching { service.runningTargets }.getOrNull().orEmpty()
-                            HotReloader.run(service, targets)
-                        }
-                        stale = if (report.allSucceeded) 0
+                    scope.launch {
+                        val restarted = withContext(Dispatchers.IO) { ModuleBridge.restartStale() }
+                        // Cleared rather than asked again on a success: re-reading the moment
+                        // the kills return races the processes' own death and would put the card
+                        // back up for a restart that has just worked. A refusal is the opposite
+                        // case - something is still on the old build, and the page should go on
+                        // saying so.
+                        stale = if (restarted) 0
                         else withContext(Dispatchers.IO) { LsposedService.staleCount() }
                     }
                 },
                 colors = ButtonDefaults.textButtonColorsPrimary(),
             )
-            Row(horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(
-                    modifier = Modifier.weight(1f),
-                    text = stringResource(R.string.update_cancel),
-                    onClick = { dismiss?.invoke() },
-                )
-                Spacer(Modifier.width(20.dp))
-                TextButton(
-                    modifier = Modifier.weight(1f),
-                    text = stringResource(R.string.restart_apply),
-                    onClick = {
-                        confirmRestart = false
-                        scope.launch {
-                            val restarted = withContext(Dispatchers.IO) { ModuleBridge.restartStale() }
-                            // Cleared rather than asked again on a success: re-reading the moment
-                            // the kills return races the processes' own death and would put the card
-                            // back up for a restart that has just worked. A refusal is the opposite
-                            // case - something is still on the old build, and the page should go on
-                            // saying so.
-                            stale = if (restarted) 0
-                            else withContext(Dispatchers.IO) { LsposedService.staleCount() }
-                        }
-                    },
-                )
-            }
         }
     }
 }
