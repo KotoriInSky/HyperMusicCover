@@ -214,19 +214,26 @@ public final class Xp {
      */
     public static XposedInterface.HookHandle hook(String id, Executable target,
                                                   XposedInterface.Hooker hooker) {
+        // The one behavioural edge of the ledger: once this generation is retired or inert,
+        // every hooker it installed is a pass-through. Neither flag is set yet, so this is a
+        // boolean today; it is what closes the window between retirement and adoption.
+        XposedInterface.Hooker guarded =
+                chain -> Gen.live() ? hooker.intercept(chain) : chain.proceed();
         XposedInterface.HookHandle old = HotReload.takeOld(id, target);
         if (old != null) {
             try {
-                XposedInterface.HookHandle replaced = old.replaceHook(hooker);
+                XposedInterface.HookHandle replaced = old.replaceHook(guarded);
                 HotReload.onReplaced(id, replaced);
+                Gen.onHook(replaced);
                 return replaced;
             } catch (Throwable t) {
                 w("[MCHotReload] replaceHook failed for " + id + ": " + t);
                 HotReload.keepOld(old);
             }
         }
-        XposedInterface.HookHandle h = api().hook(target).setId(id).intercept(hooker);
+        XposedInterface.HookHandle h = api().hook(target).setId(id).intercept(guarded);
         HotReload.onAdded(id, h);
+        Gen.onHook(h);
         return h;
     }
 
@@ -292,6 +299,18 @@ public final class Xp {
 
     // ---------------------------------------------------------------- fields
 
+    /**
+     * The classes either ClassValue has computed an entry for. A ClassValue value is held on the
+     * Class, and its key is an instance of ours - so every calculated class pins this
+     * generation's class loader until the entry is removed. Weak, and only read at retirement.
+     */
+    private static final java.util.Set<Class<?>> FIELD_CLASSES =
+            java.util.Collections.synchronizedSet(
+                    java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
+    private static final java.util.Set<Class<?>> METHOD_CLASSES =
+            java.util.Collections.synchronizedSet(
+                    java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
+
     /** The declared fields of a class by name, for the same reason the methods are cached. */
     private static final ClassValue<java.util.concurrent.ConcurrentHashMap<String, Field>>
             DECLARED_FIELDS =
@@ -299,6 +318,7 @@ public final class Xp {
                 @Override
                 protected java.util.concurrent.ConcurrentHashMap<String, Field> computeValue(
                         Class<?> type) {
+                    FIELD_CLASSES.add(type);
                     java.util.concurrent.ConcurrentHashMap<String, Field> byName =
                             new java.util.concurrent.ConcurrentHashMap<>();
                     for (Field f : type.getDeclaredFields()) {
@@ -407,6 +427,7 @@ public final class Xp {
                 @Override
                 protected java.util.concurrent.ConcurrentHashMap<String, Overload[]> computeValue(
                         Class<?> type) {
+                    METHOD_CLASSES.add(type);
                     java.util.concurrent.ConcurrentHashMap<String, Overload[]> byName =
                             new java.util.concurrent.ConcurrentHashMap<>();
                     for (Method m : type.getDeclaredMethods()) {
@@ -425,6 +446,27 @@ public final class Xp {
                     return byName;
                 }
             };
+
+    /**
+     * Drops both ClassValue entries, so the classes stop pointing at this generation. Called
+     * at retirement; the caches rebuild lazily if anything still asks.
+     */
+    static void dropClassValues() {
+        dropClassValues(DECLARED_FIELDS, FIELD_CLASSES);
+        dropClassValues(DECLARED_METHODS, METHOD_CLASSES);
+    }
+
+    private static void dropClassValues(ClassValue<?> value, java.util.Set<Class<?>> classes) {
+        synchronized (classes) {
+            for (Class<?> c : classes) {
+                try {
+                    value.remove(c);
+                } catch (Throwable ignored) {
+                }
+            }
+            classes.clear();
+        }
+    }
 
     /**
      * The order is the one the scan had: nearest class first, and within a class the order

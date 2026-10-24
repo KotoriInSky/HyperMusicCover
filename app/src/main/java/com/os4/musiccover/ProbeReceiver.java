@@ -595,6 +595,12 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
     private boolean debugOp(Context c, Intent i, String op) throws Exception {
         if ("info".equals(op)) {
             Diagnostics.dumpInfo();
+        } else if ("gen".equals(op)) {
+            // What this generation of the module holds in this process, and whether it still
+            // answers at all. The log line is for adb without an ordered sender.
+            String report = Gen.report();
+            Xp.log(Main.TAG + "gen " + report);
+            setResultData(report);
         } else if ("anim".equals(op)) {
             Diagnostics.dumpAnimConfigs();
         } else if ("hold".equals(op) || "release".equals(op)) {
