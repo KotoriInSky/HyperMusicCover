@@ -22,10 +22,9 @@ import io.github.libxposed.api.XposedModuleInterface;
  * The two hot-reload entry points. Main forwards {@code onHotReloading}/{@code onHotReloaded}
  * here.
  *
- * <p>Step 4 is the protocol and the machinery, with {@link HotReloadPolicy#SUPPORTED} empty:
- * every process still refuses, and the app's "立即生效" falls back to restarting. The retirement
- * path still only implements the check section (A) - no feature has an off path to run yet - so
- * a process only gets past it once Step 5 adds the process and its {@link HotReloadable}s.
+ * <p>Apple Music is the first supported process (Step 5): three hooks and no threads, receivers
+ * or views of its own, so retiring it is the check section plus the ledger's pass-through flag.
+ * Every other process still refuses, and the app restarts it.
  *
  * <p>The new generation has every static field empty, exactly as after a process start. The
  * saved state carries the few host objects it cannot look up again; persistent settings come
@@ -44,6 +43,8 @@ public final class HotReload {
     private static final Set<String> sPkgs = ConcurrentHashMap.newKeySet();
     /** The host loader the first package reported, a hint only; adoption still validates it. */
     private static volatile ClassLoader sHostLoader;
+    /** One delayed breaker check per cold start, even when several packages report. */
+    private static volatile boolean sBootCheckPosted;
 
     /** This generation's number; the new code starts at 1 and adoption writes the old one + 1. */
     private static volatile int sGen = 1;
@@ -73,6 +74,13 @@ public final class HotReload {
         sProcess = pkg;
         sPkgs.add(pkg);
         if (cl != null && sHostLoader == null) sHostLoader = cl;
+        if (!sBootCheckPosted && HotReloadPolicy.SUPPORTED.contains(pkg)) {
+            sBootCheckPosted = true;
+            // The Application does not exist yet at onPackageLoaded; a second later it does.
+            // A process that came up through Main.boot checks again there - whichever runs
+            // first clears the marker, and the other finds nothing.
+            Gen.postDelayed(() -> onBoot(appContext(null)), 1000L);
+        }
     }
 
     /**
@@ -87,9 +95,6 @@ public final class HotReload {
                 + " process=" + sProcess + " pkgs=" + sPkgs
                 + " gen=" + sGen + " class=" + sClassId + " build=" + build);
 
-        if (!enabled()) {
-            return refuse("disabled by preference");
-        }
         int protocol = extras == null
                 ? HotReloadPolicy.PROTOCOL
                 : extras.getInt(HotReloadPolicy.KEY_PROTOCOL, HotReloadPolicy.PROTOCOL);
@@ -120,6 +125,11 @@ public final class HotReload {
             return refuse("could not save state: " + t);
         }
 
+        // Commit. From here the old hookers pass through and nothing new is posted. Apple owns
+        // no threads, receivers or views of its own, so its hooks are the whole of its ledger;
+        // a process with more is quiesced feature by feature before this point.
+        Gen.quiescing = true;
+        Gen.retired = true;
         sRetired = true;
         Xp.log(TAG + "HotReload retired gen=" + sGen + " process=" + proc + " build=" + build
                 + " hooks=" + Gen.hooks.size() + " class=" + sClassId);
@@ -130,10 +140,6 @@ public final class HotReload {
         Xp.w(TAG + "HotReload deferred: " + reason + " process=" + sProcess + " pkgs=" + sPkgs
                 + " gen=" + sGen);
         return false;
-    }
-
-    private static boolean enabled() {
-        return Xp.remoteBoolean(HotReloadPolicy.GROUP, HotReloadPolicy.PREF_ENABLED, true);
     }
 
     /** The package this process is supported under, or null. See HotReloadPolicy.SUPPORTED. */
@@ -211,6 +217,7 @@ public final class HotReload {
             if (cl == null) {
                 throw new IllegalStateException("no host class loader can load the process's classes");
             }
+            adoptAppleState(state);
             install(proc, cl);
             if (state != null) adoptFeatures(proc, state);
         } catch (Throwable t) {
@@ -264,6 +271,25 @@ public final class HotReload {
         } else {
             throw new IllegalStateException("no installer for " + proc);
         }
+    }
+
+    /**
+     * Apple's lyric for the track the session already names, before the hooks go back in. The
+     * metadata on the session refers to a lyric only this process holds; without it the lock
+     * screen shows an empty page until the next track. Strings only, so the binder thread the
+     * framework calls us on is fine.
+     */
+    private static void adoptAppleState(HotReloadState.State state) {
+        if (state == null) return;
+        for (Object[] f : state.features) {
+            if (!"apple".equals(f[0]) || !(f[1] instanceof Object[])) continue;
+            Object[] a = (Object[]) f[1];
+            AppleLyrics.adoptState(str(a, 0), str(a, 1), str(a, 2), str(a, 3));
+        }
+    }
+
+    private static String str(Object[] a, int i) {
+        return a != null && i < a.length && a[i] instanceof String ? (String) a[i] : null;
     }
 
     /** Host objects the features left in the saved state that have to be taken on the main thread. */

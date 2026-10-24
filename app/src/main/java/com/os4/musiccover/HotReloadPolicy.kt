@@ -12,15 +12,6 @@ object HotReloadPolicy {
     /** Bumped when the extras or the saved state change shape; the app sends the same number. */
     const val PROTOCOL = 1
 
-    /** The remote preferences group both sides already share (see [LogLevel]). */
-    const val GROUP = "module"
-
-    /** The user's switch for hot reload; only an explicit false refuses. */
-    const val PREF_ENABLED = "hot_reload"
-
-    /** A second switch for SystemUI alone, so it can be turned off by itself (Step 7). */
-    const val PREF_SYSUI = "hot_reload_sysui"
-
     const val KEY_PROTOCOL = "hr_protocol"
     const val KEY_BUILD = "hr_build_mark"
     /** Debug only: which step to fail on purpose. See HotReload. */
@@ -28,11 +19,11 @@ object HotReloadPolicy {
 
     /**
      * Processes whose retirement and adoption are implemented and have passed the on-device
-     * matrix. Empty until Step 5: with nothing here every process refuses, which is what makes
-     * the home page's new action fall back to restarting.
+     * matrix. Apple Music is first: three hooks, no threads, no receivers, and Step 0 proved
+     * the mechanism there.
      */
     @JvmField
-    val SUPPORTED: Set<String> = emptySet()
+    val SUPPORTED: Set<String> = setOf("com.apple.android.music")
 
     /**
      * Loaded version codes whose retirement is known to be broken, so the app restarts them
