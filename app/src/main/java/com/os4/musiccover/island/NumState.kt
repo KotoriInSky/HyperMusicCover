@@ -1,8 +1,7 @@
 package com.os4.musiccover.island
 import com.os4.musiccover.Main
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
@@ -21,7 +20,6 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 internal object NumState {
 
-    private val main = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
 
     /** The islands fold the ordinary notifications this way (LockIslands.setActive turns it on). */
@@ -381,9 +379,9 @@ internal object NumState {
      */
     fun foldIfPiled(why: String) {
         if (!folding) return
-        main.removeCallbacks(foldCheck)
+        Gen.removeCallbacks(foldCheck)
         foldWhy = why
-        main.postDelayed(foldCheck, FOLD_SETTLE_MS)
+        Gen.postDelayed(foldCheck, FOLD_SETTLE_MS)
     }
 
     private var foldWhy = ""

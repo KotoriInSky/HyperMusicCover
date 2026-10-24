@@ -1,6 +1,7 @@
 package com.os4.musiccover.island
 import com.os4.musiccover.Main
 import com.os4.musiccover.PageSpring
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -64,6 +65,7 @@ internal object DateStatus {
     private val ORDER = listOf("zen", "charge", "trust", "owner")
 
     private val main = Handler(Looper.getMainLooper())
+
 
     /** Whether the islands are on: the placement is fixed (MiniPlayerRuntime.statusAtDate). */
     @Volatile private var switchOn = false
@@ -337,11 +339,11 @@ internal object DateStatus {
                 host.offset.snap(0f)
             }
         }
-        if (Looper.myLooper() == Looper.getMainLooper()) reset() else main.post { reset() }
+        if (Looper.myLooper() == Looper.getMainLooper()) reset() else Gen.post { reset() }
     }
 
     private fun later() {
-        main.post(::update)
+        Gen.post(::update)
     }
 
     private fun start(c: Context) {
@@ -355,7 +357,7 @@ internal object DateStatus {
         }
         readZen()
         runCatching {
-            cr.registerContentObserver(zenUri, false, object : ContentObserver(main) {
+            Gen.observer(cr, zenUri, false, object : ContentObserver(main) {
                 override fun onChange(selfChange: Boolean) {
                     readZen()
                     update()
@@ -366,11 +368,11 @@ internal object DateStatus {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, i: Intent) { battery(i) }
             }
-            app.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), null, main)
+            Gen.receiver(app, receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), null, null)
                 ?.let(::battery)
         }.onFailure { Xp.log(TAG + "battery not watched: $it") }
         Xp.log(TAG + "watching zen=$zen plugged=$plugged level=$level")
-        main.post(::update)
+        Gen.post(::update)
     }
 
     private fun battery(i: Intent) {
@@ -575,7 +577,7 @@ internal object DateStatus {
                         h.offset.to(0f, 0.42f)
                     }
                 }
-                v.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                Gen.attachState(v, object : View.OnAttachStateChangeListener {
                     override fun onViewAttachedToWindow(view: View) {
                         h.layout = null
                         h.offset.snap(0f)
@@ -589,7 +591,7 @@ internal object DateStatus {
                 })
             }
         }
-        if (hostAlive() != lastAlive) main.post(::update)
+        if (hostAlive() != lastAlive) Gen.post(::update)
         host.base = v.measuredWidth
         val mode = View.MeasureSpec.getMode(wSpec)
         if (shown.isEmpty()) {

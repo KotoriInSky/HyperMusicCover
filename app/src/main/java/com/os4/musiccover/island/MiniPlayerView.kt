@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 btm_m
 package com.os4.musiccover.island
+import com.os4.musiccover.Gen
 import com.os4.musiccover.CoverMorphMotion
 import android.content.Context
 import android.graphics.Bitmap
@@ -618,7 +619,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
                 return
             }
             applyOffset(springX.value * 100f, springY.value * 100f)
-            Choreographer.getInstance().postFrameCallback(this)
+            Gen.frame(this)
         } finally { android.os.Trace.endSection() } }
     }
 
@@ -627,7 +628,7 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
 
     /** Where the finger has pulled the pill to; the caller rubber-bands it. */
     fun setNudge(x: Float, y: Float) {
-        Choreographer.getInstance().removeFrameCallback(springFrame)
+        Gen.unframe(springFrame)
         applyOffset(x, y)
     }
 
@@ -641,13 +642,13 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
         springX.target = 0f
         springY.target = 0f
         springLast = 0L
-        Choreographer.getInstance().removeFrameCallback(springFrame)
-        Choreographer.getInstance().postFrameCallback(springFrame)
+        Gen.unframe(springFrame)
+        Gen.frame(springFrame)
     }
 
     /** A finger on a pill still springing home: it stays where it is, under the finger. */
     fun holdNudge() {
-        Choreographer.getInstance().removeFrameCallback(springFrame)
+        Gen.unframe(springFrame)
     }
 
     /** The morph takes the nudge over (MiniCardMorph's own), so the pill's goes to nothing. */
@@ -676,13 +677,13 @@ internal class MiniPlayerView(context: Context) : FrameLayout(context) {
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         context.getSystemService(android.hardware.display.DisplayManager::class.java)
-            ?.registerDisplayListener(displayListener, handler)
+            ?.let { Gen.displayListener(it, displayListener, handler) }
     }
 
     override fun onDetachedFromWindow() {
         finish()
         context.getSystemService(android.hardware.display.DisplayManager::class.java)
-            ?.unregisterDisplayListener(displayListener)
+            ?.let { Gen.undisplayListener(it, displayListener) }
         rest(title)
         rest(artist)
         super.onDetachedFromWindow()

@@ -10,6 +10,7 @@ import com.os4.musiccover.ClockRoomPolicy
 import com.os4.musiccover.CoverMorphMotion
 import com.os4.musiccover.Main
 import com.os4.musiccover.lyrics.TrackName
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import com.os4.musiccover.immersive.ImmersiveHost
 import android.content.Context
@@ -48,9 +49,7 @@ object MiniPlayerRuntime {
 
     /** One thread for scaling artwork, so a track change never decodes on the main thread. */
     internal val artWorker: java.util.concurrent.ExecutorService =
-        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
-            Thread(r, "MCMiniArt").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
-        }
+        Gen.executor("MCMiniArt", Thread.MIN_PRIORITY, true)
     private val controllers = WeakHashMap<ViewGroup, Held>()
     private var materialFailed = false
     private val selectionLock = Any()
@@ -956,9 +955,9 @@ object MiniPlayerRuntime {
                 // Out of its window now, dimmed while it was in: dressed again when it comes
                 // back, or it came back dark on a lit screen with nothing left to undo it.
                 later++
-                view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                Gen.attachState(view, object : View.OnAttachStateChangeListener {
                     override fun onViewAttachedToWindow(v: View) {
-                        v.removeOnAttachStateChangeListener(this)
+                        Gen.unattachState(v, this)
                         if (aodDimArgs == null) {
                             material(view, cl, view in notificationDressedViews)
                             dimNote("redressed on attach")
@@ -1048,14 +1047,14 @@ object MiniPlayerRuntime {
         val controller = MiniPlayerController(host, left, right, prefs(root.context),
             loader ?: root.context.classLoader)
         synchronized(controllers) { controllers[host] = Held(left, right, controller) }
-        host.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        Gen.attachState(host, object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) = Unit
             override fun onViewDetachedFromWindow(v: View) {
                 synchronized(controllers) {
                     if (controllers[host]?.controller === controller) controllers.remove(host)
                 }
                 controller.destroy()
-                host.removeOnAttachStateChangeListener(this)
+                Gen.unattachState(host, this)
             }
         })
     }

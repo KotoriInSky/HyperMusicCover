@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.ContentObserver;
+import android.hardware.display.DisplayManager;
 import android.media.session.MediaController;
 import android.net.Uri;
 import android.os.Handler;
@@ -15,6 +16,7 @@ import android.os.HandlerThread;
 import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 
 import java.util.List;
@@ -74,6 +76,9 @@ public final class Gen {
     private static final List<PrefReg> prefListeners = new CopyOnWriteArrayList<>();
     private static final List<SessionReg> sessionCallbacks = new CopyOnWriteArrayList<>();
     private static final List<TreeReg> treeListeners = new CopyOnWriteArrayList<>();
+    private static final List<PreDrawReg> preDraws = new CopyOnWriteArrayList<>();
+    private static final List<AttachReg> attachStates = new CopyOnWriteArrayList<>();
+    private static final List<DisplayReg> displayListeners = new CopyOnWriteArrayList<>();
     private static final List<Swap> swaps = new CopyOnWriteArrayList<>();
     private static final List<OwnedView> ownViews = new CopyOnWriteArrayList<>();
     private static final List<OwnedWindow> ownWindows = new CopyOnWriteArrayList<>();
@@ -150,6 +155,36 @@ public final class Gen {
 
         TreeReg(View view, Object listener) {
             this.view = view;
+            this.listener = listener;
+        }
+    }
+
+    private static final class PreDrawReg {
+        final View view;
+        final ViewTreeObserver.OnPreDrawListener listener;
+
+        PreDrawReg(View view, ViewTreeObserver.OnPreDrawListener listener) {
+            this.view = view;
+            this.listener = listener;
+        }
+    }
+
+    private static final class AttachReg {
+        final View view;
+        final View.OnAttachStateChangeListener listener;
+
+        AttachReg(View view, View.OnAttachStateChangeListener listener) {
+            this.view = view;
+            this.listener = listener;
+        }
+    }
+
+    private static final class DisplayReg {
+        final DisplayManager manager;
+        final DisplayManager.DisplayListener listener;
+
+        DisplayReg(DisplayManager manager, DisplayManager.DisplayListener listener) {
+            this.manager = manager;
             this.listener = listener;
         }
     }
@@ -233,14 +268,25 @@ public final class Gen {
         view.post(g);
     }
 
+    /** Wrappers posted for each frame callback, so unframe can find the one the caller holds. */
+    private static final java.util.Map<Choreographer.FrameCallback, Choreographer.FrameCallback>
+            FRAME_WRAPPED = new java.util.concurrent.ConcurrentHashMap<>();
+
     public static void frame(Choreographer.FrameCallback cb) {
         if (quiescing || inert) return;
         Choreographer c = Choreographer.getInstance();
-        Choreographer.FrameCallback wrapped = t -> {
-            if (live()) cb.doFrame(t);
-        };
+        Choreographer.FrameCallback wrapped = FRAME_WRAPPED.computeIfAbsent(cb, key -> t -> {
+            FRAME_WRAPPED.remove(key);
+            if (live()) key.doFrame(t);
+        });
         frames.add(new Frame(cb, wrapped));
         c.postFrameCallback(wrapped);
+    }
+
+    public static void unframe(Choreographer.FrameCallback cb) {
+        Choreographer.FrameCallback wrapped = FRAME_WRAPPED.remove(cb);
+        Choreographer.getInstance().removeFrameCallback(wrapped == null ? cb : wrapped);
+        frames.removeIf(f -> f.callback == cb);
     }
 
     // ---------------------------------------------------------------- threads
@@ -258,6 +304,17 @@ public final class Gen {
 
     public static ExecutorService executor(String name) {
         ExecutorService e = Executors.newSingleThreadExecutor(r -> new Thread(guarded(r), name));
+        executors.add(e);
+        return e;
+    }
+
+    public static ExecutorService executor(String name, int priority, boolean daemon) {
+        ExecutorService e = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(guarded(r), name);
+            t.setDaemon(daemon);
+            t.setPriority(priority);
+            return t;
+        });
         executors.add(e);
         return e;
     }
@@ -293,6 +350,19 @@ public final class Gen {
         return sticky;
     }
 
+    public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f) {
+        Intent sticky = c.registerReceiver(r, f);
+        receivers.add(new ReceiverReg(c, r));
+        return sticky;
+    }
+
+    public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, String permission,
+                           Handler handler) {
+        Intent sticky = c.registerReceiver(r, f, permission, handler);
+        receivers.add(new ReceiverReg(c, r));
+        return sticky;
+    }
+
     public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, String permission,
                            Handler handler, int flags) {
         Intent sticky = c.registerReceiver(r, f, permission, handler, flags);
@@ -311,6 +381,12 @@ public final class Gen {
         prefListeners.add(new PrefReg(p, l));
     }
 
+    public static void unprefListener(SharedPreferences p,
+                                      SharedPreferences.OnSharedPreferenceChangeListener l) {
+        p.unregisterOnSharedPreferenceChangeListener(l);
+        prefListeners.removeIf(r -> r.prefs == p && r.listener == l);
+    }
+
     public static void sessionCallback(MediaController c, MediaController.Callback cb, Handler h) {
         c.registerCallback(cb, h);
         sessionCallbacks.add(new SessionReg(c, cb));
@@ -322,6 +398,39 @@ public final class Gen {
      */
     public static void treeListener(View v, Object listener) {
         treeListeners.add(new TreeReg(v, listener));
+    }
+
+    // ---------------------------------------------------------------- view listeners
+
+    public static void preDraw(View v, ViewTreeObserver.OnPreDrawListener l) {
+        v.getViewTreeObserver().addOnPreDrawListener(l);
+        preDraws.add(new PreDrawReg(v, l));
+    }
+
+    public static void unpreDraw(View v, ViewTreeObserver.OnPreDrawListener l) {
+        v.getViewTreeObserver().removeOnPreDrawListener(l);
+        preDraws.removeIf(r -> r.view == v && r.listener == l);
+    }
+
+    public static void attachState(View v, View.OnAttachStateChangeListener l) {
+        v.addOnAttachStateChangeListener(l);
+        attachStates.add(new AttachReg(v, l));
+    }
+
+    public static void unattachState(View v, View.OnAttachStateChangeListener l) {
+        v.removeOnAttachStateChangeListener(l);
+        attachStates.removeIf(r -> r.view == v && r.listener == l);
+    }
+
+    public static void displayListener(DisplayManager dm, DisplayManager.DisplayListener l,
+                                       Handler h) {
+        dm.registerDisplayListener(l, h);
+        displayListeners.add(new DisplayReg(dm, l));
+    }
+
+    public static void undisplayListener(DisplayManager dm, DisplayManager.DisplayListener l) {
+        dm.unregisterDisplayListener(l);
+        displayListeners.removeIf(r -> r.manager == dm && r.listener == l);
     }
 
     // ---------------------------------------------------------------- what we changed
@@ -374,6 +483,9 @@ public final class Gen {
                 + " prefListeners=" + prefListeners.size()
                 + " sessionCallbacks=" + sessionCallbacks.size()
                 + " treeListeners=" + treeListeners.size()
+                + " preDraws=" + preDraws.size()
+                + " attachStates=" + attachStates.size()
+                + " displayListeners=" + displayListeners.size()
                 + " postedOn=" + postedOn.size()
                 + " mainPosted=" + MAIN_POSTED.size()
                 + " frames=" + frames.size()
