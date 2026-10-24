@@ -66,6 +66,7 @@ import java.lang.reflect.Method;
 
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
+import io.github.libxposed.api.XposedModuleInterface;
 
 /**
  * Probe module: verifies that the HyperOS keyguard clock squeeze can be driven on
@@ -777,6 +778,25 @@ public class Main extends XposedModule {
     }
 
     /**
+     * Step 0 of the hot-reload plan. Only Apple Music agrees; every other process refuses, so
+     * updating the module there still means a restart exactly as it does today. See HotReload.
+     */
+    @Override
+    public boolean onHotReloading(XposedModuleInterface.HotReloadingParam param) {
+        return HotReload.retire(param);
+    }
+
+    /**
+     * The new generation's entry. onModuleLoaded is not replayed, so this is where Xp gets the
+     * new module instance; everything else happens in HotReload.adopt.
+     */
+    @Override
+    public void onHotReloaded(XposedModuleInterface.HotReloadedParam param) {
+        Xp.attach(this);
+        HotReload.adopt(param);
+    }
+
+    /**
      * The modern API's equivalent of handleLoadPackage: called once the default class loader
      * exists, before the app's own components are built. The scope list narrows what we are
      * injected into, but the framework still reports every package loaded in those processes,
@@ -786,6 +806,9 @@ public class Main extends XposedModule {
     public void onPackageLoaded(PackageLoadedParam param) {
         Xp.attach(this);
         String pkg = param.getPackageName();
+        // A hot-reload refusal has no process name to read - HotReloadingParam carries only
+        // extras - so this is where the process remembers what it was asked to do.
+        HotReload.onPackageLoaded(pkg);
         if ("com.miui.miwallpaper".equals(pkg)) {
             WallpaperProbe.handle(param);
             return;

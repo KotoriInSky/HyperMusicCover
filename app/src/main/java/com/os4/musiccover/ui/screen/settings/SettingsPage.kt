@@ -24,14 +24,18 @@ import androidx.compose.ui.unit.dp
 import com.os4.musiccover.LauncherIcon
 import com.os4.musiccover.app.LocaleHelper
 import com.os4.musiccover.LogLevel
+import com.os4.musiccover.app.HotReloadTest
 import com.os4.musiccover.app.LsposedService
 import com.os4.musiccover.R
 import com.os4.musiccover.app.SettingsBackup
 import com.os4.musiccover.app.ThemeActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.os4.musiccover.ui.util.PageScaffold
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
@@ -47,6 +51,9 @@ fun SettingsPageView(
     val activity = context as? Activity
 
     val scope = rememberCoroutineScope()
+
+    // Step 0 of the hot-reload plan: the last line the spike produced, shown under the rows.
+    var hotReloadStatus by remember { mutableStateOf("") }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -165,22 +172,71 @@ fun SettingsPageView(
                 Card(
                     modifier = Modifier.nextCard()
                 ) {
-                    val levelNames = listOf(
-                        stringResource(R.string.log_level_normal),
-                        stringResource(R.string.log_level_verbose),
-                    )
-                    val levelValues = listOf(LogLevel.NORMAL, LogLevel.VERBOSE)
-                    var level by remember { mutableStateOf(LsposedService.logLevel(context)) }
-                    WindowDropdownPreference(
-                        title = stringResource(R.string.log_level),
-                        summary = stringResource(R.string.log_level_summary),
-                        items = levelNames,
-                        selectedIndex = levelValues.indexOf(level).coerceAtLeast(0),
-                        onSelectedIndexChange = {
-                            level = levelValues[it]
-                            LsposedService.setLogLevel(context, level)
-                        },
-                    )
+                    Column {
+                        val levelNames = listOf(
+                            stringResource(R.string.log_level_normal),
+                            stringResource(R.string.log_level_verbose),
+                        )
+                        val levelValues = listOf(LogLevel.NORMAL, LogLevel.VERBOSE)
+                        var level by remember { mutableStateOf(LsposedService.logLevel(context)) }
+                        WindowDropdownPreference(
+                            title = stringResource(R.string.log_level),
+                            summary = stringResource(R.string.log_level_summary),
+                            items = levelNames,
+                            selectedIndex = levelValues.indexOf(level).coerceAtLeast(0),
+                            onSelectedIndexChange = {
+                                level = levelValues[it]
+                                LsposedService.setLogLevel(context, level)
+                            },
+                        )
+                        // Step 0 spike, to be removed with HotReloadTest: one row per thing the
+                        // tester needs to aim at, with the last result under them.
+                        ArrowPreference(
+                            title = stringResource(R.string.hot_reload_test),
+                            summary = stringResource(R.string.hot_reload_test_summary),
+                            onClick = {
+                                hotReloadStatus = "提交中…"
+                                scope.launch {
+                                    val submitted = withContext(Dispatchers.IO) {
+                                        HotReloadTest.start(setId = false) { hotReloadStatus = it }
+                                    }
+                                    // The binder answer can land before this line; do not undo it.
+                                    if (hotReloadStatus == "提交中…") hotReloadStatus = submitted
+                                }
+                            },
+                        )
+                        ArrowPreference(
+                            title = stringResource(R.string.hot_reload_test_setid),
+                            summary = stringResource(R.string.hot_reload_test_setid_summary),
+                            onClick = {
+                                hotReloadStatus = "提交中…"
+                                scope.launch {
+                                    val submitted = withContext(Dispatchers.IO) {
+                                        HotReloadTest.start(setId = true) { hotReloadStatus = it }
+                                    }
+                                    if (hotReloadStatus == "提交中…") hotReloadStatus = submitted
+                                }
+                            },
+                        )
+                        ArrowPreference(
+                            title = stringResource(R.string.hot_reload_targets),
+                            summary = stringResource(R.string.hot_reload_targets_summary),
+                            onClick = {
+                                hotReloadStatus = "读取中…"
+                                scope.launch {
+                                    hotReloadStatus = withContext(Dispatchers.IO) {
+                                        HotReloadTest.targets()
+                                    }
+                                }
+                            },
+                        )
+                        if (hotReloadStatus.isNotEmpty()) {
+                            MiuixText(
+                                text = hotReloadStatus,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                    }
                 }
 
                 SmallTitle(text = stringResource(R.string.settings_data))

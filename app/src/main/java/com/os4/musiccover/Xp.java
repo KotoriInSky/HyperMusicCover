@@ -226,6 +226,60 @@ public final class Xp {
         return api().hook(target).intercept(hooker);
     }
 
+    /**
+     * A hook carrying an identity, for hot reload (Step 0 of the plan; the rest of the module
+     * still installs without one).
+     *
+     * <p>The id is the handle's name across versions. When adoption already holds an old handle
+     * with this id and this exact executable, the hook replaces it in place; otherwise it is
+     * installed new with the id attached, so the next generation can find it. Replacement
+     * failing is not fatal: the old handle goes back to the pending list (it will be unhooked
+     * at the end of adoption) and the hook is installed alongside.
+     */
+    public static XposedInterface.HookHandle hook(String id, Executable target,
+                                                  XposedInterface.Hooker hooker) {
+        XposedInterface.HookHandle old = HotReload.takeOld(id, target);
+        if (old != null) {
+            try {
+                XposedInterface.HookHandle replaced = old.replaceHook(hooker);
+                HotReload.onReplaced(id, replaced);
+                return replaced;
+            } catch (Throwable t) {
+                w("[MCHotReload] replaceHook failed for " + id + ": " + t);
+                HotReload.keepOld(old);
+            }
+        }
+        XposedInterface.HookHandle h = api().hook(target).setId(id).intercept(hooker);
+        HotReload.onAdded(id, h);
+        return h;
+    }
+
+    /**
+     * {@link #hookAll(Class, String, XposedInterface.Hooker)} with an id per overload:
+     * {@code id + "#" + parameter simple names}. The suffix depends only on the OEM signature,
+     * which R8 does not touch, so it survives our own obfuscation.
+     */
+    public static List<XposedInterface.HookHandle> hookAll(String id, Class<?> cls, String name,
+                                                    XposedInterface.Hooker hooker) {
+        List<XposedInterface.HookHandle> handles = new ArrayList<>();
+        for (Method m : cls.getDeclaredMethods()) {
+            if (m.getName().equals(name)) handles.add(hook(id + "#" + signature(m), m, hooker));
+        }
+        if (handles.isEmpty()) {
+            throw new IllegalArgumentException("no method " + cls.getName() + "." + name);
+        }
+        return handles;
+    }
+
+    private static String signature(Executable e) {
+        StringBuilder b = new StringBuilder();
+        for (Class<?> p : e.getParameterTypes()) {
+            if (b.length() > 0) b.append(',');
+            b.append(p.getSimpleName());
+        }
+        return b.length() == 0 ? "()" : b.toString();
+    }
+
     public static List<XposedInterface.HookHandle> hookAllConstructors(Class<?> cls,
                                                                 XposedInterface.Hooker hooker) {
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
