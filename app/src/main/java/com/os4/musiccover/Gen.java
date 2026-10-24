@@ -223,7 +223,11 @@ public final class Gen {
         // Handlers the features made for themselves (DateStatus, the shade's frame driver, the
         // mini player's per-controller one...). Their messages are ours too, and the same rule
         // applies: after retirement nothing of ours may still be queued on the main thread.
-        for (android.os.Handler h : mainHandlers) {
+        java.util.List<android.os.Handler> handlers;
+        synchronized (mainHandlers) {
+            handlers = new java.util.ArrayList<>(mainHandlers);
+        }
+        for (android.os.Handler h : handlers) {
             try {
                 h.removeCallbacksAndMessages(null);
             } catch (Throwable ignored) {
@@ -450,8 +454,18 @@ public final class Gen {
 
     static final List<XposedInterface.HookHandle> hooks = new CopyOnWriteArrayList<>();
     private static final List<PostedOn> postedOn = new CopyOnWriteArrayList<>();
-    /** The main-looper Handlers the features made for themselves; see {@link #handler()}. */
-    private static final List<android.os.Handler> mainHandlers = new CopyOnWriteArrayList<>();
+    /**
+     * The main-looper Handlers the features made for themselves; see {@link #handler()}.
+     *
+     * Weak, so a controller that is gone takes its handler's ledger entry with it instead of
+     * leaving one per keyguard rebuild. A handler with a queued message is still reachable
+     * through that message, so the sweep can clear it; one with nothing pending has nothing
+     * left to clear.
+     */
+    private static final java.util.Set<android.os.Handler> mainHandlers =
+            java.util.Collections.synchronizedSet(
+                    java.util.Collections.newSetFromMap(
+                            new java.util.WeakHashMap<android.os.Handler, Boolean>()));
     /**
      * One entry per callback, not one per post. An animation re-posts itself from inside its
      * own frame until it lands, so a list of posts grew by a frame's worth per animation.
