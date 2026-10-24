@@ -426,6 +426,12 @@ public final class Gen {
         preDraws.add(new PreDrawReg(v, l));
     }
 
+    /** For a call site that holds the observer rather than the view it belongs to. */
+    public static void preDraw(ViewTreeObserver vto, ViewTreeObserver.OnPreDrawListener l) {
+        vto.addOnPreDrawListener(l);
+        preDraws.add(new PreDrawReg(null, l));
+    }
+
     public static void unpreDraw(View v, ViewTreeObserver.OnPreDrawListener l) {
         v.getViewTreeObserver().removeOnPreDrawListener(l);
         preDraws.removeIf(r -> r.view == v && r.listener == l);

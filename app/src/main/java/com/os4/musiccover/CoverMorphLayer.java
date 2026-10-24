@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.island.MiniPlayerViewKt;
 import com.os4.musiccover.island.MiniPlayerRuntime;
@@ -155,7 +156,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         v.setRequestedFrameRate(120f);
         Main.refreshMediaCardForMorph();
         CoverCardLayer.refresh();
-        Choreographer.getInstance().postFrameCallback(v);
+        Gen.frame(v);
     }
 
     static boolean active() { return sView != null && sView.running; }
@@ -264,7 +265,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
                 || SystemClock.uptimeMillis() - startedAt > 2200L)) {
             finish();
         } else {
-            Choreographer.getInstance().postFrameCallback(this);
+            Gen.frame(this);
         }
     } finally { android.os.Trace.endSection(); } }
 
@@ -333,7 +334,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     private void finish() {
         if (!running) return;
         running = false;
-        Choreographer.getInstance().removeFrameCallback(this);
+        Gen.unframe(this);
         setRequestedFrameRate(0f);
         // Kept for the next morph; see the constructor.
         if (getVisibility() != INVISIBLE) setVisibility(INVISIBLE);

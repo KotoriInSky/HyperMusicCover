@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.lyrics.AppleLyrics;
 import com.os4.musiccover.lyrics.LocalLyrics;
@@ -1547,7 +1548,7 @@ public class Main extends XposedModule {
             f.addAction("android.telephony.action.SECRET_CODE");
             f.addDataScheme("android_secret_code");
             f.addDataAuthority(LauncherIcon.SECRET_CODE, null);
-            ctx.registerReceiver(new BroadcastReceiver() {
+            Gen.receiver(ctx, new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context c, Intent i) {
                     Xp.log(TAG + "secret code dialled: " + i.getData());
@@ -1707,7 +1708,7 @@ public class Main extends XposedModule {
         lf.addAction(Intent.ACTION_SCREEN_OFF);
         lf.addAction(Intent.ACTION_SCREEN_ON);
         lf.addAction(Intent.ACTION_USER_PRESENT);
-        ctx.registerReceiver(lifecycle, lf, Context.RECEIVER_NOT_EXPORTED);
+        Gen.receiver(ctx, lifecycle, lf, Context.RECEIVER_NOT_EXPORTED);
         Xp.log(TAG + "lifecycle receiver registered (screen off / user present)");
     }
 
@@ -2267,7 +2268,7 @@ public class Main extends XposedModule {
                     View root = sContainer == null ? null : sContainer.getRootView();
                     if (root != null) root.invalidate();
                     sBlurSyncPumping = true;
-                    android.view.Choreographer.getInstance().postFrameCallback(this);
+                    Gen.frame(this);
                 } finally { android.os.Trace.endSection(); } }
             };
 
@@ -2277,7 +2278,7 @@ public class Main extends XposedModule {
         sBlurSyncUntil = now + BLUR_SYNC_MS;
         if (sBlurSyncPumping) return;
         sBlurSyncPumping = true;
-        android.view.Choreographer.getInstance().postFrameCallback(sBlurSyncFrame);
+        Gen.frame(sBlurSyncFrame);
         // One line per burst, not per frame: the pump runs for over a thousand frames.
         Xp.log(TAG + "blur sync pumping " + BLUR_SYNC_MS + "ms (" + why + ")"
                 + (fresh ? "" : " (extended)"));
@@ -3190,7 +3191,7 @@ public class Main extends XposedModule {
                 return true;
             } finally { android.os.Trace.endSection(); } }
         };
-        d.getViewTreeObserver().addOnPreDrawListener(sDepthGuard);
+        Gen.preDraw(d, sDepthGuard);
         sDepthGuarded = d;
         Xp.log(TAG + "depth guard installed");
     }
@@ -3202,7 +3203,7 @@ public class Main extends XposedModule {
         sDepthGuard = null;
         if (d == null || g == null) return;
         try {
-            d.getViewTreeObserver().removeOnPreDrawListener(g);
+            Gen.unpreDraw(d, g);
         } catch (Throwable ignored) {
         }
     }

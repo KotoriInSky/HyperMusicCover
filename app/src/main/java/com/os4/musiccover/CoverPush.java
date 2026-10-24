@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.lyrics.LockLyrics;
 import com.os4.musiccover.immersive.ImmersiveHost;
@@ -228,7 +229,7 @@ public final class CoverPush {
             final float fb = Main.sCoverCardStyle.mode == CoverCardStyle.CARD ? 0.5f : Main.sBias;
             frostTask = new java.util.concurrent.FutureTask<>(
                     () -> CoverCompose.frostedFor(srcArt, fw, fh, fb));
-            new Thread(frostTask, "mc-cover-frost").start();
+            Gen.thread("mc-cover-frost", frostTask);
         }
         Bitmap full;
         try {
@@ -452,7 +453,7 @@ public final class CoverPush {
                 final Bitmap frosted = Main.sCoverBlurBitmap;
                 if (sharp == null || sharp.isRecycled()) return;
                 if (blur && (frosted == null || frosted.isRecycled())) {
-                    new Thread(new Runnable() {
+                    Gen.thread("mc-cover-blur", new Runnable() {
                         @Override
                         public void run() {
                             try {
@@ -475,7 +476,7 @@ public final class CoverPush {
                                 Xp.w(Main.TAG + "generate frosted on demand failed: " + t);
                             }
                         }
-                    }, "mc-cover-blur").start();
+                    });
                     return;
                 }
                 Bitmap from = blur ? sharp : (frosted != null ? frosted : sharp);
@@ -602,7 +603,7 @@ public final class CoverPush {
                 return true;
             } finally { android.os.Trace.endSection(); } }
         };
-        cover.getViewTreeObserver().addOnPreDrawListener(sCoverGuard);
+        Gen.preDraw(cover, sCoverGuard);
         sCoverGuarded = cover;
         Xp.log(Main.TAG + "video cover guard installed");
     }
@@ -1114,7 +1115,7 @@ public final class CoverPush {
         sCoverGuard = null;
         if (c == null || g == null) return;
         try {
-            c.getViewTreeObserver().removeOnPreDrawListener(g);
+            Gen.unpreDraw(c, g);
         } catch (Throwable ignored) {
         }
     }

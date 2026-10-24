@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.lyrics.LockLyrics;
 import android.content.Context;
@@ -213,13 +214,13 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
                 return true;
             } finally { android.os.Trace.endSection(); } }
         };
-        geometryObserver.addOnPreDrawListener(geometryListener);
+        Gen.preDraw(geometryObserver, geometryListener);
     }
 
     private void unwatchGeometry() {
         if (geometryObserver != null && geometryListener != null
                 && geometryObserver.isAlive()) {
-            geometryObserver.removeOnPreDrawListener(geometryListener);
+            Gen.unpreDraw(geometryObserver, geometryListener);
         }
         geometryObserver = null;
         geometryListener = null;
@@ -553,11 +554,11 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         // A temporary vote for panels that honour it. The spring is sampled on every VSYNC,
         // and the vote is removed as soon as it settles; some SystemUI windows still cap at 60Hz.
         setRequestedFrameRate(120f);
-        Choreographer.getInstance().postFrameCallback(this);
+        Gen.frame(this);
     }
 
     private void stop() {
-        if (ticking) Choreographer.getInstance().removeFrameCallback(this);
+        if (ticking) Gen.unframe(this);
         if (ticking) setRequestedFrameRate(0f);
         ticking = false;
         lastFrame = 0L;
@@ -861,7 +862,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
                 // Still waking from the big clock: keep looking until the clock has landed.
                 || (afterBigClock && phase != ClockCollapse.Phase.AOD);
         if (settling) {
-            Choreographer.getInstance().postFrameCallback(this);
+            Gen.frame(this);
         } else {
             stop();
         }

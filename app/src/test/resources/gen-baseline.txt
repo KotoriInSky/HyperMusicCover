@@ -3,13 +3,6 @@
 # any of the calls GenRulesTest forbids.
 ArtUri.java
 CardVideo.java
-ClockCollapse.java
-ClockMove.java
-ClockRoom.java
-CoverCardLayer.java
-CoverMorphLayer.java
-CoverPalette.java
-CoverPush.java
 Diagnostics.java
 Main.java
 MediaCard.java

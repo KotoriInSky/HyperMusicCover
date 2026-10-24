@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.island.MiniPlayerRuntime;
 import android.os.SystemClock;
@@ -108,7 +109,7 @@ final class ClockMove {
                 detach();
                 try {
                     resolve();
-                    v.getViewTreeObserver().addOnPreDrawListener(F);
+                    Gen.preDraw(v, F);
                     sTraced = v;
                 } catch (Throwable t) {
                     sFooter = "listener not installed: " + t;
@@ -123,7 +124,7 @@ final class ClockMove {
         sTraced = null;
         if (v == null) return;
         try {
-            v.getViewTreeObserver().removeOnPreDrawListener(F);
+            Gen.unpreDraw(v, F);
         } catch (Throwable ignored) {
         }
     }

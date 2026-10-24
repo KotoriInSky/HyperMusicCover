@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -59,13 +60,13 @@ public final class CoverPalette {
         if (sPending != null) v.removeCallbacks(sPending);
         sEarly = () -> {
             sEarly = null;
-            new Thread(CoverPalette::refreshNow, "mc-cover-palette").start();
+            Gen.thread("mc-cover-palette", CoverPalette::refreshNow);
         };
         sPending = () -> {
             sPending = null;
             // A binder call into the wallpaper process, which reads the picture: off the main
             // thread, and the result applied back on it.
-            new Thread(CoverPalette::refreshNow, "mc-cover-palette").start();
+            Gen.thread("mc-cover-palette", CoverPalette::refreshNow);
         };
         v.postDelayed(sEarly, Math.min(EARLY_MS, lateMs));
         if (lateMs > EARLY_MS) v.postDelayed(sPending, lateMs);
