@@ -1032,7 +1032,7 @@ public final class CoverPush {
                 applyVideoCoverCrossfade(iv, from, to, Main.sVideoCoverBlurred);
             }
             final long dur = Math.max(150, Math.min(500, coverFadeMs())) + 100L;
-            iv.postDelayed(() -> {
+            Gen.postDelayedOn(iv, () -> {
                 // The timer is a guess at when the crossfade is done, and it is wrong for a view
                 // that stopped being drawn part way through (hidden on the way to the desktop):
                 // its transition is still where it was, and would draw the old layer next.

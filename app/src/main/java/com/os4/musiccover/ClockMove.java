@@ -103,7 +103,7 @@ final class ClockMove {
             Xp.log(TAG + "clockmove: " + sFooter);
             return;
         }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 detach();

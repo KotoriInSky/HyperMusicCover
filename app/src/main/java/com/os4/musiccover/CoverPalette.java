@@ -56,8 +56,8 @@ public final class CoverPalette {
     static void refreshSoon(long lateMs) {
         final android.view.View v = Main.sContainer;
         if (v == null || sMgr == null) return;
-        if (sEarly != null) v.removeCallbacks(sEarly);
-        if (sPending != null) v.removeCallbacks(sPending);
+        if (sEarly != null) Gen.removeCallbacksOn(v, sEarly);
+        if (sPending != null) Gen.removeCallbacksOn(v, sPending);
         sEarly = () -> {
             sEarly = null;
             Gen.thread("mc-cover-palette", CoverPalette::refreshNow);
@@ -68,8 +68,8 @@ public final class CoverPalette {
             // thread, and the result applied back on it.
             Gen.thread("mc-cover-palette", CoverPalette::refreshNow);
         };
-        v.postDelayed(sEarly, Math.min(EARLY_MS, lateMs));
-        if (lateMs > EARLY_MS) v.postDelayed(sPending, lateMs);
+        Gen.postDelayedOn(v, sEarly, Math.min(EARLY_MS, lateMs));
+        if (lateMs > EARLY_MS) Gen.postDelayedOn(v, sPending, lateMs);
     }
 
     private static Runnable sEarly;
@@ -98,7 +98,7 @@ public final class CoverPalette {
             }
             android.view.View v = Main.sContainer;
             if (v == null) return;
-            v.post(() -> {
+            Gen.postOn(v, () -> {
                 try {
                     if (Xp.getObjectField(mgr, "mPartDeepMap") == null) {
                         sLast = "no depth map yet";

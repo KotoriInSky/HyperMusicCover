@@ -962,6 +962,15 @@ final class HyperTweaks {
         }
     }
 
+    /**
+     * A hot-reloaded generation's half of {@link #watchForPlugin()}: the plugin's loader exists
+     * already, so the constructor watch will not fire again. Re-running the soft install with
+     * that loader replaces the old hooks by id.
+     */
+    static void adoptPlugin(ClassLoader cl) {
+        softGlassPlugin(cl, "adopt", "sysui");
+    }
+
     private static void softGlassPlugin(ClassLoader cl, String where, String idPrefix) {
         if (sPluginHooked) return;
         Class<?> themeUtils;

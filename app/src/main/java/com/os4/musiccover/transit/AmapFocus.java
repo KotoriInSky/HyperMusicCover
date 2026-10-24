@@ -93,6 +93,11 @@ public final class AmapFocus {
         }
     }
 
+    /** A hot-reloaded generation's half: the plugin's loader is already here, re-run the watch. */
+    public static void adopt(ClassLoader cl) {
+        soft(cl, "adopt");
+    }
+
     /** Hooks the two questions for 高德, once the loader that can see the class turns up. */
     private static void soft(ClassLoader cl, String where) {
         if (sHooked.get()) return;

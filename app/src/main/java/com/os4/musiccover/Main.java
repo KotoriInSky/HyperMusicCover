@@ -779,9 +779,9 @@ public class Main extends XposedModule {
     }
 
     /**
-     * Hot reload's retirement half. Step 4 has no process on
-     * {@link HotReloadPolicy#SUPPORTED}, so every process refuses and updating still means a
-     * restart exactly as it does today. See HotReload.
+     * Hot reload's retirement half; see HotReload. Whatever the check section cannot clear -
+     * a process not on {@link HotReloadPolicy#SUPPORTED}, a busy feature, a state that would
+     * not encode - refuses here and the app's restart path takes over.
      */
     @Override
     public boolean onHotReloading(XposedModuleInterface.HotReloadingParam param) {
@@ -1891,7 +1891,7 @@ public class Main extends XposedModule {
                                        final int size, final float sizeInternal) {
         final View v = sContainer;
         if (v == null) { Xp.log(TAG + "no clock container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 try {
@@ -3165,7 +3165,7 @@ public class Main extends XposedModule {
             retryDepth(hide, attempt, "no clock container");
             return;
         }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 View d = findDeductedImageView();
@@ -3877,7 +3877,7 @@ public class Main extends XposedModule {
             Xp.log(TAG + "no clock container");
             return;
         }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 try {
@@ -4567,7 +4567,7 @@ public class Main extends XposedModule {
         sCoverBitmap = null;
         sCoverBlurBitmap = null;
         sVideoCoverBlurred = false;
-        iv.post(new Runnable() {
+        Gen.postOn(iv, new Runnable() {
             @Override
             public void run() {
                 try {
@@ -4716,7 +4716,7 @@ public class Main extends XposedModule {
                                          final int n, final boolean b) {
         final View v = sContainer;
         if (v == null || method == null) { Xp.log(TAG + "callclock: need m="); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 Object arg = "b".equals(kind) ? (Object) b : "i".equals(kind) ? (Object) n : (Object) f;
@@ -4741,7 +4741,7 @@ public class Main extends XposedModule {
                                         final int n, final boolean b) {
         final View v = sContainer;
         if (v == null || method == null) { Xp.log(TAG + "call: need m="); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 Object arg = "b".equals(kind) ? (Object) b : "i".equals(kind) ? (Object) n : (Object) f;
@@ -4770,7 +4770,7 @@ public class Main extends XposedModule {
                                    final float py, final float ty) {
         final View v = sContainer;
         if (v == null) { Xp.log(TAG + "no clock container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 try {

@@ -105,9 +105,35 @@ public final class Gen {
      * longer possible. Every step is independent and a failure is left for the next one.
      */
     static boolean retire(long timeoutMs) {
+        return retire(timeoutMs, null);
+    }
+
+    /**
+     * As {@link #retire(long)}, but with one main-thread step in front of the sweep. SystemUI's
+     * teardown runs there: the features give the OEM its state back while our views are still
+     * in the tree, and only then does the ledger take the views themselves.
+     */
+    static boolean retire(long timeoutMs, Runnable beforeSweep) {
         quiescing = true;
         retired = true;
-        return onMain(timeoutMs, () -> sweep(false));
+        // The teardown gives OEM state back; run late - after the framework has moved on to the
+        // next generation - it would shrink the clock or hide the print under the new code. The
+        // sweep is safe to run late (it only touches this generation's own registrations), so
+        // only the step in front of it is guarded.
+        final java.util.concurrent.atomic.AtomicBoolean tooLate =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        boolean ran = onMain(timeoutMs, () -> {
+            if (!tooLate.get() && beforeSweep != null) {
+                try {
+                    beforeSweep.run();
+                } catch (Throwable t) {
+                    Xp.w("[MCGen] teardown before the sweep failed: " + t);
+                }
+            }
+            sweep(false);
+        });
+        if (!ran) tooLate.set(true);
+        return ran;
     }
 
     /**
@@ -186,7 +212,7 @@ public final class Gen {
 
         for (PostedOn p : postedOn) {
             try {
-                p.view.removeCallbacks(p.runnable);
+                p.view.removeCallbacks(p.wrapper);
             } catch (Throwable ignored) {
             }
         }
@@ -435,11 +461,15 @@ public final class Gen {
 
     private static final class PostedOn {
         final View view;
-        final Runnable runnable;
+        /** What the caller holds, for removeCallbacksOn. */
+        final Runnable original;
+        /** What is actually on the view, and what retirement removes. */
+        final Runnable wrapper;
 
-        PostedOn(View view, Runnable runnable) {
+        PostedOn(View view, Runnable original, Runnable wrapper) {
             this.view = view;
-            this.runnable = runnable;
+            this.original = original;
+            this.wrapper = wrapper;
         }
     }
 
@@ -659,9 +689,53 @@ public final class Gen {
     /** Post on a host view, and remember it so retirement can take it back out. */
     public static void postOn(View view, Runnable r) {
         if (view == null || quiescing || inert) return;
-        Runnable g = guarded(r);
-        postedOn.add(new PostedOn(view, g));
+        Runnable g = remember(view, r);
         view.post(g);
+    }
+
+    /** As {@link #postOn}, after [ms] on the view's own handler. */
+    public static void postDelayedOn(View view, Runnable r, long ms) {
+        if (view == null || quiescing || inert) return;
+        Runnable g = remember(view, r);
+        view.postDelayed(g, ms);
+    }
+
+    /** As {@link #postOn}, on the view's next animation frame. Retirement removes both alike. */
+    public static void postOnAnimation(View view, Runnable r) {
+        if (view == null || quiescing || inert) return;
+        Runnable g = remember(view, r);
+        view.postOnAnimation(g);
+    }
+
+    /**
+     * The caller's own view post, taken back (see {@link #postOn}); callers keep their own
+     * Runnable for the removal, so the wrapper is looked up by the original.
+     */
+    public static void removeCallbacksOn(View view, Runnable r) {
+        if (view == null || r == null) return;
+        // A reposting loop may have queued the same Runnable more than once; each copy's wrapper
+        // has to come off the view as well as out of the ledger.
+        java.util.List<PostedOn> hits = new java.util.ArrayList<>();
+        for (PostedOn p : postedOn) {
+            if (p.view == view && p.original == r) hits.add(p);
+        }
+        if (hits.isEmpty()) {
+            view.removeCallbacks(r);
+            return;
+        }
+        for (PostedOn p : hits) {
+            postedOn.remove(p);
+            try {
+                view.removeCallbacks(p.wrapper);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private static Runnable remember(View view, Runnable original) {
+        Runnable g = guarded(original);
+        postedOn.add(new PostedOn(view, original, g));
+        return g;
     }
 
     /** Post a frame callback, and remember the wrapper so retirement (or unframe) can take it back. */

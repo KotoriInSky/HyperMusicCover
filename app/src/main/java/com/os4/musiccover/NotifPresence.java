@@ -108,7 +108,7 @@ public final class NotifPresence {
         if (wanted(sSystemSays) == shown(panel)) return;
         android.view.View v = Main.sContainer;
         if (v == null) return;
-        v.post(() -> {
+        Gen.postOn(v, () -> {
             if (wanted(sSystemSays) == shown(panel)) return;
             sOurs = true;
             try {

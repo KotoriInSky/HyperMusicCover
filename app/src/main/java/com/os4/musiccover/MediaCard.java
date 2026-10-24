@@ -287,7 +287,7 @@ public final class MediaCard {
         final View card = sCardGuarded;
         if (card == null || sCardFramePosted) return;
         sCardFramePosted = true;
-        card.postOnAnimation(new Runnable() {
+        Gen.postOnAnimation(card, new Runnable() {
             @Override
             public void run() {
                 sCardFramePosted = false;
@@ -767,6 +767,44 @@ public final class MediaCard {
         CardVideo.retire();
         sHeard = null;
         sHeardValid = false;
+    }
+
+    /**
+     * What a hot reload hands over: the OEM controller {@code topMediaListeners} our proxy was
+     * in, the token the card is bound to, and the track it is showing. Host object, framework
+     * object and primitives - the proxy itself is ours and cannot travel.
+     */
+    static Object[] save() {
+        return new Object[]{sListened, sCardToken, sCardKey, sCardKnown, sCardPresent,
+                sCardShowing};
+    }
+
+    /**
+     * The new generation's half. The card is not rebuilt by a hot reload, so the OEM's set gets
+     * the new proxy here rather than on the next bind; without this the cover follows nothing
+     * until the user changes track. Runs on the main thread, before the container attach path
+     * asks the card anything.
+     */
+    static void adopt(Object saved, ClassLoader cl) {
+        if (!(saved instanceof Object[])) return;
+        Object[] a = (Object[]) saved;
+        if (a.length > 1 && a[1] instanceof android.media.session.MediaSession.Token) {
+            sCardToken = (android.media.session.MediaSession.Token) a[1];
+        }
+        if (a.length > 2 && a[2] instanceof String) sCardKey = (String) a[2];
+        if (a.length > 3 && a[3] instanceof Boolean) sCardKnown = (Boolean) a[3];
+        if (a.length > 4 && a[4] instanceof Boolean) sCardPresent = (Boolean) a[4];
+        if (a.length > 5 && a[5] instanceof Boolean) sCardShowing = (Boolean) a[5];
+        if (cl != null && a.length > 0 && a[0] != null) {
+            try {
+                listenTo(a[0], cl);
+            } catch (Throwable t) {
+                Xp.w(Main.TAG + "media card listener not restored: " + t);
+            }
+        }
+        Xp.log(Main.TAG + "media card adopted: known=" + sCardKnown + " present=" + sCardPresent
+                + " showing=" + sCardShowing + " key=" + sCardKey
+                + " listener=" + (sListened != null));
     }
 
     /** Takes our proxy out of the controller we added it to. Silent: every step is best effort. */

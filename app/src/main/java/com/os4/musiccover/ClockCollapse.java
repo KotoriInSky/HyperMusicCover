@@ -675,7 +675,7 @@ public final class ClockCollapse {
         Xp.log(TAG + "clock: into the AOD");
         final Choreographer.FrameCallback flight = sFrame;
         View c = Main.sContainer;
-        c.postDelayed(new Runnable() {
+        Gen.postDelayedOn(c, new Runnable() {
             @Override
             public void run() {
                 if (sPhase == Phase.EXIT && sExitToAod && sFrame == flight) {

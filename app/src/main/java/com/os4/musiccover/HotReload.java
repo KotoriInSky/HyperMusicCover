@@ -5,9 +5,11 @@ import android.os.Bundle;
 import android.os.Looper;
 
 import com.os4.musiccover.immersive.ImmersiveHost;
+import com.os4.musiccover.island.MiniPlayerRuntime;
 import com.os4.musiccover.lyrics.AppleLyrics;
 import com.os4.musiccover.pickup.RearScreen;
 import com.os4.musiccover.shade.ShadeLayer;
+import com.os4.musiccover.transit.AmapFocus;
 import com.os4.musiccover.transit.AmapImmerse;
 import com.os4.musiccover.transit.MetroCodeIsland;
 
@@ -27,9 +29,9 @@ import io.github.libxposed.api.XposedModuleInterface;
  * The two hot-reload entry points. Main forwards {@code onHotReloading}/{@code onHotReloaded}
  * here.
  *
- * <p>Apple Music is the first supported process (Step 5): three hooks and no threads, receivers
- * or views of its own, so retiring it is the check section plus the ledger's pass-through flag.
- * Every other process still refuses, and the app restarts it.
+ * <p>Every supported process is on {@link HotReloadPolicy#SUPPORTED}; anything else refuses in
+ * the check section and the app restarts it. SystemUI is the one with views to put back: its
+ * teardown is {@link SystemUiRetire}, run on the main thread inside the commit step.
  *
  * <p>The new generation has every static field empty, exactly as after a process start. The
  * saved state carries the few host objects it cannot look up again; persistent settings come
@@ -150,11 +152,18 @@ public final class HotReload {
 
         // Commit. From here the old hookers pass through and nothing new is posted; the ledger
         // takes back the receivers, observers, listeners, posts, threads and views it recorded.
-        // Two seconds is generous for those processes: the work is unregistration, not drawing.
-        if (!Gen.retire(2000L)) {
+        // SystemUI's features first give the OEM its state back - the clock's squeeze, the
+        // hidden print, the card's listeners, the islands - on the main thread, while our views
+        // are still in the tree. The other processes only unregister, which takes a moment.
+        sRetired = true;
+        Runnable teardown = "com.android.systemui".equals(proc)
+                ? SystemUiRetire::retireForReload : null;
+        if (!Gen.retire(teardown == null ? 2000L : 4000L, teardown)) {
             Xp.w(TAG + "retirement sweep did not finish in time; guarded callbacks are inert");
         }
-        sRetired = true;
+        // The two ClassValue caches live on the host's Class objects and would keep this
+        // generation (and its loader) reachable for as long as the process runs.
+        Xp.dropClassValues();
         Xp.log(TAG + "HotReload retired gen=" + sGen + " process=" + proc + " build=" + build
                 + " hooks=" + Gen.hooks.size() + " class=" + sClassId);
         return true;
@@ -218,6 +227,18 @@ public final class HotReload {
                     AppleLyrics.playingId(), AppleLyrics.playingTitle(),
             }});
         }
+        if ("com.android.systemui".equals(proc)) {
+            // What the state file cannot say and the new generation cannot look up again the
+            // way a cold start would: the token the wallpaper process answers to, the two
+            // runtime flags (the file keeps settings, not which wallpaper is up), the clock
+            // container the keyguard attached earlier, the OEM card controller our proxy was
+            // in, and the shortcut row the mini player hung off.
+            out.add(new Object[]{"core", new Object[]{
+                    ProbeGuard.token(), Main.sVideoWallpaper, Main.sDepthHidden}});
+            out.add(new Object[]{"clock", Main.sContainer});
+            out.add(new Object[]{"mediacard", MediaCard.save()});
+            out.add(new Object[]{"island", MiniPlayerRuntime.save()});
+        }
         return out.toArray(new Object[0][]);
     }
 
@@ -271,7 +292,14 @@ public final class HotReload {
             }
             adoptAppleState(state);
             install(proc, cl);
-            if (state != null) adoptFeatures(proc, state);
+            if ("com.android.systemui".equals(proc)) {
+                // Arming here rather than from the attach path: the container may be gone
+                // while the phone is unlocked, and HyperLight's own hook is already in place
+                // (it is not reloaded), so the order this guard depends on still holds.
+                ClockGlass.armMiGlassGuard();
+                backfill(cl, param.getOldHookHandles());
+            }
+            adoptFeatures(proc, state, cl);
         } catch (Throwable t) {
             failed = true;
             Xp.w(TAG + "adopt FAILED: " + t);
@@ -352,18 +380,67 @@ public final class HotReload {
         return a != null && i < a.length && a[i] instanceof String ? (String) a[i] : null;
     }
 
-    /** Host objects the features left in the saved state that have to be taken on the main thread. */
-    private static void adoptFeatures(String proc, HotReloadState.State state) {
-        if (!"com.android.systemui".equals(proc) || state.features.length == 0) return;
+    /**
+     * What SystemUI's new generation puts back up, on the main thread: the runtime state the
+     * retirement handed over, the cold-start boot, the OEM objects that are not rebuilt (the
+     * card's listener, the mini player's row), and then the container attach path a keyguard
+     * rebuild would have run.
+     *
+     * <p>Boot runs even when nothing was handed over: an adoption with no usable saved state
+     * still has to register the receivers and read the state file. The container is optional -
+     * while the phone is unlocked the keyguard may have detached it, and the next attach hook
+     * puts everything up then.
+     */
+    private static void adoptFeatures(String proc, HotReloadState.State state, ClassLoader host) {
+        if (!"com.android.systemui".equals(proc)) return;
+        Object[][] features = state == null ? new Object[0][] : state.features;
         sAdoptingBoot = true;
         Gen.post(() -> {
             try {
-                Context ctx = state.context != null ? state.context : Main.sAppCtx;
-                if (ctx != null) Main.boot(ctx);
-                for (Object[] f : state.features) {
-                    if ("clock".equals(f[0]) && f[1] instanceof android.view.View) {
-                        Main.onContainerAttached((android.view.View) f[1]);
+                Context ctx = state != null && state.context != null
+                        ? state.context : appContext(state);
+                Object[] core = null;
+                Object card = null;
+                Object[] island = null;
+                android.view.View container = null;
+                for (Object[] f : features) {
+                    if (!(f[0] instanceof String)) continue;
+                    switch ((String) f[0]) {
+                        case "core":
+                            if (f[1] instanceof Object[]) core = (Object[]) f[1];
+                            break;
+                        case "clock":
+                            if (f[1] instanceof android.view.View) {
+                                container = (android.view.View) f[1];
+                            }
+                            break;
+                        case "mediacard":
+                            card = f[1];
+                            break;
+                        case "island":
+                            if (f[1] instanceof Object[]) island = (Object[]) f[1];
+                            break;
+                        default:
+                            break;
                     }
+                }
+                if (core != null) applyCore(core);
+                if (ctx != null) {
+                    Main.boot(ctx);
+                } else {
+                    Xp.w(TAG + "no context yet; boot waits for the next container attach");
+                }
+                if (card != null) MediaCard.adopt(card, host);
+                if (island != null) {
+                    MiniPlayerRuntime.adopt(
+                            island[0] instanceof android.view.View
+                                    ? (android.view.View) island[0] : null,
+                            island.length > 1 ? island[1] : null);
+                }
+                if (container != null) {
+                    Main.onContainerAttached(container);
+                } else {
+                    Xp.log(TAG + "adopted with no clock container; the next attach puts it up");
                 }
             } catch (Throwable t) {
                 Xp.w(TAG + "adopt on main failed: " + t);
@@ -371,6 +448,51 @@ public final class HotReload {
                 sAdoptingBoot = false;
             }
         });
+    }
+
+    /** The token and the two flags that only the retiring generation knew. */
+    private static void applyCore(Object[] core) {
+        if (core.length > 0 && core[0] instanceof String) {
+            ProbeGuard.adoptToken((String) core[0]);
+        }
+        if (core.length > 1 && core[1] instanceof Boolean) {
+            Main.sVideoWallpaper = (Boolean) core[1];
+        }
+        if (core.length > 2 && core[2] instanceof Boolean) {
+            Main.sDepthHidden = (Boolean) core[2];
+        }
+    }
+
+    /**
+     * Hooks a feature installs the first time it sees a class loader that is not SystemUI's -
+     * the control-centre plugin, mostly. That loader was constructed long ago, so the watcher
+     * that found it will not fire again; the new generation re-runs the same soft installs
+     * against the loader the old handles name. Everything else either re-arms from the attach
+     * path or is installed by {@link Main#installSystemUi}.
+     */
+    private static void backfill(ClassLoader host, List<XposedInterface.HookHandle> old) {
+        java.util.Set<ClassLoader> others = new java.util.LinkedHashSet<>();
+        for (XposedInterface.HookHandle h : old) {
+            Executable e = h.getExecutable();
+            ClassLoader l = e == null ? null : e.getDeclaringClass().getClassLoader();
+            if (l != null && l != host) others.add(l);
+        }
+        for (ClassLoader l : others) {
+            try {
+                HyperTweaks.adoptPlugin(l);
+            } catch (Throwable t) {
+                Xp.w(TAG + "soft-glass backfill from " + l + " failed: " + t);
+            }
+            try {
+                AmapFocus.adopt(l);
+            } catch (Throwable t) {
+                Xp.w(TAG + "amap-focus backfill from " + l + " failed: " + t);
+            }
+        }
+        if (!others.isEmpty()) {
+            Xp.log(TAG + "delayed hooks re-armed from " + others.size()
+                    + " secondary class loader(s)");
+        }
     }
 
     // ---------------------------------------------------------------- circuit breaker

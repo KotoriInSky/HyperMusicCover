@@ -91,6 +91,25 @@ final class SystemUiRetire {
         return out;
     }
 
+    /**
+     * The real retirement's main-thread step, called by {@link HotReload} through
+     * {@code Gen.retire(timeout, this)}. Unlike the dry run there is no put-it-back afterwards:
+     * the next generation rebuilds from the state file and the container the old one handed over.
+     */
+    static void retireForReload() {
+        List<String> warnings = new ArrayList<>();
+        long started = SystemClock.uptimeMillis();
+        retireAll(warnings);
+        Xp.log(HotReload.TAG + "SystemUI teardown ms=" + (SystemClock.uptimeMillis() - started)
+                + " warnings=" + warnings);
+    }
+
+    /**
+     * Every group, in the one order that works: the things that hang off the clock go before the
+     * clock, and the session listeners last, because the others still ask the controller
+     * questions as they let go. A null [warnings] means "log and carry on" - the real
+     * retirement cannot refuse once it has committed.
+     */
     private static void retireAll(List<String> warnings) {
         group(warnings, "lyrics", SystemUiRetire::retireLyrics);
         group(warnings, "cover", SystemUiRetire::retireCover);
@@ -110,7 +129,8 @@ final class SystemUiRetire {
         try {
             r.run();
         } catch (Throwable t) {
-            warnings.add(name + ": " + t);
+            if (warnings != null) warnings.add(name + ": " + t);
+            else Xp.w(HotReload.TAG + "teardown group " + name + " failed: " + t);
         }
     }
 

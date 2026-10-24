@@ -193,6 +193,25 @@ object MiniPlayerRuntime {
         }
     }
 
+    /**
+     * What a hot reload hands over: the shortcut row the last controller hung off and the OEM
+     * controller it was built from. Both are host objects. Without them the new generation has
+     * nothing to reattach to - a hot reload does not rebuild the keyguard, so the shortcut hook
+     * that normally supplies this pair will not fire again.
+     */
+    @JvmStatic
+    fun save(): Array<Any?> = arrayOf(lastRoot?.get(), lastShortcutController?.get())
+
+    /** The new generation's half; see [save]. Main thread, like the attach path. */
+    @JvmStatic
+    fun adopt(root: View?, shortcutController: Any?) {
+        if (root == null || !root.isAttachedToWindow) {
+            Xp.log("MCMini: no shortcut row to adopt ($root)")
+            return
+        }
+        scheduleInstall(root, shortcutController)
+    }
+
     @JvmStatic fun install(classLoader: ClassLoader) {
         loader = classLoader
         if (hooksInstalled) return

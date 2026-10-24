@@ -1,4 +1,5 @@
 package com.os4.musiccover.island
+import com.os4.musiccover.Gen
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.Paint
@@ -57,13 +58,13 @@ internal class RollingDigits(private val view: TextView) {
         }
         while (spans.size > text.length) spans.removeAt(spans.size - 1)
         view.text = out
-        view.removeCallbacks(frame)
-        if (spans.any { it.running(now) }) view.postOnAnimation(frame)
+        Gen.removeCallbacksOn(view, frame)
+        if (spans.any { it.running(now) }) Gen.postOnAnimation(view, frame)
     }
 
     /** Back to plain text: the spans go, and nothing is left running. */
     fun clear() {
-        view.removeCallbacks(frame)
+        Gen.removeCallbacksOn(view, frame)
         last = null
         spans.clear()
     }
@@ -71,7 +72,7 @@ internal class RollingDigits(private val view: TextView) {
     private val frame = object : Runnable {
         override fun run() {
             view.invalidate()
-            if (spans.any { it.running(SystemClock.uptimeMillis()) }) view.postOnAnimation(this)
+            if (spans.any { it.running(SystemClock.uptimeMillis()) }) Gen.postOnAnimation(view, this)
         }
     }
 

@@ -66,6 +66,25 @@ public final class ProbeGuard {
     /** This process minted sToken: the one that checks it, not the one that hands it back. */
     private static volatile boolean sMinted;
 
+    /**
+     * The token as it stands, for a hot-reloaded generation to inherit. Null when this process
+     * has not minted (or been given) one yet.
+     */
+    static synchronized String token() {
+        return sMinted ? sToken : null;
+    }
+
+    /**
+     * Takes on the retiring generation's token instead of minting a new one: the wallpaper
+     * process holds the old token and would refuse every hello until it heard a new one.
+     */
+    static synchronized void adoptToken(String token) {
+        if (token == null || token.isEmpty() || sMinted) return;
+        sToken = token;
+        sMinted = true;
+        Xp.log("[MCProbe] token inherited from the previous generation");
+    }
+
     /** SystemUI's half, once: the token it hands the wallpaper process and takes back from it. */
     static synchronized void mint() {
         if (sMinted) return;

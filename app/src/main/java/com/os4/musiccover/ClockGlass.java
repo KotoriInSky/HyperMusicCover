@@ -108,7 +108,7 @@ final class ClockGlass {
         final Boolean want = Main.sCoverMode ? Main.sBrightCover : Main.sBrightOutside;
         final View v = Main.sContainer;
         if (want == null || v == null) return;
-        v.post(() -> {
+        Gen.postOn(v, () -> {
             for (View root : Main.clockRoots()) {
                 for (String id : new String[]{"hour_view", "minute_view", "colon_view"}) {
                     try {
@@ -377,7 +377,7 @@ final class ClockGlass {
     static void setGlass(final boolean on) {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "no clock container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 for (View root : Main.clockRoots()) {

@@ -187,7 +187,7 @@ final class AodColour {
     static void recolorClock() {
         final View v = Main.sContainer;
         if (v == null) return;
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 for (View root : Main.clockRoots()) {
