@@ -107,12 +107,13 @@ public final class ProbeGuard {
         Receiver open = make.get();
         open.trusted = trusted;
         open.tag = tag;
-        ctx.registerReceiver(open, filter, Context.RECEIVER_EXPORTED);
+        Gen.receiver(ctx, open, filter, Context.RECEIVER_EXPORTED);
         Receiver adb = make.get();
         adb.viaDump = true;
         adb.trusted = trusted;
         adb.tag = tag;
-        ctx.registerReceiver(adb, new IntentFilter(filter), DUMP, null, Context.RECEIVER_EXPORTED);
+        Gen.receiver(ctx, adb, new IntentFilter(filter), DUMP, null,
+                Context.RECEIVER_EXPORTED);
     }
 
     /** How often a refused sender is logged: a hostile app could otherwise flood the log. */

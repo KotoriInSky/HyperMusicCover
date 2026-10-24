@@ -190,26 +190,50 @@ public final class Gen {
 
     // ---------------------------------------------------------------- main thread
 
+    /**
+     * The wrapper posted for each runnable, so removeCallbacks can find it: a guarded copy is
+     * a different object from the one the caller holds. A runnable that has run takes itself
+     * out, so this only holds what is still queued.
+     */
+    private static final java.util.Map<Runnable, Runnable> MAIN_POSTED =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     /** Post to the module's main handler; refused once quiescing or inert. */
-    static void post(Runnable r) {
+    public static void post(Runnable r) {
         if (quiescing || inert) return;
-        Main.main().post(guarded(r));
+        Main.main().post(mainGuarded(r));
     }
 
-    static void postDelayed(Runnable r, long ms) {
+    public static void postDelayed(Runnable r, long ms) {
         if (quiescing || inert) return;
-        Main.main().postDelayed(guarded(r), ms);
+        Main.main().postDelayed(mainGuarded(r), ms);
+    }
+
+    /** The counterpart of post/postDelayed; only the handler Gen posted through is targeted. */
+    public static void removeCallbacks(Runnable r) {
+        Runnable g = MAIN_POSTED.remove(r);
+        Main.main().removeCallbacks(g == null ? r : g);
+    }
+
+    private static Runnable mainGuarded(Runnable r) {
+        return MAIN_POSTED.computeIfAbsent(r, key -> new Runnable() {
+            @Override
+            public void run() {
+                MAIN_POSTED.remove(key);
+                if (live()) key.run();
+            }
+        });
     }
 
     /** Post on a host view, and remember it so retirement can take it back out. */
-    static void postOn(View view, Runnable r) {
+    public static void postOn(View view, Runnable r) {
         if (view == null || quiescing || inert) return;
         Runnable g = guarded(r);
         postedOn.add(new PostedOn(view, g));
         view.post(g);
     }
 
-    static void frame(Choreographer.FrameCallback cb) {
+    public static void frame(Choreographer.FrameCallback cb) {
         if (quiescing || inert) return;
         Choreographer c = Choreographer.getInstance();
         Choreographer.FrameCallback wrapped = t -> {
@@ -221,20 +245,24 @@ public final class Gen {
 
     // ---------------------------------------------------------------- threads
 
-    static HandlerThread handlerThread(String name) {
-        HandlerThread t = new HandlerThread(name);
+    public static HandlerThread handlerThread(String name) {
+        return handlerThread(name, android.os.Process.THREAD_PRIORITY_DEFAULT);
+    }
+
+    public static HandlerThread handlerThread(String name, int priority) {
+        HandlerThread t = new HandlerThread(name, priority);
         t.start();
         handlerThreads.add(t);
         return t;
     }
 
-    static ExecutorService executor(String name) {
+    public static ExecutorService executor(String name) {
         ExecutorService e = Executors.newSingleThreadExecutor(r -> new Thread(guarded(r), name));
         executors.add(e);
         return e;
     }
 
-    static Thread thread(String name, Runnable r) {
+    public static Thread thread(String name, Runnable r) {
         Thread t = new Thread(guarded(r), name);
         threads.add(t);
         t.start();
@@ -242,7 +270,7 @@ public final class Gen {
     }
 
     /** A background call with an in-flight count, so retirement can tell whether one is open. */
-    static <T> Future<T> io(Callable<T> c) {
+    public static <T> Future<T> io(Callable<T> c) {
         ioInFlight.incrementAndGet();
         return ioExecutor.submit(() -> {
             try {
@@ -253,30 +281,37 @@ public final class Gen {
         });
     }
 
-    static int ioInFlight() {
+    public static int ioInFlight() {
         return ioInFlight.get();
     }
 
     // ---------------------------------------------------------------- host callbacks
 
-    static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, int flags) {
+    public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, int flags) {
         Intent sticky = c.registerReceiver(r, f, flags);
         receivers.add(new ReceiverReg(c, r));
         return sticky;
     }
 
-    static void observer(ContentResolver cr, Uri uri, boolean descendants, ContentObserver o) {
+    public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, String permission,
+                           Handler handler, int flags) {
+        Intent sticky = c.registerReceiver(r, f, permission, handler, flags);
+        receivers.add(new ReceiverReg(c, r));
+        return sticky;
+    }
+
+    public static void observer(ContentResolver cr, Uri uri, boolean descendants, ContentObserver o) {
         cr.registerContentObserver(uri, descendants, o);
         observers.add(new ObserverReg(cr, o));
     }
 
-    static void prefListener(SharedPreferences p,
+    public static void prefListener(SharedPreferences p,
                              SharedPreferences.OnSharedPreferenceChangeListener l) {
         p.registerOnSharedPreferenceChangeListener(l);
         prefListeners.add(new PrefReg(p, l));
     }
 
-    static void sessionCallback(MediaController c, MediaController.Callback cb, Handler h) {
+    public static void sessionCallback(MediaController c, MediaController.Callback cb, Handler h) {
         c.registerCallback(cb, h);
         sessionCallbacks.add(new SessionReg(c, cb));
     }
@@ -285,27 +320,27 @@ public final class Gen {
      * A listener on a host view whose type varies (pre-draw, layout, attach). Recorded here so
      * retirement can find it; the typed removal is the caller's, by kind.
      */
-    static void treeListener(View v, Object listener) {
+    public static void treeListener(View v, Object listener) {
         treeListeners.add(new TreeReg(v, listener));
     }
 
     // ---------------------------------------------------------------- what we changed
 
     /** A host value we wrote, with the way back. */
-    static <T> void swap(Object owner, String what, T original, Runnable restore) {
+    public static <T> void swap(Object owner, String what, T original, Runnable restore) {
         swaps.add(new Swap(owner, what, original, restore));
         Xp.d("[MCGen] swap " + what + " (had " + original + ")");
     }
 
-    static void ownView(ViewGroup parent, View v) {
+    public static void ownView(ViewGroup parent, View v) {
         ownViews.add(new OwnedView(parent, v));
     }
 
-    static void ownWindow(WindowManager manager, View v) {
+    public static void ownWindow(WindowManager manager, View v) {
         ownWindows.add(new OwnedWindow(manager, v));
     }
 
-    static <A extends Animator> A anim(A a) {
+    public static <A extends Animator> A anim(A a) {
         animators.add(a);
         return a;
     }
@@ -340,6 +375,7 @@ public final class Gen {
                 + " sessionCallbacks=" + sessionCallbacks.size()
                 + " treeListeners=" + treeListeners.size()
                 + " postedOn=" + postedOn.size()
+                + " mainPosted=" + MAIN_POSTED.size()
                 + " frames=" + frames.size()
                 + " swaps=" + swaps.size()
                 + " ownViews=" + ownViews.size()

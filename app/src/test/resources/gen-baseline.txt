@@ -1,0 +1,40 @@
+# Module files still making raw lifecycle/thread/listener calls.
+# Step 2 removes one group at a time; a file not listed must not contain
+# any of the calls GenRulesTest forbids.
+ArtUri.java
+CardVideo.java
+ClockCollapse.java
+ClockMove.java
+ClockRoom.java
+CoverCardLayer.java
+CoverMorphLayer.java
+CoverPalette.java
+CoverPush.java
+Diagnostics.java
+Main.java
+MediaCard.java
+MotionArt.java
+MotionCover.java
+MotionTrace.java
+Prefetch.java
+ProbeReceiver.java
+WallpaperProbe.java
+WallpaperVideo.java
+immersive/CountdownScene.java
+immersive/ImmersiveHost.java
+island/DateStatus.kt
+island/LockIslands.kt
+island/MiniCardMorph.kt
+island/MiniPlayerController.kt
+island/MiniPlayerRuntime.kt
+island/MiniPlayerSqueeze.kt
+island/MiniPlayerView.kt
+lyrics/LockLyrics.java
+lyrics/LyricSource.java
+lyrics/LyricView.java
+lyrics/LyricWindow.java
+lyrics/OnlineLyrics.java
+pickup/PickupIsland.kt
+pickup/PickupObserver.kt
+shade/ShadeBackdrop.java
+transit/AmapTransitScene.java

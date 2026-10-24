@@ -856,7 +856,7 @@ final class HyperTweaks {
             final android.content.ContentResolver cr = ctx.getContentResolver();
             boolean on = android.provider.Settings.Global.getInt(cr, GLOBAL_COLON, 0) != 0;
             sAodColon = on;
-            cr.registerContentObserver(
+            Gen.observer(cr, 
                     android.provider.Settings.Global.getUriFor(GLOBAL_COLON),
                     false,
                     new android.database.ContentObserver(

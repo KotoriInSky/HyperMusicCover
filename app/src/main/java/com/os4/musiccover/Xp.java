@@ -71,7 +71,7 @@ public final class Xp {
         try {
             SharedPreferences prefs = api.getRemotePreferences(LogLevel.GROUP);
             sLevel = prefs.getInt(LogLevel.KEY, LogLevel.NORMAL);
-            prefs.registerOnSharedPreferenceChangeListener(LEVEL_LISTENER);
+            Gen.prefListener(prefs, LEVEL_LISTENER);
             sLevelPrefs = prefs;
         } catch (Throwable t) {
             write(Log.WARN, "[MCLog] log level unavailable, logging at normal: " + t);

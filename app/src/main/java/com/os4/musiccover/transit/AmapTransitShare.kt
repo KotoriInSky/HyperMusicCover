@@ -1,5 +1,6 @@
 package com.os4.musiccover.transit
 import com.os4.musiccover.ProbeGuard
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.content.Intent
 import android.os.Handler
@@ -86,7 +87,7 @@ internal object AmapTransitShare {
     /** 高德's own walking island, posted every second while its walking navigation runs. */
     private const val WALK_ISLAND_STALE_MS = 5_000L
 
-    private val worker: Handler = Handler(HandlerThread("mc-transit").apply { start() }.looper)
+    private val worker: Handler = Handler(Gen.handlerThread("mc-transit").looper)
 
     /** What a line on rails has in its name, where its type does not say so (AmapTransitScene). */
     private val RAIL = arrayOf("号线", "地铁", "城际", "轨道", "铁路", "有轨", "APM", "轻轨", "磁浮", "云巴")

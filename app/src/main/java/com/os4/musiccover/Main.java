@@ -2366,8 +2366,8 @@ public class Main extends XposedModule {
             // Default priority put the composing on a little core and made it swing between
             // 48ms and 196ms for the same picture. This work is on the critical path of a track
             // change, so ask for display priority rather than background.
-            HandlerThread t = new HandlerThread("mc-art", android.os.Process.THREAD_PRIORITY_DISPLAY);
-            t.start();
+            HandlerThread t = Gen.handlerThread("mc-art",
+                    android.os.Process.THREAD_PRIORITY_DISPLAY);
             sWork = new Handler(t.getLooper());
         }
         return sWork;

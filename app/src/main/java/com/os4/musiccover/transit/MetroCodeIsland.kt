@@ -1,6 +1,7 @@
 package com.os4.musiccover.transit
 import com.os4.musiccover.BuildConfig
 import com.os4.musiccover.ProbeGuard
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.app.Application
 import android.app.Notification
@@ -20,8 +21,6 @@ import android.graphics.RectF
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
@@ -191,7 +190,6 @@ internal object MetroCodeIsland {
     /** Where 高德's plan boards and leaves the subway, and when it last said so. */
     private var planStops: Set<String> = emptySet()
     private var planAt = 0L
-    private val main = Handler(Looper.getMainLooper())
     private val entryOver = Runnable { entryTimeout() }
     private val BRACKETS = Regex("[（(][^）)]*[）)]")
 
@@ -264,11 +262,11 @@ internal object MetroCodeIsland {
                 }
             }
         }
-        app.registerReceiver(heard, IntentFilter().apply {
+        Gen.receiver(app, heard, IntentFilter().apply {
             addAction(ACTION_UPDATE)
             addAction(ACTION_COMPLETE)
         }, Context.RECEIVER_EXPORTED)
-        app.registerReceiver(object : BroadcastReceiver() {
+        Gen.receiver(app, object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
                 // Swiped away, or timed out (a timeout sends the delete intent too): down for now,
                 // put up again at the trip's next station ([Trip.popped] keeps this one down).
@@ -292,7 +290,7 @@ internal object MetroCodeIsland {
         ProbeGuard.register(app, IntentFilter(ACTION_TRIP), TAG, { Trips() },
             AMAP, SYSUI, BuildConfig.APPLICATION_ID)
         // adb's shell holds DUMP; nothing else that may send it here does.
-        app.registerReceiver(object : BroadcastReceiver() {
+        Gen.receiver(app, object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
                 resultData = command(i.getStringExtra("json"), i.getStringExtra("do"))
             }
@@ -342,8 +340,8 @@ internal object MetroCodeIsland {
             // No trip: it starts here (tripStations.size == 1, metro_commute_start).
             t.stations += n
             trip = t
-            main.removeCallbacks(entryOver)
-            main.postDelayed(entryOver, ENTRY_MS)
+            Gen.removeCallbacks(entryOver)
+            Gen.postDelayed(entryOver, ENTRY_MS)
             val route = runCatching { commute?.match(s.city, n, t.startedAt) }.getOrNull()
             t.learned = route?.stops.orEmpty()
             Xp.log(TAG + "trip starts at ${s.name}" +
@@ -353,7 +351,7 @@ internal object MetroCodeIsland {
         } else if (n.isNotEmpty() && t.stations.last() != n) {
             t.stations += n
             t.newAt = now
-            main.removeCallbacks(entryOver)
+            Gen.removeCallbacks(entryOver)
             val plan = if (now - planAt < PLAN_STALE_MS) planStops else emptySet()
             remind = n in plan || n in t.learned
             Xp.log(TAG + "in the trip at ${s.name} (station ${t.stations.size}): " + when {
@@ -390,7 +388,7 @@ internal object MetroCodeIsland {
     private fun end(why: String, fareFrom: String = "", fareTo: String = "") {
         val t = trip ?: return
         trip = null
-        main.removeCallbacks(entryOver)
+        Gen.removeCallbacks(entryOver)
         Xp.log(TAG + "trip over (" + t.stations.joinToString(" -> ") + "): $why")
         learn(t, fareFrom, fareTo)
     }
