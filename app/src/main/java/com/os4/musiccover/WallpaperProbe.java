@@ -1290,6 +1290,9 @@ public class WallpaperProbe {
         } catch (Throwable t) {
             Xp.w(TAG + "application hook failed (a cold start still registers): " + t);
         }
+        // What was registered before this point (the log-level preference listener, from
+        // Xp.attach) is install-time, like SystemUI's: a dry run must put it back, not sweep it.
+        Gen.markInstallScope();
     }
 
     private static final String ART_FILE = "mc_art.jpg";
