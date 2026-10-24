@@ -1,15 +1,10 @@
 # Module files still making raw lifecycle/thread/listener calls.
 # Step 2 removes one group at a time; a file not listed must not contain
 # any of the calls GenRulesTest forbids.
-ArtUri.java
 CardVideo.java
-Diagnostics.java
 Main.java
-MediaCard.java
 MotionArt.java
 MotionCover.java
 MotionTrace.java
-Prefetch.java
-ProbeReceiver.java
 WallpaperProbe.java
 WallpaperVideo.java

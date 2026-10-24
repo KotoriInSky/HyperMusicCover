@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
@@ -263,7 +264,7 @@ final class Diagnostics {
         View v = Main.sContainer;
         if (v != null) {
             try {
-                v.getViewTreeObserver().addOnPreDrawListener(sGeomTraceL);
+                Gen.preDraw(v, sGeomTraceL);
                 sGeomTraced = v;
             } catch (Throwable t) {
                 Xp.log(Main.TAG + "geomtrace not installed: " + t);
@@ -277,7 +278,7 @@ final class Diagnostics {
         sGeomTraced = null;
         if (v == null) return;
         try {
-            v.getViewTreeObserver().removeOnPreDrawListener(sGeomTraceL);
+            Gen.unpreDraw(v, sGeomTraceL);
         } catch (Throwable ignored) {
         }
     }
@@ -604,7 +605,7 @@ final class Diagnostics {
                 return true;
             }
         };
-        root.getViewTreeObserver().addOnPreDrawListener(sTrace);
+        Gen.preDraw(root, sTrace);
     }
 
     /**
@@ -668,7 +669,7 @@ final class Diagnostics {
         sTrace = null;
         if (on == null || t == null) return;
         try {
-            on.getViewTreeObserver().removeOnPreDrawListener(t);
+            Gen.unpreDraw(on, t);
         } catch (Throwable ignored) {
         }
     }

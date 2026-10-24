@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.lyrics.LockLyrics;
 import com.os4.musiccover.lyrics.TrackName;
@@ -467,7 +468,7 @@ public final class MediaCard {
                 return true;
             } finally { android.os.Trace.endSection(); } }
         };
-        card.getViewTreeObserver().addOnPreDrawListener(sCardGuard);
+        Gen.preDraw(card, sCardGuard);
         sCardGuarded = card;
         Xp.log(Main.TAG + "media card guard installed");
     }
@@ -489,7 +490,7 @@ public final class MediaCard {
         CardPageButton.release();
         if (d == null || g == null) return;
         try {
-            d.getViewTreeObserver().removeOnPreDrawListener(g);
+            Gen.unpreDraw(d, g);
         } catch (Throwable ignored) {
         }
     }

@@ -815,7 +815,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             final MediaController lw = Main.sWatched;
             final java.io.File lf =
                     new java.io.File(c.getFilesDir(), "mc_local.txt");
-            new Thread(new Runnable() {
+            Gen.thread("MCLocalProbe", new Runnable() {
                 @Override
                 public void run() {
                     // Its own thread: anything thrown here would take SystemUI down.
@@ -839,7 +839,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                         Xp.w(Main.TAG + "local write failed: " + t);
                     }
                 }
-            }, "MCLocalProbe").start();
+            });
             setResultData("looking -> " + lf.getAbsolutePath());
         } else if ("metadump".equals(op)) {
             String d = LyricSource.dumpMetadata(Main.sWatched);
@@ -864,7 +864,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             final String qAlbum = i.getStringExtra("album");
             final long qDur = i.getLongExtra("dur", 0L);
             final java.io.File out = new java.io.File(c.getFilesDir(), "mc_ncm.txt");
-            new Thread(new Runnable() {
+            Gen.thread("MCNcmProbe", new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -896,7 +896,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                         Xp.w(Main.TAG + "ncm write failed: " + t);
                     }
                 }
-            }, "MCNcmProbe").start();
+            });
             setResultData("searching -> " + out.getAbsolutePath());
         } else if ("tweaks".equals(op)) {
             // Which of the HyperOS restrictions actually came off in this process.
@@ -1122,7 +1122,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             if ("fetch".equals(i.getStringExtra("do"))) {
                 final PendingResult receipt = goAsync();
                 async = true;
-                new Thread(() -> {
+                Gen.thread("mc-pickup-cloud", () -> {
                     String said;
                     boolean ok = false;
                     try {
@@ -1139,7 +1139,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                     receipt.setResultData(said);
                     receipt.setResultCode(Main.OP_ACK);
                     receipt.finish();
-                }, "mc-pickup-cloud").start();
+                });
             } else {
                 setResultData(PickupCloud.INSTANCE.describe());
             }
