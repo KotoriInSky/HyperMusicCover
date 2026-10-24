@@ -145,7 +145,7 @@ internal object PickupCodeIsland {
 
     fun install(cl: ClassLoader) {
         runCatching {
-            Xp.hookAll(Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
+            Xp.hookAll("sysui.pickup.top_activity", Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
                 val out = chain.proceed()
                 runCatching {
                     val state = Xp.getObjectField(chain.thisObject, "mState")

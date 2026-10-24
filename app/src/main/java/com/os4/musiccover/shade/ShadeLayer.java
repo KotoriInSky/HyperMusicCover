@@ -57,7 +57,7 @@ public final class ShadeLayer {
     public static void install(ClassLoader cl) {
         try {
             final Class<?> root = Xp.findClass(CLS_WINDOW_ROOT, cl);
-            Xp.hookAllConstructors(root, chain -> {
+            Xp.hookAllConstructors("sysui.shade.root_ctor", root, chain -> {
                 final Object result = chain.proceed();
                 if (chain.getThisObject() instanceof View) sRoot = (View) chain.getThisObject();
                 return result;
@@ -72,7 +72,7 @@ public final class ShadeLayer {
         try {
             sExpansionCls = Xp.findClass(CLS_EXPANSION_ANIMATOR, cl);
             final Class<?> flow = Xp.findClass(CLS_FLOAT_FLOW, cl);
-            Xp.hookAll(flow, "setValue", chain -> {
+            Xp.hookAll("sysui.shade.expansion", flow, "setValue", chain -> {
                 final Object result = chain.proceed();
                 if (chain.getThisObject().getClass() == sExpansionCls) {
                     final java.util.List<Object> a = chain.getArgs();
@@ -88,7 +88,7 @@ public final class ShadeLayer {
 
         try {
             final Class<?> centre = Xp.findClass(CLS_CENTRE_EXPAND, cl);
-            Xp.hookAll(centre, "onExpansionChanged", chain -> {
+            Xp.hookAll("sysui.shade.expansion_change", centre, "onExpansionChanged", chain -> {
                 final Object result = chain.proceed();
                 final java.util.List<Object> a = chain.getArgs();
                 if (a.size() == 1 && a.get(0) instanceof Float) onCentreExpansion((Float) a.get(0));

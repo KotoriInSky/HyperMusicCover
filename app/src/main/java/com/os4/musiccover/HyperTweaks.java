@@ -126,15 +126,15 @@ final class HyperTweaks {
     // ------------------------------------------------------------------ SystemUI
 
     static void systemUi(ClassLoader cl) {
-        openDepthThreshold(cl, "systemui");
+        openDepthThreshold(cl, "systemui", "sysui.depth.threshold");
         keyguardDepth(cl);
         thirdPartyWallpaperDepth(cl);
         softGlassTheme(cl);
-        softGlassPlugin(cl, "systemui");
+        softGlassPlugin(cl, "systemui", "sysui");
         // Nothing found from SystemUI's own loader, which is the normal case: wait for the
         // plugin's loader to be built.
         if (!sPluginHooked) watchForPlugin();
-        clockColon(cl, "systemui", () -> sForceColon);
+        clockColon(cl, "systemui", "sysui.clock.colon", () -> sForceColon);
         mediaBarGlow(cl, () -> sBarGlow);
         coverUnlockFade(cl, Main::coverModeOn);
     }
@@ -169,7 +169,7 @@ final class HyperTweaks {
                     "com.android.keyguard.wallpaper.MiuiKeyguardWallPaperManager", cl);
             Method m = cls.getDeclaredMethod("updateKeyguardWallpaperStateAnim", boolean.class,
                     boolean.class, int.class, boolean.class, boolean.class, Runnable.class);
-            Xp.hook(m, chain -> {
+            Xp.hook("sysui.wallpaper.unlock_fade", m, chain -> {
                 Object[] args = chain.getArgs().toArray();
                 boolean show = (Boolean) args[0];
                 boolean anim = (Boolean) args[1];
@@ -213,7 +213,7 @@ final class HyperTweaks {
         String what = "media-bar-glow";
         try {
             Class<?> cls = Xp.findClass(CLS_MEDIA_BAR, cl);
-            Xp.hookAllConstructors(cls, chain -> {
+            Xp.hookAllConstructors("sysui.media_bar.ctor", cls, chain -> {
                 Object result = chain.proceed();
                 if (wanted.getAsBoolean()) {
                     try {
@@ -236,7 +236,7 @@ final class HyperTweaks {
             // the level 0 path spends on a progress alpha the shader never reads. Restored in a
             // finally, because a touch that throws must not leave the bar drawing the flat way
             // for good.
-            Xp.hookAll(cls, "onTouchEvent", chain -> {
+            Xp.hookAll("sysui.media_bar.touch", cls, "onTouchEvent", chain -> {
                 Object self = chain.getThisObject();
                 if (!sGlowBars.containsKey(self) || hasHeadAnimator(self)) return chain.proceed();
                 Xp.setObjectField(self, "mDeviceLevel", 0);
@@ -447,14 +447,14 @@ final class HyperTweaks {
      * their own copies of the same classes.
      */
     static void aod(ClassLoader cl) {
-        openDepthThreshold(cl, "aod");
+        openDepthThreshold(cl, "aod", "aod.depth.threshold");
         hierarchyBypass(cl);
         aodWallpaperDepth(cl);
         templateLimit(cl);
         historyTrimLimit(cl);
         // The always-on clock is drawn in this process, by the same clock library, so the same
         // hook works - it just has to ask a different place what the switch says.
-        clockColon(cl, "aod", HyperTweaks::aodColonWanted);
+        clockColon(cl, "aod", "aod.clock.colon", HyperTweaks::aodColonWanted);
         reportTo("/data/user/0/com.miui.aod/cache/mc_tweaks.txt");
     }
 
@@ -481,7 +481,7 @@ final class HyperTweaks {
 
     /** The control centre, where the soft glass a global theme switched off actually shows. */
     static void plugin(ClassLoader cl) {
-        softGlassPlugin(cl, "plugin");
+        softGlassPlugin(cl, "plugin", "plugin");
     }
 
     // ------------------------------------------------------------------ depth
@@ -496,13 +496,13 @@ final class HyperTweaks {
      * which time the hook is in place. The field is then overwritten as well, for the build whose
      * initialiser has already run.
      */
-    private static void openDepthThreshold(ClassLoader cl, String where) {
+    private static void openDepthThreshold(ClassLoader cl, String where, String id) {
         try {
             Class<?> thresholdCls = Xp.findClass(CLS_DEPTH_THRESHOLD, cl);
             Class<?> evaluatorCls = Xp.findClass(CLS_DEPTH_EVALUATOR, cl);
             Constructor<?> ctor = thresholdCls.getDeclaredConstructor(double.class);
             ctor.setAccessible(true);
-            Xp.hook(ctor, chain -> {
+            Xp.hook(id, ctor, chain -> {
                 Object[] args = chain.getArgs().toArray();
                 if (args.length == 1 && args[0] instanceof Double
                         && (Double) args[0] == DEPTH_THRESHOLD_STOCK) {
@@ -532,11 +532,11 @@ final class HyperTweaks {
     private static void hierarchyBypass(ClassLoader cl) {
         try {
             Class<?> controller = Xp.findClass(CLS_HIERARCHY_AVOID, cl);
-            Xp.hookAll(controller, "isHierarchyEnable", chain -> {
+            Xp.hookAll("sysui.depth.hierarchy_enable", controller, "isHierarchyEnable", chain -> {
                 Object result = chain.proceed();
                 return userOpenedHierarchy(chain.getThisObject()) ? Boolean.TRUE : result;
             });
-            Xp.hookAll(controller, "onHierarchyEnableChange", chain -> {
+            Xp.hookAll("sysui.depth.hierarchy_change", controller, "onHierarchyEnableChange", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 if (args.length == 2 && userOpenedHierarchy(chain.getThisObject())) {
                     args[0] = Boolean.TRUE;
@@ -570,7 +570,7 @@ final class HyperTweaks {
             return;
         }
         try {
-            Xp.hookAll(interactorCls, "updateAvoidStatus", chain -> {
+            Xp.hookAll("sysui.depth.avoid_status", interactorCls, "updateAvoidStatus", chain -> {
                 clearAvoidState(chain.getThisObject());
                 // Not proceeded with: the OEM's own recomputation is exactly what puts the
                 // avoidance back, so it is replaced rather than followed.
@@ -586,7 +586,7 @@ final class HyperTweaks {
                     continue;
                 }
                 m.setAccessible(true);
-                Xp.hook(m, chain -> {
+                Xp.hook("sysui.depth.alpha", m, chain -> {
                     clearAvoidState(chain.getThisObject());
                     return chain.proceed();
                 });
@@ -609,7 +609,7 @@ final class HyperTweaks {
             Field videoEnable = interactorField.getType().getDeclaredField("depthVideoEnable");
             videoEnable.setAccessible(true);
             Method updateCrop = interactorField.getType().getMethod("updateDeductedImageView");
-            Xp.hookAll(panelCls, "updateShowDepthState", chain -> {
+            Xp.hookAll("sysui.depth.show_state", panelCls, "updateShowDepthState", chain -> {
                 Object panel = chain.getThisObject();
                 sKgPanel = panel;
                 Object interactor = interactorField.get(panel);
@@ -651,7 +651,7 @@ final class HyperTweaks {
             videoEnable.setAccessible(true);
             Field enableInner = interactorCls.getDeclaredField("depthEffectEnableInner");
             enableInner.setAccessible(true);
-            Xp.hookAll(interactorCls, "updateVideoDepthSurface", chain -> {
+            Xp.hookAll("sysui.depth.video_surface", interactorCls, "updateVideoDepthSurface", chain -> {
                 Object result = chain.proceed();
                 Object interactor = chain.getThisObject();
                 Object panel = sKgPanel;
@@ -698,7 +698,7 @@ final class HyperTweaks {
     private static void thirdPartyWallpaperDepth(ClassLoader cl) {
         try {
             Class<?> infoCls = Xp.findClass(CLS_WALLPAPER_INFO, cl);
-            Xp.hookAll(infoCls, "getSupportSubject", chain -> Boolean.TRUE);
+            Xp.hookAll("sysui.depth.support_subject", infoCls, "getSupportSubject", chain -> Boolean.TRUE);
             Class<?> hierarchyCls = Xp.findClass(CLS_HIERARCHY_ENABLE, cl);
             // Nine booleans, one per layout, and all of them yes. Built once: the getter is
             // called per frame in places, and a new instance each time would be litter.
@@ -709,7 +709,7 @@ final class HyperTweaks {
             ctor.setAccessible(true);
             final Object all = ctor.newInstance(
                     true, true, true, true, true, true, true, true, true);
-            Xp.hookAll(infoCls, "getLargeScreenHierarchyEnable", chain -> all);
+            Xp.hookAll("sysui.depth.large_screen_hierarchy", infoCls, "getLargeScreenHierarchyEnable", chain -> all);
             ok("depth-wallpaper:systemui");
         } catch (Throwable t) {
             failed("depth-wallpaper:systemui", t);
@@ -720,12 +720,12 @@ final class HyperTweaks {
     private static void aodWallpaperDepth(ClassLoader cl) {
         try {
             Class<?> infoCls = Xp.findClass(CLS_AOD_WALLPAPER_INFO, cl);
-            Xp.hookAll(infoCls, "getSupportSubject", chain -> Boolean.TRUE);
+            Xp.hookAll("aod.depth.support_subject", infoCls, "getSupportSubject", chain -> Boolean.TRUE);
             Class<?> hierarchyCls = Xp.findClass(CLS_AOD_HIERARCHY_ENABLE, cl);
             Constructor<?> ctor = hierarchyCls.getDeclaredConstructor();
             ctor.setAccessible(true);
             final Object all = ctor.newInstance();
-            Xp.hookAll(infoCls, "getLargeScreenHierarchyEnable", chain -> all);
+            Xp.hookAll("aod.depth.large_screen_hierarchy", infoCls, "getLargeScreenHierarchyEnable", chain -> all);
             ok("depth-wallpaper:aod");
         } catch (Throwable t) {
             failed("depth-wallpaper:aod", t);
@@ -743,7 +743,7 @@ final class HyperTweaks {
             Class<?> modelCls = Xp.findClass(CLS_CROSS_LIST_MODEL, cl);
             Field max = modelCls.getDeclaredField("_maxTemplateCount");
             max.setAccessible(true);
-            Xp.hookAllConstructors(modelCls, chain -> {
+            Xp.hookAllConstructors("aod.editor.template_limit", modelCls, chain -> {
                 Object result = chain.proceed();
                 try {
                     max.setInt(chain.getThisObject(), TEMPLATE_LIMIT);
@@ -780,7 +780,7 @@ final class HyperTweaks {
         try {
             Class<?> daoCls = Xp.findClass(CLS_TEMPLATE_HISTORY_DAO, cl);
             final int shift = TEMPLATE_LIMIT - TEMPLATE_LIMIT_STOCK;
-            Xp.hookAll(daoCls, "getHistoryCount", chain -> {
+            Xp.hookAll("aod.editor.history_count", daoCls, "getHistoryCount", chain -> {
                 Object real = chain.proceed();
                 if (!(real instanceof Integer)) return real;
                 int shifted = (Integer) real - shift;
@@ -795,11 +795,11 @@ final class HyperTweaks {
     // ------------------------------------------------------------------ clock colon
 
     /** The big clock's colon, which some styles drop. Off unless the user asked for it. */
-    private static void clockColon(ClassLoader cl, String where,
+    private static void clockColon(ClassLoader cl, String where, String id,
                                    java.util.function.BooleanSupplier wanted) {
         try {
             Class<?> beanCls = Xp.findClass(CLS_CLOCK_BEAN, cl);
-            Xp.hookAll(beanCls, "isColonShow",
+            Xp.hookAll(id, beanCls, "isColonShow",
                     chain -> wanted.getAsBoolean() ? Boolean.TRUE : chain.proceed());
             ok("clock-colon:" + where);
         } catch (Throwable t) {
@@ -886,7 +886,7 @@ final class HyperTweaks {
     private static void softGlassTheme(ClassLoader cl) {
         try {
             Class<?> materialUtils = Xp.findClass(CLS_MATERIAL_UTILS, cl);
-            Xp.hookAll(materialUtils, "onDefaultThemeChanged", chain -> {
+            Xp.hookAll("sysui.glass.theme_changed", materialUtils, "onDefaultThemeChanged", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 if (args.length == 1) args[0] = Boolean.TRUE;
                 return chain.proceed(args);
@@ -901,7 +901,7 @@ final class HyperTweaks {
             flag.setAccessible(true);
             flag.setBoolean(null, true);
             Class<?> config = Xp.findClass(CLS_CONFIG_CONTROLLER, cl);
-            Xp.hookAll(config, "onConfigurationChanged", chain -> {
+            Xp.hookAll("sysui.glass.config_changed", config, "onConfigurationChanged", chain -> {
                 Object result = chain.proceed();
                 try {
                     flag.setBoolean(null, true);
@@ -943,12 +943,14 @@ final class HyperTweaks {
             Class<?> base = Class.forName("dalvik.system.BaseDexClassLoader");
             for (Constructor<?> ctor : base.getDeclaredConstructors()) {
                 ctor.setAccessible(true);
-                Xp.hook(ctor, chain -> {
+                Xp.hook("sysui.glass.loader_watch", ctor, chain -> {
                     Object result = chain.proceed();
                     if (!sPluginHooked) {
                         Object loader = chain.getThisObject();
                         if (loader instanceof ClassLoader) {
-                            softGlassPlugin((ClassLoader) loader, "plugin");
+                            // The plugin's loader, but still SystemUI's process: the id
+                            // prefix is the process, not where the loader came from.
+                            softGlassPlugin((ClassLoader) loader, "plugin", "sysui");
                         }
                     }
                     return result;
@@ -960,7 +962,7 @@ final class HyperTweaks {
         }
     }
 
-    private static void softGlassPlugin(ClassLoader cl, String where) {
+    private static void softGlassPlugin(ClassLoader cl, String where, String idPrefix) {
         if (sPluginHooked) return;
         Class<?> themeUtils;
         try {
@@ -974,24 +976,28 @@ final class HyperTweaks {
         try {
             for (String name : new String[] {"getDefaultPluginTheme", "getDefaultSysUiTheme"}) {
                 try {
-                    Xp.hookAll(themeUtils, name, chain -> Boolean.TRUE);
+                    Xp.hookAll(idPrefix + ".glass.default_get." + Xp.slug(name), themeUtils, name,
+                            chain -> Boolean.TRUE);
                 } catch (Throwable ignored) {
                     // Not on this build; the other answers still stand.
                 }
             }
             for (String name : new String[] {"updateDefaultPluginTheme", "updateDefaultSysUiTheme"}) {
                 try {
-                    Xp.hookAll(themeUtils, name, chain -> {
-                        Object result = chain.proceed();
-                        forceThemeFlags(themeUtils);
-                        return result;
-                    });
+                    Xp.hookAll(idPrefix + ".glass.default_update." + Xp.slug(name), themeUtils, name,
+                            chain -> {
+                                Object result = chain.proceed();
+                                forceThemeFlags(themeUtils);
+                                return result;
+                            });
                 } catch (Throwable ignored) {
                     // As above.
                 }
             }
             forceThemeFlags(themeUtils);
-            pluginMaterialGuards(themeUtils.getClassLoader() == null ? cl : themeUtils.getClassLoader());
+            pluginMaterialGuards(
+                    themeUtils.getClassLoader() == null ? cl : themeUtils.getClassLoader(),
+                    idPrefix);
             sPluginHooked = true;
             ok("glass-plugin:" + where);
         } catch (Throwable t) {
@@ -1012,17 +1018,18 @@ final class HyperTweaks {
     }
 
     /** Newer builds keep their own copy of the answer; these are the two that ask. */
-    private static void pluginMaterialGuards(ClassLoader cl) {
+    private static void pluginMaterialGuards(ClassLoader cl, String idPrefix) {
         try {
             Class<?> blurCompat = Xp.findClass(CLS_MI_BLUR_COMPAT, cl);
-            Xp.hookAll(blurCompat, "getBackgroundMaterialOpenedInDefaultTheme",
-                    chain -> Boolean.TRUE);
+            Xp.hookAll(idPrefix + ".glass.blur_compat",
+                    blurCompat, "getBackgroundMaterialOpenedInDefaultTheme", chain -> Boolean.TRUE);
         } catch (Throwable t) {
             failed("glass-blur-compat", t);
         }
         try {
             Class<?> controller = Xp.findClass(CLS_DEFAULT_THEME_CONTROLLER, cl);
-            Xp.hookAll(controller, "isDefaultTheme", chain -> Boolean.TRUE);
+            Xp.hookAll(idPrefix + ".glass.default_theme_controller",
+                    controller, "isDefaultTheme", chain -> Boolean.TRUE);
         } catch (Throwable t) {
             failed("glass-default-theme-controller", t);
         }

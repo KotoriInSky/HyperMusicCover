@@ -209,7 +209,7 @@ final class ClockGlass {
         if (sMiGlassGuardArmed) return;
         sMiGlassGuardArmed = true;
         try {
-            Xp.hookAll(View.class, "setMiGlass", chain -> {
+            Xp.hookAll("sysui.clock.glass_set", View.class, "setMiGlass", chain -> {
                 Object self = chain.getThisObject();
                 if (!(self instanceof View) || !declaresGlass((View) self)) return chain.proceed();
                 Object[] args = chain.getArgs().toArray();

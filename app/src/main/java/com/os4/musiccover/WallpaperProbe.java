@@ -674,7 +674,7 @@ public class WallpaperProbe {
                     Class<?>[] pt = m.getParameterTypes();
                     if (pt.length < 2 || pt[0] != int.class
                             || !java.util.Map.class.isAssignableFrom(pt[pt.length - 1])) continue;
-                    Xp.api().hook(m).intercept(chain -> {
+                    Xp.hook("wall.palette.get." + Xp.slug(inner.getSimpleName()), m, chain -> {
                         java.util.List<Object> a = chain.getArgs();
                         int which = (Integer) a.get(0);
                         Object rects = a.get(a.size() - 1);
@@ -759,7 +759,7 @@ public class WallpaperProbe {
         // after it. The keyguard renderer's is built when its surface is created, after this.
         try {
             Class<?> prog = Xp.findClass("com.miui.miwallpaper.opengl.ImageGLProgram", sCl);
-            Xp.hookAll(prog, "getShaderResource", chain -> {
+            Xp.hookAll("wall.shader.resource", prog, "getShaderResource", chain -> {
                 Object r = chain.proceed();
                 if (!(r instanceof String)) return r;
                 String src = (String) r;
@@ -788,7 +788,7 @@ public class WallpaperProbe {
             // Hooking here rather than on WallpaperTexture.getWallpaperBitmap() because
             // thisObject is the renderer, so we can tell the keyguard one from the desktop one
             // and leave the home wallpaper alone.
-            Xp.hookAllLambdas(base, "lambda$onSurfaceCreated$0", chain -> {
+            Xp.hookAllLambdas("wall.render.surface_created", base, "lambda$onSurfaceCreated$0", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 boolean keyguard = chain.getThisObject().getClass().getName().contains("Keyguard");
                 if (!keyguard && args.length > 0 && args[0] instanceof Bitmap
@@ -979,7 +979,7 @@ public class WallpaperProbe {
         try {
             Class<?> tex = Xp.findClass(
                     "com.miui.miwallpaper.opengl.ImageWallpaperRenderer$WallpaperTexture", sCl);
-            Xp.hookAll(tex, "getTextureDimensions", chain -> {
+            Xp.hookAll("wall.texture.dimensions", tex, "getTextureDimensions", chain -> {
                 Object self = chain.getThisObject();
                 if (!sTexFit || self == null) return chain.proceed();
                 // What THIS texture was last given, not what the last upload anywhere was. On a
@@ -1010,7 +1010,7 @@ public class WallpaperProbe {
             Class<?> kg = Xp.findClass(
                     "com.miui.miwallpaper.container.openGL.KeyguardAnimImageWallpaperRenderer",
                     sCl);
-            Xp.hookAll(kg, "getBitmap", chain -> {
+            Xp.hookAll("wall.texture.bitmap", kg, "getBitmap", chain -> {
                 // Not size-checked here on purpose: getBitmap is the SOURCE, and what the
                 // texture ends up being is decided by the lambda above, which does check.
                 Bitmap ov = sUploadOverride;
@@ -1042,7 +1042,7 @@ public class WallpaperProbe {
             Class<?> dr = Xp.findClass(
                     "com.miui.miwallpaper.container.openGL.DesktopAnimImageWallpaperRenderer",
                     sCl);
-            Xp.hookAll(dr, "getBitmap", chain -> {
+            Xp.hookAll("wall.desktop.bitmap", dr, "getBitmap", chain -> {
                 if (!desktopOnLockWanted()) {
                     sDesktopGaveOurs = false;
                     return chain.proceed();
@@ -1072,7 +1072,7 @@ public class WallpaperProbe {
         // frosted copy the notification cards blur against.
         try {
             Class<?> eng = Xp.findClass(CLS_KEYGUARD_ENGINE, sCl);
-            Xp.hookAllConstructors(eng, chain -> {
+            Xp.hookAllConstructors("wall.engine.keyguard_ctor", eng, chain -> {
                 Object result = chain.proceed();
                 sKeyguardEngine = chain.getThisObject();
                 // Read the obfuscated member names off this instance before anything reaches for
@@ -1105,7 +1105,7 @@ public class WallpaperProbe {
             Class<?> base = kg.getSuperclass();
             Xp.log(TAG + "engine base class = " + (base == null ? "null" : base.getName()));
             if (base != null) {
-                Xp.hookAllConstructors(base, chain -> {
+                Xp.hookAllConstructors("wall.engine.base_ctor", base, chain -> {
                     Object result = chain.proceed();
                     Object self = chain.getThisObject();
                     String n = self.getClass().getName();
@@ -1138,7 +1138,7 @@ public class WallpaperProbe {
                 // with its setKeyguardLocked. The no-argument hide is something else - sent from
                 // the screen-on and unlock animations with the lock screen still up.
                 if (m.getParameterCount() != 2) continue;
-                Xp.hook(m, chain -> {
+                Xp.hook("wall.desktop.keyguard_show", m, chain -> {
                     Object r = chain.proceed();
                     if (sSharedLock) onDesktopKeyguard(show);
                     else sDesktopKgShown = show;
@@ -1162,7 +1162,7 @@ public class WallpaperProbe {
         try {
             Class<?> ap = Xp.findClass(
                     "com.miui.miwallpaper.opengl.ordinary.AnimatorProgram", sCl);
-            Xp.hookAll(ap, "setUpMixFrost", chain -> {
+            Xp.hookAll("wall.render.mix_frost", ap, "setUpMixFrost", chain -> {
                 if (sFrostSkipping) return null;
                 return chain.proceed();
             });
@@ -1176,7 +1176,7 @@ public class WallpaperProbe {
         try {
             Class<?> ar = Xp.findClass(
                     "com.miui.miwallpaper.opengl.AnimImageWallpaperRenderer", sCl);
-            Xp.hookAll(ar, "updateMaskLayerStatus", chain -> {
+            Xp.hookAll("wall.render.mask_layer", ar, "updateMaskLayerStatus", chain -> {
                 Object self = chain.getThisObject();
                 Object[] args = chain.getArgs().toArray();
                 if (self == null || args.length != 2 || !(args[1] instanceof Boolean)) {
@@ -1217,7 +1217,7 @@ public class WallpaperProbe {
                     "com.miui.miwallpaper.opengl.ImageWallpaperRenderer", sCl);
             sPlainProgram = Xp.findClass(
                     "com.miui.miwallpaper.opengl.ordinary.AnimImageGLProgram", sCl);
-            Xp.hookAll(base, "onDrawFrame", chain -> {
+            Xp.hookAll("wall.render.draw_frame", base, "onDrawFrame", chain -> {
                 final boolean mine = chain.getThisObject() == sKeyguardRenderer;
                 // The program draw hook reads this to know whose texture it is setting the
                 // dim on. Single GL thread, so a plain flag is enough.
@@ -1258,7 +1258,7 @@ public class WallpaperProbe {
         // go on the current program immediately before its glDrawArrays.
         try {
             Class<?> glw = Xp.findClass("com.miui.miwallpaper.opengl.ImageGLWallpaper", sCl);
-            Xp.hookAll(glw, "draw", chain -> {
+            Xp.hookAll("wall.render.gl_draw", glw, "draw", chain -> {
                 if (sKeyguardDrawing) applyKeepDim();
                 return chain.proceed();
             });
@@ -1267,7 +1267,7 @@ public class WallpaperProbe {
             Xp.w(TAG + "keep-dim uniform hook failed (the KEEP look keeps no dim): " + t);
         }
 
-        Xp.hook(Xp.findMethodExact(Application.class, "onCreate"), chain -> {
+        Xp.hook("wall.app.create", Xp.findMethodExact(Application.class, "onCreate"), chain -> {
             Object result = chain.proceed();
             try {
                 register((Application) chain.getThisObject());
@@ -4081,7 +4081,7 @@ public class WallpaperProbe {
                             && (m.getName().equals("showKeyguardWallpaper")
                             || m.getName().equals("hideKeyguardWallpaper"));
                     final boolean showing = m.getName().equals("showKeyguardWallpaper");
-                    Xp.hook(m, chain -> {
+                    Xp.hook("wall.video.engine_lifecycle", m, chain -> {
                         Object self = chain.getThisObject();
                         noteVideoEngine(self);
                         // Every engine is told when the lock screen shows and hides - the
@@ -4092,7 +4092,7 @@ public class WallpaperProbe {
                     });
                     n++;
                 }
-                Xp.hookAllConstructors(vd, chain -> {
+                Xp.hookAllConstructors("wall.video.engine_ctor", vd, chain -> {
                     Object result = chain.proceed();
                     noteVideoEngine(chain.getThisObject());
                     return result;
@@ -4109,7 +4109,7 @@ public class WallpaperProbe {
         try {
             Class<?> ue = Xp.findClass(
                     "com.miui.miwallpaper.wallpaperservice.UniversalWallpaper$UniversalEngine", sCl);
-            Xp.hookAll(ue, "onVisibilityChanged", chain -> {
+            Xp.hookAll("wall.video.visibility", ue, "onVisibilityChanged", chain -> {
                 Object r = chain.proceed();
                 noteVideoEngine(fieldOfType(chain.getThisObject(),
                         "com.miui.miwallpaper.wallpaperservice.service.EngineService"));
@@ -4303,7 +4303,7 @@ public class WallpaperProbe {
                     || "toString".equals(m.getName())) {
                 continue;
             }
-            Xp.hook(m, chain -> {
+            Xp.hook("wall.video.data_source_get", m, chain -> {
                 Object self = chain.getThisObject();
                 String cover = sCoverVideoPath;
                 if (self != null && self == sActiveEngine && sCoverVideoActive && cover != null) {
@@ -4350,7 +4350,7 @@ public class WallpaperProbe {
                     Xp.findClass(CLS_FASTPLAYER_IMPL, sCl),
                     Xp.findClass("com.miui.miwallpaper.container.video.MediaPlayerImpl", sCl)}) {
                 Method m = impl.getDeclaredMethod(setter, String.class);
-                Xp.hook(m, chain -> {
+                Xp.hook("wall.video.data_source_set", m, chain -> {
                     Object self = chain.getThisObject();
                     String cover = sCoverVideoPath;
                     if (!sCoverVideoActive || cover == null
@@ -4381,13 +4381,13 @@ public class WallpaperProbe {
     private static void hookPlayerLoop() {
         hookPlayerStart();
         try {
-            Xp.hookAll(Xp.findClass(CLS_FASTPLAYER, sCl), "setLoop", LOOP_HOOKER);
+            Xp.hookAll("wall.video.fast_loop", Xp.findClass(CLS_FASTPLAYER, sCl), "setLoop", LOOP_HOOKER);
             Xp.log(TAG + "FastPlayer.setLoop hooked (lock player only)");
         } catch (Throwable t) {
             Xp.w(TAG + "FastPlayer.setLoop hook failed: " + t);
         }
         try {
-            Xp.hookAll(android.media.MediaPlayer.class, "setLooping", LOOP_HOOKER);
+            Xp.hookAll("wall.video.media_looping", android.media.MediaPlayer.class, "setLooping", LOOP_HOOKER);
             Xp.log(TAG + "MediaPlayer.setLooping hooked (lock player only)");
         } catch (Throwable t) {
             Xp.w(TAG + "MediaPlayer.setLooping hook failed: " + t);
@@ -4940,7 +4940,7 @@ public class WallpaperProbe {
 
     private static void hookPlayerStart() {
         try {
-            Xp.hookAll(Xp.findClass(CLS_FASTPLAYER, sCl), "start", chain -> {
+            Xp.hookAll("wall.video.fast_start", Xp.findClass(CLS_FASTPLAYER, sCl), "start", chain -> {
                 long pos = sPreSeekPos;
                 if (pos >= 0 && SystemClock.uptimeMillis() < sPreSeekUntil) {
                     Object eng = sPreSeekEng;
@@ -4967,7 +4967,7 @@ public class WallpaperProbe {
         // The plain shape's player, the same story: its reload is a reset MediaPlayer, and the
         // quarter second from its frame 0 to the seek was frame 0 in every card.
         try {
-            Xp.hookAll(android.media.MediaPlayer.class, "start", chain -> {
+            Xp.hookAll("wall.video.media_start", android.media.MediaPlayer.class, "start", chain -> {
                 long pos = sPreSeekPos;
                 if (pos >= 0 && SystemClock.uptimeMillis() < sPreSeekUntil) {
                     Object eng = sPreSeekEng;
@@ -5184,7 +5184,8 @@ public class WallpaperProbe {
             }
             if (!touches) continue;
             try {
-                Xp.hook(ct, argLogger("<init>"));
+                Xp.hook("wall.probe.ctor_args." + Xp.slug(c.getSimpleName())
+                        + "#" + Xp.slug(Xp.signature(ct)), ct, argLogger("<init>"));
                 n++;
             } catch (Throwable ignored) {
             }
@@ -5198,7 +5199,11 @@ public class WallpaperProbe {
                 }
                 if (!touches) continue;
                 try {
-                    Xp.hook(m, argLogger(m.getName()));
+                    Xp.hook("wall.probe.bitmap_args."
+                            + Xp.slug(m.getDeclaringClass().getSimpleName())
+                            + "." + Xp.slug(m.getName())
+                            + "#" + Xp.slug(Xp.signature(m)),
+                            m, argLogger(m.getName()));
                     n++;
                 } catch (Throwable ignored) {
                 }

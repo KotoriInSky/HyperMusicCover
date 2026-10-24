@@ -409,7 +409,7 @@ internal object LockIslands {
             return
         }
         runCatching {
-            Xp.hookAll(filterClass, "shouldFilterOut") { chain ->
+            Xp.hookAll("sysui.island.filter", filterClass, "shouldFilterOut") { chain ->
                 val hidden = chain.proceed() as Boolean
                 runCatching { consider(chain.thisObject, chain.args, hidden) }
                     .getOrDefault(hidden)
@@ -418,7 +418,7 @@ internal object LockIslands {
         runCatching {
             val pluggable = Xp.findClass("com.android.systemui.statusbar.notification.collection." +
                 "listbuilder.pluggable.Pluggable", classLoader)
-            Xp.hookAll(pluggable, "onCleanup") { chain ->
+            Xp.hookAll("sysui.island.cleanup", pluggable, "onCleanup") { chain ->
                 val result = chain.proceed()
                 if (chain.thisObject === filter?.get()) {
                     endRun()
@@ -435,7 +435,7 @@ internal object LockIslands {
         runCatching {
             val collection = Xp.findClass("com.android.systemui.statusbar.notification.collection." +
                 "NotifCollection", classLoader)
-            Xp.hookAll(collection, "onNotificationRemoved") { chain ->
+            Xp.hookAll("sysui.island.removed", collection, "onNotificationRemoved") { chain ->
                 val result = chain.proceed()
                 (chain.args.firstOrNull() as? StatusBarNotification)?.key?.let { key ->
                     runCatching { CountdownScene.INSTANCE.onRemoved(key) }
@@ -448,7 +448,7 @@ internal object LockIslands {
         runCatching {
             val collection = Xp.findClass("com.android.systemui.statusbar.notification.collection." +
                 "NotifCollection", classLoader)
-            Xp.hookAll(collection, "onNotificationPosted") { chain ->
+            Xp.hookAll("sysui.island.posted", collection, "onNotificationPosted") { chain ->
                 val result = chain.proceed()
                 (chain.args.firstOrNull() as? StatusBarNotification)?.key?.let { key ->
                     val at = android.os.SystemClock.uptimeMillis()

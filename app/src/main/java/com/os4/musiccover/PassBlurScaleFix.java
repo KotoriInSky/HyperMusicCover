@@ -47,7 +47,7 @@ final class PassBlurScaleFix {
             sDrawSfScale.setAccessible(true);
             sCheckSurTexSize = vri.getDeclaredMethod("checkSurTexSize");
             sCheckSurTexSize.setAccessible(true);
-            Xp.hookAll(vri, "getReqSfScale", chain -> {
+            Xp.hookAll("sysui.shade.scale", vri, "getReqSfScale", chain -> {
                 final Object result = chain.proceed();
                 align(chain.getThisObject());
                 return result;

@@ -32,7 +32,7 @@ public final class CoverPalette {
 
     static void install(ClassLoader cl) {
         try {
-            Xp.hookAllConstructors(Xp.findClass(CLS_MGR, cl), chain -> {
+            Xp.hookAllConstructors("sysui.palette.manager_ctor", Xp.findClass(CLS_MGR, cl), chain -> {
                 Object r = chain.proceed();
                 sMgr = chain.getThisObject();
                 return r;

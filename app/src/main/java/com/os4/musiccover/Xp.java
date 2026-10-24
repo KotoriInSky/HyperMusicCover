@@ -174,27 +174,6 @@ public final class Xp {
     // ---------------------------------------------------------------- hooking
 
     /**
-     * Every overload of a name, the way XposedBridge.hookAllMethods worked. The OEM classes this
-     * module hooks are obfuscated and their signatures move between OS versions, so hooking by
-     * name and taking whatever is there has proven far more durable than naming the parameters.
-     */
-    public static List<XposedInterface.HookHandle> hookAll(Class<?> cls, String name,
-                                                    XposedInterface.Hooker hooker) {
-        // Declared methods only, no walk up the hierarchy - the same rule the classic
-        // hookAllMethods followed, and here it is load-bearing: onAttachedToWindow and onDraw
-        // are declared on the OEM classes we mean, but if one ever were not, falling through to
-        // View's would hook every view in SystemUI.
-        List<XposedInterface.HookHandle> handles = new ArrayList<>();
-        for (Method m : cls.getDeclaredMethods()) {
-            if (m.getName().equals(name)) handles.add(api().hook(m).intercept(hooker));
-        }
-        if (handles.isEmpty()) {
-            throw new IllegalArgumentException("no method " + cls.getName() + "." + name);
-        }
-        return handles;
-    }
-
-    /**
      * A lambda body, under either name D8 may have given it.
      *
      * A lambda compiles to a synthetic method called lambda$enclosing$N, but when a subclass
@@ -205,14 +184,16 @@ public final class Xp {
      * threw there, and the caller logged it and carried on - with the one hook that replaces
      * the wallpaper texture not installed, so the cover did nothing at all on that phone.
      */
-    static List<XposedInterface.HookHandle> hookAllLambdas(Class<?> cls, String name,
+    static List<XposedInterface.HookHandle> hookAllLambdas(String id, Class<?> cls, String name,
                                                            XposedInterface.Hooker hooker) {
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         String mangled = name + "$";
         for (Method m : cls.getDeclaredMethods()) {
             String n = m.getName();
             if (n.equals(name) || n.startsWith(mangled)) {
-                handles.add(api().hook(m).intercept(hooker));
+                // The plain and the mangled body can share a signature; the name is part of the
+                // id so the pair stays two hooks rather than one replacing the other.
+                handles.add(hook(id + "#" + n + "(" + signature(m) + ")", m, hooker));
             }
         }
         if (handles.isEmpty()) {
@@ -222,13 +203,8 @@ public final class Xp {
         return handles;
     }
 
-    public static XposedInterface.HookHandle hook(Executable target, XposedInterface.Hooker hooker) {
-        return api().hook(target).intercept(hooker);
-    }
-
     /**
-     * A hook carrying an identity, for hot reload (Step 0 of the plan; the rest of the module
-     * still installs without one).
+     * A hook carrying an identity, for hot reload. Every hook in the module goes through here.
      *
      * <p>The id is the handle's name across versions. When adoption already holds an old handle
      * with this id and this exact executable, the hook replaces it in place; otherwise it is
@@ -255,9 +231,14 @@ public final class Xp {
     }
 
     /**
-     * {@link #hookAll(Class, String, XposedInterface.Hooker)} with an id per overload:
-     * {@code id + "#" + parameter simple names}. The suffix depends only on the OEM signature,
-     * which R8 does not touch, so it survives our own obfuscation.
+     * Every overload of a name, the way XposedBridge.hookAllMethods worked, with an id per
+     * overload: {@code id + "#" + parameter simple names}. The suffix depends only on the OEM
+     * signature, which R8 does not touch, so it survives our own obfuscation.
+     *
+     * <p>Declared methods only, no walk up the hierarchy - the same rule the classic
+     * hookAllMethods followed, and here it is load-bearing: onAttachedToWindow and onDraw are
+     * declared on the OEM classes we mean, but if one ever were not, falling through to View's
+     * would hook every view in SystemUI.
      */
     public static List<XposedInterface.HookHandle> hookAll(String id, Class<?> cls, String name,
                                                     XposedInterface.Hooker hooker) {
@@ -271,7 +252,26 @@ public final class Xp {
         return handles;
     }
 
-    private static String signature(Executable e) {
+    /**
+     * An OEM class or method name folded into an id segment: lower case, and an underscore
+     * where a capital was. Those names are literals in our source or come off the target class,
+     * neither of which R8 touches, so the segment is as stable as the hook itself.
+     */
+    public static String slug(String name) {
+        StringBuilder b = new StringBuilder(name.length() + 8);
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (b.length() > 0) b.append('_');
+                b.append(Character.toLowerCase(c));
+            } else {
+                b.append(c);
+            }
+        }
+        return b.toString();
+    }
+
+    public static String signature(Executable e) {
         StringBuilder b = new StringBuilder();
         for (Class<?> p : e.getParameterTypes()) {
             if (b.length() > 0) b.append(',');
@@ -280,11 +280,12 @@ public final class Xp {
         return b.length() == 0 ? "()" : b.toString();
     }
 
-    public static List<XposedInterface.HookHandle> hookAllConstructors(Class<?> cls,
+    /** Every constructor, id per signature: {@code id + "#<init>(" + parameters + ")"}. */
+    public static List<XposedInterface.HookHandle> hookAllConstructors(String id, Class<?> cls,
                                                                 XposedInterface.Hooker hooker) {
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         for (Constructor<?> c : cls.getDeclaredConstructors()) {
-            handles.add(api().hook(c).intercept(hooker));
+            handles.add(hook(id + "#<init>(" + signature(c) + ")", c, hooker));
         }
         return handles;
     }

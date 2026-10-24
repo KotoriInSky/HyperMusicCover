@@ -47,7 +47,7 @@ internal object PaletteThrottle {
             return
         }
         runCatching {
-            Xp.hookAll(cls, NAME) { chain ->
+            Xp.hookAll("sysui.palette.throttle", cls, NAME) { chain ->
                 if (passing || Looper.myLooper() != Looper.getMainLooper()) {
                     return@hookAll chain.proceed()
                 }

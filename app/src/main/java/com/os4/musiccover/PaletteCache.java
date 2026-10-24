@@ -70,7 +70,7 @@ final class PaletteCache {
                 if (!deep && !(paletteToo && "getMiuiWallpaperPalette".equals(name))) continue;
                 if (!asked(m)) continue;
                 try {
-                    Xp.api().hook(m).intercept(chain -> proceed(chain, name));
+                    Xp.hook("wall.palette.cache." + Xp.slug(name), m, chain -> proceed(chain, name));
                     hooked++;
                 } catch (Throwable t) {
                     Xp.log(TAG + name + " not cached: " + t);
@@ -127,7 +127,7 @@ final class PaletteCache {
             }
             file.setAccessible(true);
             sFileOf = file;
-            Xp.api().hook(decode).intercept(PaletteCache::decoded);
+            Xp.hook("wall.palette.decode", decode, PaletteCache::decoded);
             Xp.log(TAG + "decode kept through " + decode.getName());
         } catch (Throwable t) {
             Xp.log(TAG + "decode not kept: " + t);

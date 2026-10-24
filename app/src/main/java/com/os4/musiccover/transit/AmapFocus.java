@@ -79,7 +79,7 @@ public final class AmapFocus {
             Class<?> base = Class.forName("dalvik.system.BaseDexClassLoader");
             for (Constructor<?> ctor : base.getDeclaredConstructors()) {
                 ctor.setAccessible(true);
-                Xp.hook(ctor, chain -> {
+                Xp.hook("sysui.amap_focus.loader_watch", ctor, chain -> {
                     Object result = chain.proceed();
                     if (!sHooked.get() && chain.getThisObject() instanceof ClassLoader) {
                         soft((ClassLoader) chain.getThisObject(), "loader");
@@ -106,7 +106,7 @@ public final class AmapFocus {
             int hooked = 0;
             for (String name : ASKED) {
                 try {
-                    Xp.hookAll(cls, name, chain -> {
+                    Xp.hookAll("sysui.amap_focus." + Xp.slug(name), cls, name, chain -> {
                         final java.util.List<Object> a = chain.getArgs();
                         final Object arg = a != null && !a.isEmpty() ? a.get(0) : null;
                         if (AMAP.equals(arg) || ASSISTANT.equals(arg) || SYSUI.equals(arg)) {

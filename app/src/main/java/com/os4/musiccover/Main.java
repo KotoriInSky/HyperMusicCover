@@ -744,18 +744,18 @@ public class Main extends XposedModule {
      * one that fired. Its own try, like every hook here: a build without the method must not cost
      * the others. `cls` is a class name looked up now, `owner` a class already in hand.
      */
-    private static void armLeave(ClassLoader cl, String cls, String method, String tag) {
+    private static void armLeave(ClassLoader cl, String cls, String method, String tag, String id) {
         try {
-            armLeave(Xp.findClass(cls, cl), method, tag);
+            armLeave(Xp.findClass(cls, cl), method, tag, id);
         } catch (Throwable t) {
             LockLyrics.armed("!" + tag);
             Xp.log(TAG + "leaving hook " + tag + " has no class: " + t);
         }
     }
 
-    private static void armLeave(Class<?> owner, String method, String tag) {
+    private static void armLeave(Class<?> owner, String method, String tag, String id) {
         try {
-            Xp.hookAll(owner, method, chain -> {
+            Xp.hookAll(id, owner, method, chain -> {
                 LockLyrics.lockScreenLeaving(tag);
                 main().post(ImmersiveHost::onLockScreenLeaving);
                 // At once rather than on the window's next pre-draw (coverCardVisible says why).
@@ -940,7 +940,7 @@ public class Main extends XposedModule {
 
     private static void hookContainerAttach() {
         try {
-            Xp.hookAll(sContainerCls, "onAttachedToWindow", chain -> {
+            Xp.hookAll("sysui.clock.container_attach", sContainerCls, "onAttachedToWindow", chain -> {
                 Object result = chain.proceed();
                 CoverMorphLayer.cancel();
                 sContainer = (View) chain.getThisObject();
@@ -1036,7 +1036,7 @@ public class Main extends XposedModule {
         // The keyguard is rebuilt on every screen-off/on, so a captured instance goes
         // stale. Drop it on detach and always drive the currently attached one.
         try {
-            Xp.hookAll(sContainerCls, "onDetachedFromWindow", chain -> {
+            Xp.hookAll("sysui.clock.container_detach", sContainerCls, "onDetachedFromWindow", chain -> {
                 Object result = chain.proceed();
                 if (sContainer == chain.getThisObject()) {
                     CoverMorphLayer.cancel();
@@ -1062,7 +1062,7 @@ public class Main extends XposedModule {
         // already have drawn one frame of its full-size clock - which is the flash this prevents.
         try {
             Class<?> ks = Xp.findClass("com.android.systemui.keyguard.KeyguardService$2", cl);
-            Xp.hookAll(ks, "onStartedGoingToSleep", chain -> {
+            Xp.hookAll("sysui.screen.sleep", ks, "onStartedGoingToSleep", chain -> {
                 Object result = chain.proceed();
                 main().post(new Runnable() {
                     @Override
@@ -1089,10 +1089,11 @@ public class Main extends XposedModule {
             // screen comes back, so both ends of a doze read as a dismissal and the lyrics vanished
             // on every screen-off (user, 2026-09-29), and `hideLocked`/`keyguardDone` are not the
             // unlock on this build.
-            armLeave(ks, "startKeyguardExitAnimation", "exit");
+            armLeave(ks, "startKeyguardExitAnimation", "exit", "sysui.lyrics.leave.exit");
             armLeave(cl, "com.android.keyguard.injector.KeyguardViewMediatorInjector",
-                    "startKeyguardExitAnimationByInteractiveOrFullAODUnlockAnimation", "inj");
-            Xp.hookAll(ks, "onStartedWakingUp", chain -> {
+                    "startKeyguardExitAnimationByInteractiveOrFullAODUnlockAnimation", "inj",
+                    "sysui.lyrics.leave.inj");
+            Xp.hookAll("sysui.screen.wake", ks, "onStartedWakingUp", chain -> {
                 ClockCollapse.noteWaking();
                 main().post(new Runnable() {
                     @Override
@@ -1136,11 +1137,11 @@ public class Main extends XposedModule {
         try {
             Class<?> tc = Xp.findClass("android.media.session.MediaController$TransportControls",
                     cl);
-            Xp.hookAll(tc, "skipToNext", chain -> {
+            Xp.hookAll("sysui.transport.next", tc, "skipToNext", chain -> {
                 CoverPush.noteSkip(1);
                 return chain.proceed();
             });
-            Xp.hookAll(tc, "skipToPrevious", chain -> {
+            Xp.hookAll("sysui.transport.previous", tc, "skipToPrevious", chain -> {
                 CoverPush.noteSkip(-1);
                 return chain.proceed();
             });
@@ -1165,7 +1166,7 @@ public class Main extends XposedModule {
         // the OEM starts growing its glyphs from the AOD size - so the collapse starts from the
         // clock the AOD was showing and absorbs the OEM's growth, instead of racing it.
         try {
-            Xp.hookAll(sContainerCls, "doAnimationToAod", chain -> {
+            Xp.hookAll("sysui.aod.transition", sContainerCls, "doAnimationToAod", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 boolean toAod = args.length > 0 && Boolean.TRUE.equals(args[0]);
                 if (clockHeld() && toAod) {
@@ -1205,7 +1206,7 @@ public class Main extends XposedModule {
         try {
             Class<?> depth = Xp.findClass(
                     "com.android.keyguard.depth.KeyguardDepthInteractor", cl);
-            Xp.hookAll(depth, "updateDeductedImageView", chain -> {
+            Xp.hookAll("sysui.depth.deducted_image", depth, "updateDeductedImageView", chain -> {
                 sDepthInteractor = chain.getThisObject();
                 Object result = chain.proceed();
                 if (sDepthHidden) {
@@ -1232,7 +1233,7 @@ public class Main extends XposedModule {
         // ImageView declares its own setVisibility, so this sees ImageViews only, and it acts on
         // exactly one of them.
         try {
-            Xp.hookAll(android.widget.ImageView.class, "setVisibility", chain -> {
+            Xp.hookAll("sysui.depth.image_visibility", android.widget.ImageView.class, "setVisibility", chain -> {
                 if (!sOwnDepthWrite && chain.getThisObject() == sDeductedRef) {
                     Object a = chain.getArgs().get(0);
                     if (a instanceof Integer) sDeductedWanted = (Integer) a;
@@ -1265,7 +1266,7 @@ public class Main extends XposedModule {
         // to act on the cover as it always has.
         try {
             Class<?> kpvc = Xp.findClass("com.android.keyguard.panel.KeyguardPanelViewController", cl);
-            Xp.hookAll(kpvc, "doDeductedImageScaleAnim", chain -> {
+            Xp.hookAll("sysui.depth.scale_anim", kpvc, "doDeductedImageScaleAnim", chain -> {
                 Object[] a = chain.getArgs().toArray();
                 if (a.length > 0 && a[0] instanceof Float) {
                     CoverPush.sAodShrink = (Float) a[0] - 0.05f;
@@ -1288,7 +1289,7 @@ public class Main extends XposedModule {
         // root it was set on; the first-frame signal re-asserts both. See reassertAodDim().
         try {
             Class<?> vri = Xp.findClass("android.view.ViewRootImpl", cl);
-            Xp.hookAll(vri, "setWallpaperBlack", chain -> {
+            Xp.hookAll("sysui.wallpaper.black", vri, "setWallpaperBlack", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 if (args.length == 1 && args[0] instanceof Float) {
                     float v = (Float) args[0];
@@ -1318,7 +1319,7 @@ public class Main extends XposedModule {
         // singleton built during SystemUI startup, so the hook has to be in before that.
         try {
             Class<?> wp = Xp.findClass(CLS_KG_WALLPAPER_MANAGER, cl);
-            Xp.hookAllConstructors(wp, chain -> {
+            Xp.hookAllConstructors("sysui.wallpaper.manager_ctor", wp, chain -> {
                 Object result = chain.proceed();
                 sKgWallpaperMgr = chain.getThisObject();
                 return result;
@@ -1354,7 +1355,7 @@ public class Main extends XposedModule {
         // stays NaN for the life of the process otherwise), and held because the system's own
         // re-assertions arrive here on these styles and would otherwise undo the squeeze.
         try {
-            Xp.hookAll(sContainerCls, "notifStateChange", chain -> {
+            Xp.hookAll("sysui.notif.state_change", sContainerCls, "notifStateChange", chain -> {
                 // Anyone calling this is by definition the live instance.
                 sContainer = (View) chain.getThisObject();
                 if (ClockViews.findClockView(sContainer, "time_group") != null) {
@@ -1413,10 +1414,10 @@ public class Main extends XposedModule {
                 return chain.proceed(args);
             };
             for (String m : new String[]{"setSizeInternal", "setWidth", "setHeight", "setWeight"}) {
-                Xp.hookAll(timeView, m, axisLog);
+                Xp.hookAll("sysui.clock.text_axis." + Xp.slug(m), timeView, m, axisLog);
             }
             // Its bounds are computed inside its own draw; see ClockCollapse.onGlyphDrawn().
-            Xp.hookAll(timeView, "onDraw", chain -> {
+            Xp.hookAll("sysui.clock.glyph_draw", timeView, "onDraw", chain -> {
                 Object result = chain.proceed();
                 ClockCollapse.onGlyphDrawn((View) chain.getThisObject());
                 return result;
@@ -1437,14 +1438,14 @@ public class Main extends XposedModule {
             //
             // The lightness is not touched here, and setBrightness - which carries the material's
             // own dark/light flag and used to be hooked alongside these - deliberately is not.
-            Xp.hookAll(timeView, "setGlassColor", chain -> {
+            Xp.hookAll("sysui.clock.glass_color", timeView, "setGlassColor", chain -> {
                 View self = (View) chain.getThisObject();
                 if (!ClockGlass.glassStyleFor(self)) return chain.proceed();
                 Object[] args = chain.getArgs().toArray();
                 args[0] = legible(self, (Integer) args[0]);
                 return chain.proceed(args);
             });
-            Xp.hookAll(timeView, "setTextColor", chain -> {
+            Xp.hookAll("sysui.clock.text_color", timeView, "setTextColor", chain -> {
                 View self = (View) chain.getThisObject();
                 if (!ClockGlass.glassStyleFor(self)) return chain.proceed();
                 Object[] args = chain.getArgs().toArray();
@@ -1460,7 +1461,7 @@ public class Main extends XposedModule {
             // wallpaper it says "dark" and the clock over the cover turns near black. It fires on
             // a wake, and sometimes just after an entry. So in cover mode the switch follows the
             // palette the OEM computed for the cover; out of it, whatever the OEM says.
-            Xp.hookAll(timeView, "setBrightness", chain -> {
+            Xp.hookAll("sysui.clock.brightness", timeView, "setBrightness", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 if (!sCoverMode) {
                     if (sScreenOn && args[0] instanceof Boolean) sBrightOutside = (Boolean) args[0];
@@ -1470,7 +1471,7 @@ public class Main extends XposedModule {
                 return chain.proceed(args);
             });
             try {
-                Xp.hookAll(Xp.findClass("com.miui.clock.MiuiGalleryBaseClock",
+                Xp.hookAll("sysui.clock.palette", Xp.findClass("com.miui.clock.MiuiGalleryBaseClock",
                         timeView.getClassLoader()), "setClockPalette", chain -> {
                     java.util.List<Object> a = chain.getArgs();
                     // Only a palette that came with its colours: the ones the OEM computes from a
@@ -1494,7 +1495,7 @@ public class Main extends XposedModule {
         // per-frame driving - lands here, so this is where ownership is enforced.
         try {
             Class<?> interactor = Xp.findClass(CLS_INTERACTOR, cl);
-            Xp.hookAll(interactor, "setNotifY", chain -> {
+            Xp.hookAll("sysui.clock.notif_y", interactor, "setNotifY", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 float requested = (Float) args[0];
                 // Only the system's own emissions tell us where the clock really

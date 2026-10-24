@@ -712,7 +712,7 @@ public final class MediaCard {
         // which is exactly what we want: pausing leaves the card up, so it leaves the cover up.
         try {
             Class<?> card = Xp.findClass(Main.CLS_MEDIA_CARD, cl);
-            Xp.hookAll(card, "access$setTopMediaData", chain -> {
+            Xp.hookAll("sysui.mediacard.top_data", card, "access$setTopMediaData", chain -> {
                 java.util.List<Object> args = chain.getArgs();
                 if (!args.isEmpty()) listenTo(args.get(0), cl);
                 Object result = chain.proceed();
@@ -730,7 +730,7 @@ public final class MediaCard {
         }
         try {
             Class<?> card = Xp.findClass(Main.CLS_MEDIA_CARD, cl);
-            Xp.hookAllConstructors(card, chain -> {
+            Xp.hookAllConstructors("sysui.mediacard.ctor", card, chain -> {
                 Object result = chain.proceed();
                 listenTo(chain.getThisObject(), cl);
                 return result;

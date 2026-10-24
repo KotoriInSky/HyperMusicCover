@@ -197,13 +197,13 @@ internal object DateStatus {
             return
         }
         runCatching {
-            Xp.hookAll(cls, "onMeasure") { chain ->
+            Xp.hookAll("sysui.datestatus.classic_measure", cls, "onMeasure") { chain ->
                 val result = chain.proceed()
                 runCatching { measured(chain.thisObject as TextView, (chain.args[0] as Number).toInt()) }
                     .onFailure { Xp.log(TAG + "measure: $it") }
                 result
             }
-            Xp.hookAll(cls, "onDraw") { chain ->
+            Xp.hookAll("sysui.datestatus.classic_draw", cls, "onDraw") { chain ->
                 val v = chain.thisObject as TextView
                 val host = hosts[v]
                 val canvas = chain.args[0] as Canvas
@@ -226,7 +226,7 @@ internal object DateStatus {
             return
         }
         runCatching {
-            Xp.hookAll(cls, "updateIndication") { chain ->
+            Xp.hookAll("sysui.datestatus.indication_update", cls, "updateIndication") { chain ->
                 val type = (chain.args[0] as? Number)?.toInt()
                 if (passing || type == null || type !in MOVED || chain.args.size != 3) {
                     return@hookAll chain.proceed()
@@ -255,7 +255,7 @@ internal object DateStatus {
             }
             // Withheld, the controller has nothing under the type and returns early; this is how
             // we hear that it went.
-            Xp.hookAll(cls, "hideIndication") { chain ->
+            Xp.hookAll("sysui.datestatus.indication_hide", cls, "hideIndication") { chain ->
                 val type = (chain.args.getOrNull(0) as? Number)?.toInt()
                 if (!passing && type != null && type in MOVED) {
                     controllerRef = WeakReference(chain.thisObject)
@@ -276,7 +276,7 @@ internal object DateStatus {
             return
         }
         runCatching {
-            Xp.hookAll(cls, "onMeasure") { chain ->
+            Xp.hookAll("sysui.datestatus.numstate_measure", cls, "onMeasure") { chain ->
                 val result = chain.proceed()
                 val v = chain.thisObject as View
                 numStateRef = WeakReference(v)

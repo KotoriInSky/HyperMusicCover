@@ -60,7 +60,7 @@ internal object RideCodeExit {
     /** SystemUI's loader. Each hook stands on its own. */
     fun install(cl: ClassLoader) {
         runCatching {
-            Xp.hookAll(Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
+            Xp.hookAll("sysui.ride_exit.top_activity", Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
                 val out = chain.proceed()
                 runCatching {
                     val state = Xp.getObjectField(chain.thisObject, "mState")
@@ -73,7 +73,7 @@ internal object RideCodeExit {
         runCatching {
             // postNotification(Ranking, StatusBarNotification): the collection's own entry for a
             // post (this build has no onNotificationPosted of its own; its handler calls this).
-            Xp.hookAll(Xp.findClass(NOTIF_COLLECTION, cl), "postNotification") { chain ->
+            Xp.hookAll("sysui.ride_exit.notification", Xp.findClass(NOTIF_COLLECTION, cl), "postNotification") { chain ->
                 val out = chain.proceed()
                 val sbn = chain.args.firstOrNull { it is StatusBarNotification } as? StatusBarNotification
                 if (sbn?.packageName == MI_CARD) {

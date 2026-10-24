@@ -83,7 +83,7 @@ internal object AmapImmerse {
         appLoader = cl
         try {
             val instr = Xp.findClass("android.app.Instrumentation", cl)
-            Xp.hookAll(instr, "callApplicationOnCreate") { chain ->
+            Xp.hookAll("amap.immerse.app_create", instr, "callApplicationOnCreate") { chain ->
                 val out = chain.proceed()
                 try {
                     val app = chain.args[0] as Application
@@ -98,12 +98,12 @@ internal object AmapImmerse {
         }
         try {
             val module = Xp.findClass(MODULE, cl)
-            Xp.hookAllConstructors(module) { chain ->
+            Xp.hookAllConstructors("amap.immerse.module_ctor", module) { chain ->
                 val out = chain.proceed()
                 Xp.log(TAG + "module built #" + modules.incrementAndGet())
                 out
             }
-            Xp.hookAll(module, "init") { chain ->
+            Xp.hookAll("amap.immerse.init", module, "init") { chain ->
                 lastConfig = chain.args.getOrNull(0) as String?
                 lastInitAt = SystemClock.uptimeMillis()
                 Xp.log(TAG + "init #" + inits.incrementAndGet() + " config=" + lastConfig)
@@ -112,7 +112,7 @@ internal object AmapImmerse {
                 tell(true)
                 out
             }
-            Xp.hookAll(module, "destroy") { chain ->
+            Xp.hookAll("amap.immerse.destroy", module, "destroy") { chain ->
                 Xp.log(TAG + "destroy")
                 armed = false
                 previewCallback = false
@@ -124,7 +124,7 @@ internal object AmapImmerse {
             // without a word ("sendPreviewCommandToAjx: no callbacks registered").
             for (name in CALLBACKS) {
                 try {
-                    Xp.hookAll(module, name) { chain ->
+                    Xp.hookAll("amap.immerse.callback." + Xp.slug(name), module, name) { chain ->
                         val cb = chain.args.getOrNull(0)
                         if (name == PREVIEW_CALLBACK) previewCallback = cb != null
                         Xp.log(TAG + "page " + name + (if (cb == null) " cleared" else ""))
@@ -147,7 +147,7 @@ internal object AmapImmerse {
                     it.parameterTypes[0] == java.lang.Boolean.TYPE
             }
             for (m in preview) {
-                Xp.hook(m) { chain ->
+                Xp.hook("amap.immerse.preview_command", m) { chain ->
                     Xp.log(TAG + "overview to the page: isPreview=" + chain.args[0] +
                         " previewCallback=" + previewCallback + " config=" + lastConfig)
                     chain.proceed()

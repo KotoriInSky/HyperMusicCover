@@ -384,7 +384,7 @@ final class Fingerprint {
         // has read its settings at all - see peekHideFp, which is what both of them start with.
         try {
             Class<?> anim = Xp.findClass(CLS_FOD_ANIM, cl);
-            Xp.hookAll(anim, "draw", chain -> {
+            Xp.hookAll("sysui.fp.anim_draw", anim, "draw", chain -> {
                 Object[] args = chain.getArgs().toArray();
                 // The print's own window is painted before the keyguard's clock container
                 // attaches, so the setting has to be fetched here rather than waited for.
@@ -413,7 +413,7 @@ final class Fingerprint {
     static void hookFingerprintIcon(final ClassLoader cl) {
         try {
             Class<?> iconCls = Xp.findClass(CLS_FOD_ICON, cl);
-            Xp.hookAllConstructors(iconCls, chain -> {
+            Xp.hookAllConstructors("sysui.fp.icon_ctor", iconCls, chain -> {
                 Object result = chain.proceed();
                 try {
                     View v = (View) chain.getThisObject();
@@ -432,7 +432,7 @@ final class Fingerprint {
             // brought back by anything that happens between frames, which the alpha above can.
             for (String name : new String[] {"onDraw", "draw"}) {
                 try {
-                    Xp.hookAll(iconCls, name, chain -> {
+                    Xp.hookAll("sysui.fp.icon_paint." + Xp.slug(name), iconCls, name, chain -> {
                         peekHideFp();
                         if (sHideFp && fodForKeyguard(chain.getThisObject())) return null;
                         return chain.proceed();
@@ -457,7 +457,7 @@ final class Fingerprint {
             int hooked = 0;
             for (String name : new String[] {"onDraw", "draw", "dispatchDraw"}) {
                 try {
-                    Xp.hookAll(animView, name, chain -> {
+                    Xp.hookAll("sysui.fp.print_paint." + Xp.slug(name), animView, name, chain -> {
                         peekHideFp();
                         // Painting nothing, rather than dimming: the alpha on this view is the
                         // OEM's to animate, and a frame it never paints cannot be animated back.
@@ -490,7 +490,7 @@ final class Fingerprint {
                 Xp.log(Main.TAG + "no nsslLockYPosition combine lambda on this build"
                         + " - fingerprint avoidance cannot be overridden");
             } else {
-                Xp.hook(invoke, chain -> {
+                Xp.hook("sysui.fp.avoid_combine", invoke, chain -> {
                     Object[] args = chain.getArgs().toArray();
                     if (args.length == 3 && args[1] instanceof Object[]) {
                         Object[] vals = (Object[]) args[1];
@@ -511,7 +511,7 @@ final class Fingerprint {
                 });
                 try {
                     Class<?> combineKt = Xp.findClass("kotlinx.coroutines.flow.internal.CombineKt", cl);
-                    Xp.hookAll(combineKt, "combineInternal", chain -> {
+                    Xp.hookAll("sysui.fp.avoid_combine_internal", combineKt, "combineInternal", chain -> {
                         Object[] args = chain.getArgs().toArray();
                         // Only this panel's transform: other SystemUI combines keep their inputs.
                         if (args.length == 5 && combine.isInstance(args[2])
@@ -530,7 +530,7 @@ final class Fingerprint {
                     // The transform is $1$3; its enclosing combined Flow is $1.
                     Class<?> combinedFlow = Xp.findClass(combine.getName().substring(0,
                             combine.getName().length() - 2), cl);
-                    Xp.hookAll(combinedFlow, "collect", chain -> {
+                    Xp.hookAll("sysui.fp.avoid_flow_collect", combinedFlow, "collect", chain -> {
                         try {
                             if (Main.sNotificationSink.attach(chain.getThisObject(), sFpAvoid))
                                 Xp.log(Main.TAG + "notification bound policy flow attached");
@@ -545,7 +545,7 @@ final class Fingerprint {
                     // coroutine executes, before collect can be inlined or started.
                     Class<?> sharing = Xp.findClass(
                             "kotlinx.coroutines.flow.FlowKt__ShareKt$launchSharing$1", cl);
-                    Xp.hookAll(sharing, "invokeSuspend", chain -> {
+                    Xp.hookAll("sysui.fp.avoid_flow_share", sharing, "invokeSuspend", chain -> {
                         try {
                             Object upstream = Xp.getObjectField(chain.getThisObject(), "$upstream");
                             if (combinedFlow.isInstance(upstream)

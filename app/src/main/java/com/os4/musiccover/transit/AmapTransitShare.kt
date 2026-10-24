@@ -158,7 +158,7 @@ internal object AmapTransitShare {
             val module = Xp.findClass(WEARABLE, cl)
             for (name in arrayOf("bizBegin", "bizBeginWithData", "bizEnd", "sendMessage")) {
                 try {
-                    Xp.hookAll(module, name) { chain ->
+                    Xp.hookAll("amap.share." + Xp.slug(name), module, name) { chain ->
                         val a = chain.args
                         val biz = a.firstOrNull { it is Int } as Int?
                         val text = a.firstOrNull { it is String } as String?

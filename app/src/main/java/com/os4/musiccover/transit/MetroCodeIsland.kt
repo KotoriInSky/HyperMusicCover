@@ -199,7 +199,7 @@ internal object MetroCodeIsland {
     fun install(cl: ClassLoader) {
         try {
             val instr = Xp.findClass("android.app.Instrumentation", cl)
-            Xp.hookAll(instr, "callApplicationOnCreate") { chain ->
+            Xp.hookAll("assist.metro.app_create", instr, "callApplicationOnCreate") { chain ->
                 val out = chain.proceed()
                 try {
                     val app = chain.args[0] as Application
@@ -214,7 +214,7 @@ internal object MetroCodeIsland {
         }
         try {
             // Both overloads, (Uri, ...) and (String authority, ...): the method is the second.
-            Xp.hookAll(android.content.ContentResolver::class.java, "call") { chain ->
+            Xp.hookAll("assist.metro.resolver_call", android.content.ContentResolver::class.java, "call") { chain ->
                 val out = chain.proceed()
                 if (chain.args.getOrNull(1) == GET_INTENTION) {
                     try {
@@ -232,7 +232,7 @@ internal object MetroCodeIsland {
             Xp.w(TAG + "provider hook failed: $t")
         }
         try {
-            Xp.hookAll(Xp.findClass(ROUTER, cl), "onCreate") { chain ->
+            Xp.hookAll("assist.metro.router_create", Xp.findClass(ROUTER, cl), "onCreate") { chain ->
                 val out = chain.proceed()
                 val a = chain.thisObject as android.app.Activity
                 if (a.intent?.getStringExtra("type") == TYPE) tap(a, a.intent)

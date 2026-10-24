@@ -64,7 +64,7 @@ internal object NumState {
         }
         runCatching {
             for ((name, value) in listOf("enterNumState" to true, "exitNumState" to false)) {
-                Xp.hookAll(vmClass, name) { chain ->
+                Xp.hookAll("sysui.numstate." + Xp.slug(name), vmClass, name) { chain ->
                     val result = chain.proceed()
                     modelRef = WeakReference(chain.thisObject)
                     if (inNumber != value) {
@@ -81,7 +81,7 @@ internal object NumState {
         // screen and no island: folding, a hands-up that lands there lands folded instead, so
         // the stack is either the island or the list, as ColorOS's is either capsule or list.
         runCatching {
-            Xp.hookAll(vmClass, "switchStackStatus") { chain ->
+            Xp.hookAll("sysui.numstate.switch_stack", vmClass, "switchStackStatus") { chain ->
                 val target = chain.proceed()
                 runCatching { handsUp(chain.thisObject, chain.args.firstOrNull(), target as Float) }
                     .getOrNull() ?: target

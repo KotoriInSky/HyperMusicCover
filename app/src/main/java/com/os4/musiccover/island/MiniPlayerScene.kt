@@ -41,24 +41,28 @@ internal object MiniPlayerScene {
 
     /** Each hook alone: a renamed class costs the one signal it carried, nothing else. */
     fun install(cl: ClassLoader) {
-        fun hook(className: String, methodName: String, before: (List<Any?>) -> Unit) {
+        fun hook(id: String, className: String, methodName: String, before: (List<Any?>) -> Unit) {
             runCatching {
-                Xp.hookAll(Xp.findClass(className, cl), methodName) { chain ->
+                Xp.hookAll(id, Xp.findClass(className, cl), methodName) { chain ->
                     before(chain.args)
                     chain.proceed()
                 }
             }.onFailure { Xp.w("MCMini: scene hook $methodName unavailable: $it") }
         }
-        hook("com.android.keyguard.injector.KeyguardViewMediatorInjector", "keyguardGoingAway") {
+        hook("sysui.mini.scene.going_away",
+            "com.android.keyguard.injector.KeyguardViewMediatorInjector", "keyguardGoingAway") {
             setKeyguardGoingAway(true)
         }
-        hook("com.android.systemui.statusbar.policy.KeyguardStateControllerImpl", "notifyKeyguardState") {
+        hook("sysui.mini.scene.keyguard_state",
+            "com.android.systemui.statusbar.policy.KeyguardStateControllerImpl", "notifyKeyguardState") {
             if (it.firstOrNull() == true) setKeyguardGoingAway(false)
         }
-        hook("com.android.systemui.statusbar.StatusBarStateControllerImpl", "setIsDozing") {
+        hook("sysui.mini.scene.dozing",
+            "com.android.systemui.statusbar.StatusBarStateControllerImpl", "setIsDozing") {
             setAodActive(it.firstOrNull() == true)
         }
-        hook("com.android.keyguard.editor.KeyguardEditorHelper", "setEditorState") {
+        hook("sysui.mini.scene.editor",
+            "com.android.keyguard.editor.KeyguardEditorHelper", "setEditorState") {
             setEditorActive(it.firstOrNull()?.toString() != "IDEL")
         }
         runCatching {
@@ -66,7 +70,7 @@ internal object MiniPlayerScene {
                 "com.miui.systemui.controlcenter.container.ControlCenterContainerController\$onExpandChangeListener\$1",
                 cl,
             )
-            Xp.hookAll(listener, "onExpandStateChanged") { chain ->
+            Xp.hookAll("sysui.mini.scene.expand", listener, "onExpandStateChanged") { chain ->
                 val state = chain.args.firstOrNull()?.toString()
                 if (state != null && state != "COLLAPSED") setControlCenterActive(true)
                 val result = chain.proceed()

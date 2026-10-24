@@ -139,7 +139,7 @@ object MiniPlayerRuntime {
                 "com.android.systemui.statusbar.notification.mediacontrol.MiuiMediaHeaderView",
                 classLoader,
             )
-            Xp.hookAll(cls, "setVisibility") { chain ->
+            Xp.hookAll("sysui.mini.header_visibility", cls, "setVisibility") { chain ->
                 val args = chain.args.toTypedArray()
                 if (args.size == 1 && args[0] == View.VISIBLE && keepNativeHeaderInvisible()) {
                     args[0] = View.INVISIBLE
@@ -149,7 +149,7 @@ object MiniPlayerRuntime {
         }.onFailure { Xp.w("MCMini: native header visibility hook unavailable: $it") }
         runCatching {
             val cls = Xp.findClass("com.android.keyguard.shortcut.MiuiShortcutController", classLoader)
-            Xp.hookAll(cls, "addShortcutViews") { chain ->
+            Xp.hookAll("sysui.mini.shortcut_views", cls, "addShortcutViews") { chain ->
                 val result = chain.proceed()
                 (chain.args.firstOrNull() as? View)?.let { scheduleInstall(it, chain.thisObject) }
                 result
@@ -159,7 +159,7 @@ object MiniPlayerRuntime {
         // between rows too, where the card swipe never sees it: the rows are the list's again.
         runCatching {
             val cls = Xp.findClass("com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout", classLoader)
-            Xp.hookAll(cls, "onScrollTouch") { chain ->
+            Xp.hookAll("sysui.mini.scroll_touch", cls, "onScrollTouch") { chain ->
                 val result = chain.proceed()
                 val event = chain.args.firstOrNull() as? MotionEvent
                 val stack = chain.thisObject as? View
@@ -176,7 +176,7 @@ object MiniPlayerRuntime {
         for (name in listOf("com.android.systemui.statusbar.notification.row.ExpandableView",
                 "com.android.systemui.statusbar.notification.row.ExpandableNotificationRow")) {
             runCatching {
-                Xp.hookAll(Xp.findClass(name, classLoader), "removeFromTransientContainer") { chain ->
+                Xp.hookAll("sysui.mini.remove_transient", Xp.findClass(name, classLoader), "removeFromTransientContainer") { chain ->
                     val v = chain.thisObject as? View
                     if (v != null && !passTransient && heldTransients.containsKey(v) && !reAdding()) {
                         heldTransients[v] = true
@@ -195,7 +195,7 @@ object MiniPlayerRuntime {
             val cls = Xp.findClass(
                 "com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutControllerInjectorImpl",
                 classLoader)
-            Xp.hookAll(cls, "updateStackingBottomForMiui") { chain ->
+            Xp.hookAll("sysui.mini.stack_bottom", cls, "updateStackingBottomForMiui") { chain ->
                 val args = chain.args.toTypedArray()
                 val bottom = args.getOrNull(0) as? Float
                 if (bottom == null) chain.proceed() else {
@@ -449,7 +449,7 @@ object MiniPlayerRuntime {
         }
         effects.forEach { cls ->
             runCatching {
-                Xp.hookAll(cls, "apply") { chain ->
+                Xp.hookAll("sysui.mini.apply", cls, "apply") { chain ->
                     val target = chain.args.firstOrNull() as? View
                     val card = Main.miniPlayerMediaHeader()
                     // The pill and the islands live on the lock screen, so they wear the lock
@@ -525,7 +525,7 @@ object MiniPlayerRuntime {
                         && it.parameterTypes.any { p -> View::class.java.isAssignableFrom(p) }
                 }.forEach { m ->
                     m.isAccessible = true
-                    Xp.api().hook(m).intercept { chain ->
+                    Xp.hook("sysui.mini.glass." + Xp.slug(className.substringAfterLast('.')) + "." + Xp.slug(m.name), m) { chain ->
                         val list = recording
                         val bg = recordTarget
                         if (list == null || bg == null || recordDepth > 0) {
@@ -533,11 +533,11 @@ object MiniPlayerRuntime {
                             if (list == null && recordDepth == 0) runCatching {
                                 recordNotificationMaterial(m, chain.args.toTypedArray())
                             }
-                            return@intercept result
+                            return@hook result
                         }
                         val args = chain.args.toTypedArray()
                         val at = args.indexOfFirst { it === bg }
-                        if (at < 0) return@intercept chain.proceed()
+                        if (at < 0) return@hook chain.proceed()
                         recordDepth++
                         try {
                             chain.proceed()
@@ -821,7 +821,7 @@ object MiniPlayerRuntime {
         }
         // The controller is SystemUI's own singleton; the first listener it takes brings us in.
         var added = false
-        Xp.hookAll(controller, "addCallback") { chain ->
+        Xp.hookAll("sysui.mini.session_callback", controller, "addCallback") { chain ->
             val result = chain.proceed()
             val firstController = aodController?.get() == null
             aodController = WeakReference(chain.thisObject)
