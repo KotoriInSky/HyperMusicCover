@@ -411,6 +411,9 @@ internal object LockIslands {
         focusShown = emptyList()
         setActive(false)
         stopFolding()
+        // The receiver itself is in Gen's ledger and the sweep takes it. This guard is what
+        // would keep the next pipeline run from registering it again.
+        screenWatch = false
     }
 
     fun install(classLoader: ClassLoader) {

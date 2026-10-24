@@ -184,6 +184,9 @@ public final class HotReload {
         // The user never taps "update" while looking at the lock screen; anything on it is
         // someone using the phone, and every one of those transitions has a view mid-flight.
         if (Main.keyguardShowing() && Main.screenOn()) return "the lock screen is up and lit";
+        // A doze or a sleeping display: the rebuild's frame work would not run, and the test
+        // would be measuring a teardown that nobody is looking at.
+        if (!Main.screenOn()) return "the screen is off";
         if (CoverMorphLayer.active()) return "a cover morph is running";
         if (CoverPush.sCoverFadeWaiting || CoverPush.sCoverFadingOut != null
                 || CoverPush.sOwedSwap != null) {

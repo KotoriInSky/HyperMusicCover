@@ -335,6 +335,11 @@ public final class Gen {
             threads.clear();
 
             ioExecutor.shutdownNow();
+        } else {
+            // The one-shot threads are not ours to stop in a dry run, but their records are:
+            // every lookup during a run added one, and 50 runs left 64 of them in a ledger that
+            // is supposed to be a count of what is held now.
+            threads.removeIf(t -> !t.isAlive());
         }
         Xp.log("[MCGen] " + (dryRun ? "dry-run swept" : "retired")
                 + ": registrations taken back, treeListeners=" + trees);
