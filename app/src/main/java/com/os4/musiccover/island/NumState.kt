@@ -359,6 +359,22 @@ internal object NumState {
     }
 
     /**
+     * The row spread out as the list: a wake meanwhile wakes to the list, the default NUMBER
+     * otherwise (forceDefault). Only while folding has the default in hand.
+     */
+    fun wakeAsList(on: Boolean) {
+        if (!folding || !forcedDefault) return
+        runCatching {
+            val flow = defaultFlow() ?: return
+            val model = model() ?: return
+            val name = if (on) "LIST" else "NUMBER"
+            if ((Xp.callMethod(flow, "getValue") as? Enum<*>)?.name == name) return
+            Xp.callMethod(flow, "setValue", stateConst(model, name))
+            trace("default $name (in memory)")
+        }.onFailure { trace("default not set: $it") }
+    }
+
+    /**
      * Folding and the lock screen up with the stack as a pile: folded. Asked when the islands
      * show (after SystemUI starts, the first lock screen has not been through a wake), and
      * never while the stack is being moved or is the list the user opened.

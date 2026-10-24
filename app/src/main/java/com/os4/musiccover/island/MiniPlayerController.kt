@@ -485,7 +485,7 @@ internal class MiniPlayerController(
 
     // ------------------------------------------------------------ the islands
 
-    /** The row's islands in order: MUSIC_ISLAND, then notification keys. Set by refreshUnsafe. */
+    /** The row's islands in order: the focus ones that outrank the music, MUSIC_ISLAND, the rest. Set by refreshUnsafe. */
     private var islandKeys: List<String> = emptyList()
 
     /** The islands wear the ordinary notification's colours and soft glass, always (2026-10-09). */
@@ -3298,16 +3298,58 @@ internal class MiniPlayerController(
 
     /**
      * The super island's compareState for this row: whether [origin] takes the place [cur]
-     * holds, the big island's when [big]. The music ranks above every notification in both
-     * places - the user's call (2026-09-25); the super island's own gives it islandProperty 2,
-     * which loses the big place to any focus notification.
+     * holds, the big island's when [big]. The music is ranked as the super island ranks it
+     * (MiuiIslandMediaControllerImpl: islandProperty 2, islandPriority 2), so a focus
+     * notification of property 1 - 高德's navigation - takes the big place from it and it the
+     * small place back (the user, 2026-10-24; it ranked above everything from 2026-09-25).
+     * Against the ordinary notifications, which the super island has no island for, the music
+     * still wins both places.
      */
     private fun takesPlace(cur: String, origin: String, big: Boolean): Boolean {
-        if (origin == MUSIC_ISLAND) return true
-        if (cur == MUSIC_ISLAND) return false
-        val c = LockIslands.rankOf(cur) ?: return true
-        val o = LockIslands.rankOf(origin) ?: return false
+        if (origin == MUSIC_ISLAND && !isFocusIsland(cur)) return true
+        if (cur == MUSIC_ISLAND && !isFocusIsland(origin)) return false
+        val c = rankOf(cur) ?: return true
+        val o = rankOf(origin) ?: return false
         return LockIslands.takesPlace(c, o, big)
+    }
+
+    private fun rankOf(key: String): LockIslands.Rank? =
+        if (key == MUSIC_ISLAND) LockIslands.Rank(2, 2, musicSince) else LockIslands.rankOf(key)
+
+    /** A focus notification's island: not the music, the stack island or an app's group. */
+    private fun isFocusIsland(key: String): Boolean =
+        key != MUSIC_ISLAND && key != STACK_ISLAND && !LockIslands.isAppGroup(key) &&
+            LockIslands.noteFor(key)?.focus == true
+
+    /** When the music's session was first seen, on the notifications' clock (Note.since). */
+    private var musicSince = 0L
+
+    /**
+     * The islands this lock screen's row has had, and since when each known one has been
+     * missing from it. A focus island not among them is new, and may take the pill (refreshUnsafe);
+     * one missing for less than PICK_GRACE_MS keeps the pill it had. The time unlocked is not
+     * counted ([knownLocked]): locked again, the row is the one that was left.
+     */
+    private val islandKnown = HashSet<String>()
+    private val islandMissing = HashMap<String, Long>()
+    private var knownLocked = false
+    private val graceCheck = Runnable { refresh() }
+
+    private fun noteKnown(present: List<String>, now: Long) {
+        for (k in present) {
+            islandKnown += k
+            islandMissing -= k
+        }
+        val it = islandKnown.iterator()
+        while (it.hasNext()) {
+            val k = it.next()
+            if (k in present) continue
+            val since = islandMissing.getOrPut(k) { now }
+            if (now - since > KNOWN_FORGET_MS) {
+                it.remove()
+                islandMissing -= k
+            }
+        }
     }
 
     /** Who is in the big place and the small one once an expanded switch is over. */
@@ -4806,6 +4848,10 @@ internal class MiniPlayerController(
         /** Pulled open by a finger still on the island: it scrolls the stack (followFinger). */
         var finger: SpreadFinger? = null
         var collapseFinger: SpreadCollapseFinger? = null
+        /** The screen went off or into the doze while it was open; and when it came back on. */
+        var slept = false
+        var wokeAt = 0L
+        var lastFrameAt = 0L
     }
 
     private class SpreadCollapseFinger(val startY: Float, val startProgress: Float, val range: Float) {
@@ -4833,6 +4879,32 @@ internal class MiniPlayerController(
     }
 
     private var spread: Spread? = null
+
+    /**
+     * The list was open when the phone was unlocked: it opens again on the next lock screen, once
+     * the row is up with the stack island in it ([reopenKeptList]). Folded, it is not kept.
+     */
+    private var listKept = false
+    private var listKeptShownAt = 0L
+
+    private fun reopenKeptList(shown: Boolean) {
+        if (!listKept) return
+        val now = android.os.SystemClock.uptimeMillis()
+        val awake = !MiniPlayerScene.aodActive && Main.screenOnCached()
+        if (!shown || !awake || spread != null || player?.visibility != View.VISIBLE) {
+            listKeptShownAt = 0L
+            return
+        }
+        if (STACK_ISLAND in islandKeys && LockIslands.foldsNatively()) {
+            listKept = false
+            listKeptShownAt = 0L
+            handler.post { if (spread == null) openSpread("kept over the unlock") }
+            return
+        }
+        // Up without the stack island - its notifications went meanwhile: nothing to open.
+        if (listKeptShownAt == 0L) listKeptShownAt = now
+        else if (now - listKeptShownAt > LIST_KEPT_WAIT_MS) listKept = false
+    }
 
     fun spreadCollapseAt(x: Float, y: Float): Boolean {
         val s = spread ?: return false
@@ -5043,9 +5115,15 @@ internal class MiniPlayerController(
         override fun doFrame(frameTimeNanos: Long) { android.os.Trace.beginSection("MC spread"); try {
             val s = spread ?: return
             if (destroyed || !Main.keyguardLocked() || MiniPlayerScene.keyguardGoingAway) {
+                // Open, it opens again on the next lock screen (the user, 2026-10-24).
+                listKept = s.phase == SPREAD_OPEN && s.progress >= 0.5f
                 endSpread(folded = s.progress < 0.5f, why = "lock screen gone")
                 return
             }
+            // No frames for a while: the screen was off.
+            val frameAt = android.os.SystemClock.uptimeMillis()
+            if (s.lastFrameAt != 0L && frameAt - s.lastFrameAt > SPREAD_SLEEP_GAP_MS) s.slept = true
+            s.lastFrameAt = frameAt
             when (s.phase) {
                 SPREAD_WAIT -> waitSpread(s)
                 SPREAD_OPEN -> watchOpen(s)
@@ -5450,6 +5528,8 @@ internal class MiniPlayerController(
         s.phase = SPREAD_OPEN
         s.cardsY = y
         s.still = 0
+        // A wake while it is open wakes to the list, not to the folded stack (watchOpen).
+        NumState.wakeAsList(true)
         // The list's place read again, from the stack as it is now: asked from a sample still
         // short of the rows that came in, it was short of the list (the stack's pile). The cards
         // are the stack's own from here, so the rest of the way is its scroll alone.
@@ -5473,6 +5553,27 @@ internal class MiniPlayerController(
      * else moving it - a notification coming or going - is the list's own: its rest follows.
      */
     private fun watchOpen(s: Spread) {
+        // The list is kept over the doze (the user, 2026-10-24): the full-screen AOD scrolls the
+        // stack to its count and the wake sends it to its default, and either folded it read as
+        // the stack folding by itself - every card went home whenever the screen had gone off.
+        // Asleep it is left be; woken, the stack goes back to the list if it is not there.
+        val now = android.os.SystemClock.uptimeMillis()
+        if (MiniPlayerScene.aodActive || !Main.screenOnCached()) {
+            s.slept = true
+            s.wokeAt = 0L
+            return
+        }
+        if (s.slept) {
+            s.slept = false
+            s.wokeAt = now
+            if (NumState.inNumber == true) NumState.goTo("LIST", why = "list kept over the doze")
+            spreadTrace("spread woke: " + describeSpread())
+        }
+        if (s.wokeAt != 0L) {
+            if (now - s.wokeAt < SPREAD_WAKE_MS && !listPulled() &&
+                (NumState.inNumber == true || NumState.busy())) return
+            s.wokeAt = 0L
+        }
         val y = NumState.position() ?: return
         val islandsY = NumState.scrollTo("NUMBER") ?: return
         s.lastY = y
@@ -5546,6 +5647,8 @@ internal class MiniPlayerController(
         snapSmallOnce = smallTaken || cameHome == null
         spreadTrace("spread end ($why) folded=$folded")
         MiniPlayerRuntime.noteTouch("spread end ($why) folded=$folded")
+        if (folded) listKept = false
+        NumState.wakeAsList(false)
         LockIslands.setSpread(false, folded)
         // Folded home but the stack left at its pile (a let-go it read as the pile): folded too.
         if (folded) NumState.foldIfPiled("spread folded")
@@ -7459,7 +7562,7 @@ internal class MiniPlayerController(
     private fun canShow(): Boolean =
         // The music on its way in or out of its card or the cover is not the row's to gate: the
         // row takes taps meanwhile, to turn the switch round (2026-09-25).
-        if (islandKeys.firstOrNull() == MUSIC_ISLAND && exchange == null && noteMorphKey != MUSIC_ISLAND)
+        if (MUSIC_ISLAND in islandKeys && exchange == null && noteMorphKey != MUSIC_ISLAND)
             Main.miniPlayerCanShow() else Main.miniPlayerIslandsCanShow()
 
     /** A morph moving on its springs under this point - the switch's, or a scene's. */
@@ -7822,6 +7925,7 @@ internal class MiniPlayerController(
             controller = chosen
             runCatching { chosen?.registerCallback(mediaListener, handler) }
             followLive(chosen)
+            musicSince = System.currentTimeMillis()
             cachedCover = null
             // Another player: its artwork, not the last one's.
             thumbShown = null
@@ -7848,8 +7952,13 @@ internal class MiniPlayerController(
         val others = notes.isNotEmpty() || returning.isNotEmpty() || exchange != null ||
             noteMorphKey.let { it != null && it != MUSIC_ISLAND }
         val musicInRow = music != null && (!carded || !others || musicMoving)
-        // The row: the music first, then the notifications in LockIslands' order.
-        islandKeys = (if (musicInRow) listOf(MUSIC_ISLAND) else emptyList()) + notes.map { it.key }
+        // The row in the super island's order: the focus islands that take the big place from
+        // the music (高德's navigation, islandProperty 1 against the music's 2) ahead of it, then
+        // the music, then the rest in LockIslands' order. The music used to be first whatever
+        // else there was, and the navigation had to be swiped to every time (the user, 2026-10-24).
+        val (ahead, behind) = notes.partition { isFocusIsland(it.key) && takesPlace(MUSIC_ISLAND, it.key, big = true) }
+        islandKeys = ahead.map { it.key } + (if (musicInRow) listOf(MUSIC_ISLAND) else emptyList()) +
+            behind.map { it.key }
         // Two can be on their way back at once: a tap mid-switch brings one down as another lands.
         val now = android.os.SystemClock.uptimeMillis()
         returning.entries.removeAll { (key, since) ->
@@ -7860,6 +7969,24 @@ internal class MiniPlayerController(
         noteMorphKey?.let { key -> islandKeys = keptInPlace(islandKeys, key) }
         // Every island of a switch holds its place in the row till it is over.
         exchange?.let { x -> for (key in x.keys()) islandKeys = keptInPlace(islandKeys, key) }
+        // The time unlocked does not count against an island: the row comes back as it was left.
+        val locked = Main.keyguardLocked()
+        if (locked && !knownLocked) for (k in islandMissing.keys) islandMissing[k] = now
+        knownLocked = locked
+        // The island in the pill missing from one run - 高德 re-posts its island every second, and
+        // a row being re-inflated is left out of that run - keeps the pill for PICK_GRACE_MS.
+        // It fell to the row's first island at once, and the navigation picked went back to the
+        // music a moment later (the user, 2026-10-24).
+        val graced = selectedIsland?.takeIf { k ->
+            locked && k != MUSIC_ISLAND && k !in islandKeys && k in islandKnown &&
+                !LockIslands.isReleased(k) && LockIslands.noteFor(k) != null &&
+                now - (islandMissing[k] ?: now) < PICK_GRACE_MS
+        }
+        if (graced != null) {
+            islandKeys = keptInPlace(islandKeys, graced)
+            handler.removeCallbacks(graceCheck)
+            handler.postDelayed(graceCheck, PICK_GRACE_MS + 50L)
+        }
         // Islands out as their cards keep their places too, for when they come back.
         var order = islandKeys
         // A new island in the row comes up beside the first, swiped alone or not.
@@ -7870,6 +7997,9 @@ internal class MiniPlayerController(
             }
         }
         islandOrder = order
+        // Islands new to this lock screen's row, before they are counted as known below.
+        val fresh = if (locked) order.filter { it !in islandKnown } else emptyList()
+        if (locked) noteKnown(order - listOfNotNull(graced), now)
         noteMorphKey?.let { key ->
             // The pill itself morphing: it keeps what it is showing. Under a flight it goes on
             // being the row's (the island beside the flight can take it).
@@ -7891,7 +8021,33 @@ internal class MiniPlayerController(
             return
         }
         val lost = selectedIsland != null && selectedIsland !in islandKeys
-        val selected = selectedIsland?.takeIf { it in islandKeys } ?: islandKeys.first()
+        var selected = selectedIsland?.takeIf { it in islandKeys } ?: islandKeys.first()
+        // A focus island new to the row takes the big place from the one there when it outranks
+        // it, as the super island's handleReplacedState gives it: the navigation started comes up
+        // in the pill and the music goes into the small place. An ordinary notification never
+        // does - each message would take the pill. Busy with another motion, it is tried again
+        // on the next refresh.
+        val taker = if (lost || selectedIsland == null) null else fresh.firstOrNull {
+            it != selected && it in islandKeys && isFocusIsland(it) && takesPlace(selected, it, big = true)
+        }
+        if (taker != null) {
+            val busy = swap != null || morph != null || exchange != null || flight != null ||
+                group != null || rowWaitKey != null || islandDragging
+            if (busy) islandKnown.remove(taker)
+            else {
+                val oldBig = selected
+                val oldSmall = smallKey
+                selected = taker
+                preferredSmall = null
+                aloneFirst = null
+                MiniPlayerRuntime.noteTouch("island ${taker.takeLast(6)} takes the pill from ${oldBig.takeLast(6)}")
+                if (player?.visibility == View.VISIBLE) handler.post {
+                    if (swap == null && morph == null && selectedIsland == taker) {
+                        startSwap(oldBig, oldSmall, intoSmall = smallKey == oldBig)
+                    }
+                }
+            }
+        }
         selectedIsland = selected
         // The notification in the pill went (dismissed, answered elsewhere): the next island
         // grows into the pill from its end, as one coming out of the stack does.
@@ -8910,7 +9066,7 @@ internal class MiniPlayerController(
         // startSceneFlight puts it back first in the row a moment before its morph exists, and
         // for that refresh the cover still up read as "not presentable" - the row went and came
         // back within 2ms, a whole list rebuild each way, on every exit (probed 2026-09-25).
-        val presentable = if (islandKeys.firstOrNull() == MUSIC_ISLAND && noteMorphKey != MUSIC_ISLAND)
+        val presentable = if (MUSIC_ISLAND in islandKeys && noteMorphKey != MUSIC_ISLAND)
             Main.miniPlayerPresentable() else Main.miniPlayerIslandsPresentable()
         val sceneVisible = keyguardOwned && presentable && !MiniPlayerScene.blocksMiniPlayer
         // Unlocking or a session ending mid-morph: straight to where it was going.
@@ -8991,7 +9147,9 @@ internal class MiniPlayerController(
                 "scene=${Main.coverSceneActive()}")
         }
         LockIslands.setActive(active)
-        if (!keyguardOwned) selectedIsland = null
+        reopenKeptList(active && sceneVisible)
+        // The island in the pill is kept across an unlock (the user, 2026-10-24): locked again,
+        // the row is as it was left, and an island gone meanwhile falls to the row's first.
         // While a flight is out and coming back, its end is the small island's place: the small
         // island is the flight, and whatever was there makes way. Once it is out for good the
         // place is the next island's.
@@ -9006,9 +9164,11 @@ internal class MiniPlayerController(
             animate = shown && !snapSmallOnce && group == null && exchange == null)
         snapSmallOnce = false
         if (!keyguardOwned) preferredSmall = null
+        // Cards still out across an unlock (LockIslands keeps the focus ones) go home where they
+        // came from; the rest of the record is this lock screen's.
         if (!Main.keyguardLocked()) {
-            releasedFromPill.clear()
-            releasedFromSmall.clear()
+            releasedFromPill.retainAll { it != MUSIC_ISLAND && LockIslands.isReleased(it) }
+            releasedFromSmall.retainAll { it != MUSIC_ISLAND && LockIslands.isReleased(it) }
         }
         if (view != null) {
             val target = if (shown) View.VISIBLE else View.GONE
@@ -9610,6 +9770,11 @@ private const val SPRING_BACK_MS = 320L
 /** How long a notification folded back in may take to come back from the stack. */
 private const val RETURN_WAIT_MS = 1500L
 
+/** The island in the pill missing from the reads this long keeps the pill (高德 re-posts every second). */
+private const val PICK_GRACE_MS = 2000L
+/** An island missing this long is new when it comes back, and may take the pill again. */
+private const val KNOWN_FORGET_MS = 3000L
+
 /** A row hidden on its way out of the stack shows again if it is still there after this. */
 private const val ROW_GONE_MS = 1200L
 
@@ -9644,6 +9809,12 @@ private const val MATERIAL_INK_MS = 500L
 
 /** A finger pulling the open list this far toward the fold takes the cards home with it. */
 private const val SPREAD_PULL_DP = 8f
+/** The spread's frames stopping this long means the screen was off. */
+private const val SPREAD_SLEEP_GAP_MS = 700L
+/** Woken, the stack has this long to be the list again before a fold counts as one. */
+private const val SPREAD_WAKE_MS = 1500L
+/** Locked again with the list kept, the row has this long to show the stack island to open. */
+private const val LIST_KEPT_WAIT_MS = 1500L
 
 /** Pulled home past this (from 1, the list), the let-go folds the row home: see spreadFolding. */
 private const val SPREAD_FOLD_BELOW = 0.95f

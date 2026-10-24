@@ -199,11 +199,35 @@ internal object LockIslands {
     private fun sceneOf(key: String): ImmersiveScene? =
         noteFor(key)?.let { runCatching { ImmersiveHost.sceneFor(it.pkg, it.focus, key) }.getOrNull() }
 
-    /** What a clear of [released] leaves: the open page's island, if there is one. */
+    /**
+     * What a clear of [released] leaves: the open page's island, and every focus island opened
+     * as its card - kept across an unlock as the page is (the user, 2026-10-24: the navigation
+     * opened went back into its island each time). Gone, a notification leaves it ([dropRemoved]).
+     */
     private fun clearReleased() {
         val keep = sceneKey
-        released.clear()
+        released.retainAll { it == keep || !isAppGroup(it) && lastRead[it]?.focus == true }
         if (keep != null) released.add(keep)
+    }
+
+    /** When each removed notification went, for [dropRemoved]; and when each was last posted. */
+    private val removedAt = HashMap<String, Long>()
+    private val postedAt = HashMap<String, Long>()
+
+    /**
+     * A released notification removed and not posted again within SCENE_GONE_MS is gone: its key
+     * is no longer released, or the next one under that key (高德's navigation tomorrow) would come
+     * up as an open card. Not at once - an app may take its notification down and put it back up.
+     */
+    private fun dropRemoved(key: String) {
+        val now = android.os.SystemClock.uptimeMillis()
+        removedAt[key] = now
+        main.postDelayed({
+            val gone = removedAt[key] == now && (postedAt[key] ?: 0L) < now
+            if (gone) removedAt -= key
+            if (gone && key != sceneKey && released.remove(key)) invalidate("released $key removed")
+            postedAt.keys.retainAll { it in released }
+        }, SCENE_GONE_MS)
     }
 
     /**
@@ -415,10 +439,24 @@ internal object LockIslands {
                 val result = chain.proceed()
                 (chain.args.firstOrNull() as? StatusBarNotification)?.key?.let { key ->
                     runCatching { CountdownScene.INSTANCE.onRemoved(key) }
+                    main.post { if (key in released) dropRemoved(key) }
                 }
                 result
             }
         }.onFailure { Xp.w("MCIsland: removals unavailable: $it") }
+        // Hooks fail on their own: a build without this one only drops a card a moment late.
+        runCatching {
+            val collection = Xp.findClass("com.android.systemui.statusbar.notification.collection." +
+                "NotifCollection", classLoader)
+            Xp.hookAll(collection, "onNotificationPosted") { chain ->
+                val result = chain.proceed()
+                (chain.args.firstOrNull() as? StatusBarNotification)?.key?.let { key ->
+                    val at = android.os.SystemClock.uptimeMillis()
+                    main.post { if (key in released) postedAt[key] = at }
+                }
+                result
+            }
+        }.onFailure { Xp.w("MCIsland: postings unavailable: $it") }
         NumState.install(classLoader)
         NumState.addListener { folded ->
             if (!nativeStack) return@addListener
@@ -670,7 +708,7 @@ internal object LockIslands {
         val entry = args.firstOrNull() ?: return false
         if (!lockedOrLocking(filterObject)) {
             // Unlocked: what a tap put back is an island again on the next lock screen - all but
-            // 高德's, which stays open with its map as the cover stays up.
+            // the focus ones, which stay open as 高德's map stays up (clearReleased).
             clearReleased()
             if (!nativeStack) stackOut = false
             // Unlocking, the keyguard is "not locked" from the first frame of its fade-out,
