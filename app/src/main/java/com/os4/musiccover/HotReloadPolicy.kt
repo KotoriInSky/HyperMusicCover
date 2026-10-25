@@ -49,8 +49,9 @@ object HotReloadPolicy {
     val BROKEN_RETIRE: Set<Int> = emptySet()
 
     /**
-     * The first release that shipped `onHotReloading`; older builds refuse by default, so the
-     * app restarts them without a round trip. Zero until that release exists - Step 4 is not it.
+     * The first release that ships the whole matrix: every supported process reloads in place,
+     * the circuit breaker is enforced, and the wallpaper process was verified on device.
+     * Builds older than this refuse by default, so a restart is the only thing that works.
      */
-    const val FIRST_HOT_RELOAD_VERSION = 0
+    const val FIRST_HOT_RELOAD_VERSION = 947058
 }
