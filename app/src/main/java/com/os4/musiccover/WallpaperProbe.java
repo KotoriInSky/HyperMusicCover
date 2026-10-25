@@ -4461,6 +4461,12 @@ public class WallpaperProbe {
     private static void noteVideoEngine(Object self) {
         if (self == null || self == sVideoEngine || self == sDesktopVideoEngine) return;
         String n = self.getClass().getName();
+        // UniversalEngine holds its EngineService whatever kind it is, so onVisibilityChanged
+        // reaches here with the still-image engines too. Only a video engine is one: a still
+        // lock wallpaper runs KeyguardImageEngineImpl, and taking it for a video engine made a
+        // freshly started process answer videoPath() with true until the first push said
+        // otherwise - which refused its hot reload as "the lock wallpaper is a live video".
+        if (!n.contains("Video")) return;
         if (n.contains("Keyguard")) {
             sVideoEngine = self;
         } else if (n.contains("Desktop")) {
