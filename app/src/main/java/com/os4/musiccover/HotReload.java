@@ -74,7 +74,7 @@ public final class HotReload {
     private static final String BLOCKED = "mc_hot_reload_blocked";
     /** A pending marker older than this is from a process that was simply restarted later. */
     private static final long PENDING_WINDOW_MS = 2 * 60 * 1000L;
-    /** The build the last hot reload did not survive, or empty. For `op=gen`. */
+    /** The build blocked in this process (its version code), or empty. For `op=gen`. */
     private static volatile String sBlocked = "";
     /** How the last adoption in this process paired the hooks, or empty. For `op=gen`. */
     private static volatile String sAdopted = "";
@@ -132,6 +132,10 @@ public final class HotReload {
         String proc = supportedProcess();
         if (proc == null) {
             return refuse("process not supported");
+        }
+        String blocked = blockedReason();
+        if (blocked != null) {
+            return refuse(blocked);
         }
         // A feature that is in the middle of something it cannot stop reports it here; the
         // first ones arrive with their retire() in Steps 5-7.
@@ -293,7 +297,10 @@ public final class HotReload {
         Context ctx = appContext(state);
         // If this process does not survive the next few seconds, the marker is still here when
         // it comes back, and that cold start blocks this build until the next restart.
-        writePending(ctx, build + "@" + System.currentTimeMillis());
+        // The version code is this generation's own constant: the marker names the build that is
+        // being adopted without depending on the extras (null under autoHotReload) or on a
+        // package-manager query from a host that may not be allowed to see the module's APK.
+        writePending(ctx, pendingMark(BuildConfig.VERSION_CODE, build, System.currentTimeMillis()));
 
         Set<String> oldIds = new java.util.HashSet<>();
         for (XposedInterface.HookHandle h : param.getOldHookHandles()) oldIds.add(h.getId());
@@ -582,24 +589,95 @@ public final class HotReload {
 
     // ---------------------------------------------------------------- circuit breaker
 
-    /** Called once from Main.boot on a real cold start. */
+    /**
+     * A marker that identifies the build without asking the package manager: the version code is
+     * a constant compiled into the generation that writes it, so it is right in every process and
+     * needs no visibility into the module's APK.
+     */
+    static String pendingMark(long version, String build, long now) {
+        return version + "@" + now + "@" + build;
+    }
+
+    /** The version code at the front of a pending marker, or -1 for one from an older build. */
+    static long versionOf(String mark) {
+        if (mark == null) return -1L;
+        int at = mark.indexOf('@');
+        if (at <= 0) return -1L;
+        try {
+            return Long.parseLong(mark.substring(0, at));
+        } catch (NumberFormatException e) {
+            return -1L;
+        }
+    }
+
+    /**
+     * Called once from Main.boot on a real cold start.
+     *
+     * <p>A pending marker left behind means the previous hot reload did not settle; the build it
+     * names is recorded as blocked in this process. Then the block is reconciled with the build
+     * actually installed: it only matters for the build that is still there, so a cold start on
+     * a newer build clears it. That is what makes the block finite - the remedy for a blocked
+     * process is to install a newer build and restart it.
+     */
     static void onBoot(Context ctx) {
         if (sAdoptingBoot || ctx == null) return;
         try {
-            File f = new File(ctx.getFilesDir(), PENDING);
-            if (!f.exists()) return;
-            long age = System.currentTimeMillis() - f.lastModified();
-            String mark = read(f);
-            //noinspection ResultOfMethodCallIgnored
-            f.delete();
-            if (age < 0 || age > PENDING_WINDOW_MS) return;
-            sBlocked = mark;
-            appendBlocked(ctx, mark);
-            Xp.w(TAG + "previous hot reload did not settle (" + mark + ", " + age
-                    + "ms ago); this build is blocked until another restart");
+            File pending = new File(ctx.getFilesDir(), PENDING);
+            if (pending.exists()) {
+                long age = System.currentTimeMillis() - pending.lastModified();
+                String mark = read(pending);
+                //noinspection ResultOfMethodCallIgnored
+                pending.delete();
+                if (age >= 0 && age <= PENDING_WINDOW_MS) {
+                    long crashed = versionOf(mark);
+                    if (crashed > 0) {
+                        writeBlocked(ctx, crashed);
+                        Xp.w(TAG + "previous hot reload did not settle (" + mark + ", " + age
+                                + "ms ago); build #" + crashed + " is blocked in this process");
+                    } else {
+                        Xp.w(TAG + "previous hot reload did not settle (" + mark + ", " + age
+                                + "ms ago); the marker carries no version, not blocking");
+                    }
+                }
+            }
+            long blocked = blockedVersion(ctx);
+            long now = BuildConfig.VERSION_CODE;
+            if (blocked > 0 && blocked != now) {
+                clearBlocked(ctx);
+                Xp.log(TAG + "build #" + blocked + " is no longer installed; the block is cleared");
+                blocked = -1L;
+            }
+            sBlocked = blocked > 0 ? String.valueOf(blocked) : "";
         } catch (Throwable t) {
             Xp.w(TAG + "breaker check failed: " + t);
         }
+    }
+
+    /**
+     * Why this generation may not be hot reloaded, or null. Runs in the check section, before
+     * anything is touched: a build that crashed this process on its way in is not tried again,
+     * and neither is any other build while that one is still what is installed.
+     */
+    private static String blockedReason() {
+        long blocked = -1L;
+        try {
+            Context ctx = appContext(null);
+            if (ctx != null) blocked = blockedVersion(ctx);
+        } catch (Throwable t) {
+            Xp.d(TAG + "blocked check could not read the file: " + t);
+        }
+        if (blocked <= 0 && !sBlocked.isEmpty()) {
+            try {
+                blocked = Long.parseLong(sBlocked);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        long now = BuildConfig.VERSION_CODE;
+        if (blocked > 0 && blocked == now) {
+            return "build #" + now + " did not survive a hot reload here; restart the process"
+                    + " after installing a newer build";
+        }
+        return null;
     }
 
     private static void writePending(Context ctx, String mark) {
@@ -621,12 +699,32 @@ public final class HotReload {
         }
     }
 
-    private static void appendBlocked(Context ctx, String mark) {
+    /** The build recorded as blocked in this process, or -1. One line, overwritten. */
+    private static long blockedVersion(Context ctx) {
+        try {
+            File f = new File(ctx.getFilesDir(), BLOCKED);
+            if (!f.exists()) return -1L;
+            return Long.parseLong(read(f).trim());
+        } catch (Throwable t) {
+            return -1L;
+        }
+    }
+
+    private static void writeBlocked(Context ctx, long version) {
         try (FileOutputStream out = new FileOutputStream(
-                new File(ctx.getFilesDir(), BLOCKED), true)) {
-            out.write((mark + "\n").getBytes(StandardCharsets.UTF_8));
+                new File(ctx.getFilesDir(), BLOCKED), false)) {
+            out.write((version + "\n").getBytes(StandardCharsets.UTF_8));
         } catch (Throwable t) {
             Xp.w(TAG + "could not record the blocked build: " + t);
+        }
+    }
+
+    private static void clearBlocked(Context ctx) {
+        try {
+            //noinspection ResultOfMethodCallIgnored
+            new File(ctx.getFilesDir(), BLOCKED).delete();
+        } catch (Throwable t) {
+            Xp.w(TAG + "could not clear the blocked build: " + t);
         }
     }
 
