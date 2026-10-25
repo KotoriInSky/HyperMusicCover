@@ -2628,7 +2628,10 @@ public class WallpaperProbe {
         if (sComposing.get() > 0) return "a cover is being composed";
         if (sArtSaving.get() > 0) return "the cover is still being written";
         if (sLyricBlurWant != sLyricBlur) return "a lyric blur change is in flight";
-        if (sKeepAt != 0L) return "the keep-wallpaper dim is moving";
+        // The keep dim is not a reason to refuse: sKeepFrom/To/At/DurMs travel with the
+        // handover and adoptMain() restarts the pump, so the transition carries on at the same
+        // point on the shared clock. A KEEP wallpaper was being refused on every install that
+        // landed inside its 100-300ms move.
         if (sGlTex != 0) return "a gpu crossfade holds a texture";
         if (sVideoGlLive || WallpaperVideo.holdsGl()) return "the motion cover holds GL objects";
         if (sCoverVideoActive || sActiveEngine != null || sPathPinned) {
