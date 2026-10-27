@@ -313,7 +313,9 @@ internal object PickupPark {
                         return super.onTransact(code, data, reply, flags)
                     }
                     // Every call on this interface is oneway; the ones not wanted are only taken.
-                    if (code != restart && code != front) return true
+                    // So is all of it once this generation has retired: the system keeps the
+                    // listener if the retirement could not unregister it.
+                    if (code != restart && code != front || !Gen.live()) return true
                     val info = runCatching {
                         data.enforceInterface("android.app.ITaskStackListener")
                         if (data.readInt() != 0) android.app.ActivityManager.RunningTaskInfo.CREATOR.createFromParcel(data) else null

@@ -839,6 +839,9 @@ public final class MediaCard {
                     (proxy, method, a) -> {
                         switch (method.getName()) {
                             case "onMediaDataChanged":
+                                // A retirement that could not take this back out of the set
+                                // leaves it here; a retired generation does not answer it.
+                                if (!Gen.live()) return null;
                                 Object data = a != null && a.length > 0 ? a[0] : null;
                                 sHeard = data;
                                 sHeardValid = true;

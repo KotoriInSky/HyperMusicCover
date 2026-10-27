@@ -334,7 +334,7 @@ public final class Xp {
 
     private static Field field(Object obj, String name) {
         for (Class<?> c = obj.getClass(); c != null; c = c.getSuperclass()) {
-            Field f = DECLARED_FIELDS.get(c).get(name);
+            Field f = cached(DECLARED_FIELDS, FIELD_CLASSES, c).get(name);
             if (f != null) return f;
         }
         throw new IllegalArgumentException("no field " + obj.getClass().getName() + "." + name);
@@ -448,8 +448,30 @@ public final class Xp {
             };
 
     /**
+     * [value]'s entry for [c], not left on the class once this generation is no longer live.
+     *
+     * The drop below runs on the binder thread as the retirement returns, while a thread of
+     * ours can still be finishing on the old code (GL, a lookup); an entry it computed after the
+     * drop would pin this loader again. The drop comes after retired is set, and both sides go
+     * through [classes]' lock, so an entry added after the drop sees retired here and goes.
+     */
+    private static <T> T cached(ClassValue<T> value, java.util.Set<Class<?>> classes, Class<?> c) {
+        T v = value.get(c);
+        if (!Gen.live()) {
+            synchronized (classes) {
+                try {
+                    value.remove(c);
+                } catch (Throwable ignored) {
+                }
+                classes.remove(c);
+            }
+        }
+        return v;
+    }
+
+    /**
      * Drops both ClassValue entries, so the classes stop pointing at this generation. Called
-     * at retirement; the caches rebuild lazily if anything still asks.
+     * at retirement, after retired is set; what is asked after that is not cached ([cached]).
      */
     static void dropClassValues() {
         dropClassValues(DECLARED_FIELDS, FIELD_CLASSES);
@@ -474,7 +496,7 @@ public final class Xp {
      */
     private static Method findMethod(Class<?> cls, String name, Object[] args) {
         for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
-            Overload[] cands = DECLARED_METHODS.get(c).get(name);
+            Overload[] cands = cached(DECLARED_METHODS, METHOD_CLASSES, c).get(name);
             if (cands == null) continue;
             for (Overload o : cands) {
                 Class<?>[] p = o.params;

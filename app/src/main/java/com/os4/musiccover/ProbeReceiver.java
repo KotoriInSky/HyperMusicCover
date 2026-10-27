@@ -1128,6 +1128,8 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
             if ("fetch".equals(i.getStringExtra("do"))) {
                 final PendingResult receipt = goAsync();
                 async = true;
+                // Finished either way: a receipt never finished holds the app's ordered
+                // broadcast until it times out.
                 Gen.thread("mc-pickup-cloud", () -> {
                     String said;
                     boolean ok = false;
@@ -1145,7 +1147,7 @@ final class ProbeReceiver extends ProbeGuard.Receiver {
                     receipt.setResultData(said);
                     receipt.setResultCode(Main.OP_ACK);
                     receipt.finish();
-                });
+                }, receipt::finish);
             } else {
                 setResultData(PickupCloud.INSTANCE.describe());
             }

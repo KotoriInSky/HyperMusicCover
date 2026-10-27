@@ -1091,7 +1091,7 @@ public final class LyricSource {
                         done.offer(slot);
                     }
                 }
-            });
+            }, () -> done.offer(slot));
         }
         boolean[] finished = new boolean[lenders.size()];
         int next = 0;
@@ -1247,7 +1247,7 @@ public final class LyricSource {
                         done.offer(1);
                     }
                 }
-            });
+            }, () -> done.offer(1));
         }
         // The TTML Hub beside the database: the same kind of file, keyed by the same ids.
         if (id != null && TtmlHub.kindOf(dir) != null) {
@@ -1261,7 +1261,7 @@ public final class LyricSource {
                         done.offer(3);
                     }
                 }
-            });
+            }, () -> done.offer(3));
         }
         if (q != null) {
             pending++;
@@ -1274,7 +1274,7 @@ public final class LyricSource {
                         done.offer(2);
                     }
                 }
-            });
+            }, () -> done.offer(2));
         }
         boolean haveNcm = false;
         long deadline = android.os.SystemClock.uptimeMillis() + RACE_BUDGET_MS;

@@ -921,13 +921,17 @@ object MiniPlayerRuntime {
             })?.apply { isAccessible = true }
         val ours = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(listener)) { self, m, args ->
             when (m.name) {
-                "updateFullAodAnimState" -> { runCatching { onAodDim(args!!) }; null }
-                "completeFullAodAnim" -> { dimNote("complete"); runCatching { settleAodDim() }; null }
-                "onFullAodChange" -> { dimNote("change dark=${args?.getOrNull(0)} glass=${args?.getOrNull(1)}"); null }
                 "hashCode" -> System.identityHashCode(self)
                 "equals" -> self === args?.firstOrNull()
                 "toString" -> "MusicCover full-AOD dim"
-                else -> null
+                // Without removeCallback, retire() takes this out of mListeners by field name, and
+                // a build that named it differently keeps it; a retired generation answers nothing.
+                else -> if (!Gen.live()) null else when (m.name) {
+                    "updateFullAodAnimState" -> { runCatching { onAodDim(args!!) }; null }
+                    "completeFullAodAnim" -> { dimNote("complete"); runCatching { settleAodDim() }; null }
+                    "onFullAodChange" -> { dimNote("change dark=${args?.getOrNull(0)} glass=${args?.getOrNull(1)}"); null }
+                    else -> null
+                }
             }
         }
         aodListener = ours

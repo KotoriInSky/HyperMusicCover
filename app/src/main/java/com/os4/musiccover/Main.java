@@ -2453,7 +2453,8 @@ public class Main extends XposedModule {
             // change, so ask for display priority rather than background.
             HandlerThread t = Gen.handlerThread("mc-art",
                     android.os.Process.THREAD_PRIORITY_DISPLAY);
-            sWork = new Handler(t.getLooper());
+            // Gen's, like main(): a push still queued when this generation retires is dropped.
+            sWork = Gen.liveHandler(t.getLooper());
         }
         return sWork;
     }

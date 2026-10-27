@@ -113,7 +113,7 @@ public final class OnlineLyrics {
                         done.offer(slot);
                     }
                 }
-            });
+            }, () -> done.offer(slot));
         }
         long deadline = android.os.SystemClock.uptimeMillis() + BUDGET_MS;
         boolean[] finished = new boolean[2];

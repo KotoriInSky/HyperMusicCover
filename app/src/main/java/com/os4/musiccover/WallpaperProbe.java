@@ -1504,7 +1504,7 @@ public class WallpaperProbe {
             } finally {
                 sArtSaving.decrementAndGet();
             }
-        });
+        }, sArtSaving::decrementAndGet);
     }
 
     private static void saveArt(Context ctx, byte[] jpg) {
@@ -3437,7 +3437,7 @@ public class WallpaperProbe {
             } finally {
                 sArtSaving.decrementAndGet();
             }
-        });
+        }, sArtSaving::decrementAndGet);
     }
 
     /**

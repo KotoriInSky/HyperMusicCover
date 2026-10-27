@@ -340,11 +340,14 @@ public final class Gen {
         // own - but a dry run has no next generation to build it: some of these are static
         // finals (the lyric pool) and the rest are cached in statics that install-time code
         // would have to be run again to replace.
+        //
+        // Not joined: this is the main thread, a GL or composing thread can be in the middle of
+        // a frame, and nothing after this waits on them being gone - what they run from here on
+        // is gated (liveHandler, guarded), and each ends at its loop's next turn.
         if (!dryRun) {
             for (HandlerThread t : handlerThreads) {
                 try {
                     t.quitSafely();
-                    t.join(200L);
                 } catch (Throwable ignored) {
                 }
             }
@@ -352,7 +355,13 @@ public final class Gen {
 
             for (ExecutorService e : executors) {
                 try {
-                    e.shutdownNow();
+                    // What never started is handed back, not cancelled: a submit()'s caller
+                    // waiting on get() (MotionArt's album pages) would wait for good.
+                    for (Runnable r : e.shutdownNow()) {
+                        if (r instanceof java.util.concurrent.Future) {
+                            ((java.util.concurrent.Future<?>) r).cancel(false);
+                        }
+                    }
                 } catch (Throwable ignored) {
                 }
             }
@@ -845,7 +854,17 @@ public final class Gen {
      * against the host the next one now owns (Main.main() is one of these too).
      */
     static android.os.Handler liveHandler() {
-        return new android.os.Handler(android.os.Looper.getMainLooper()) {
+        return liveHandler(android.os.Looper.getMainLooper());
+    }
+
+    /**
+     * The same on a thread of ours. The sweep's quitSafely still delivers what is already due,
+     * and the retirement is committed on the main thread while this one keeps going - a cover
+     * push queued on the composing worker would then compose from the old state and send it
+     * to the wallpaper over the next generation's.
+     */
+    static android.os.Handler liveHandler(android.os.Looper looper) {
+        return new android.os.Handler(looper) {
             @Override
             public void dispatchMessage(android.os.Message msg) {
                 if (live()) super.dispatchMessage(msg);
@@ -1034,15 +1053,38 @@ public final class Gen {
         return e;
     }
 
+    /**
+     * A thread whose body is skipped when this generation is no longer live by the time it
+     * starts. A FutureTask is cancelled then, so whoever waits on its get() is let go.
+     */
     public static Thread thread(String name, Runnable r) {
+        return thread(name, r, r instanceof java.util.concurrent.Future
+                ? () -> ((java.util.concurrent.Future<?>) r).cancel(false) : null);
+    }
+
+    /**
+     * The same, with [skipped] run in the body's place when it is skipped: the other half of
+     * whatever the caller paired with the body - a count taken before it started, a receipt it
+     * owes, a queue someone is polling.
+     */
+    public static Thread thread(String name, Runnable r, Runnable skipped) {
         // Out of the ledger when the work is done: this list is what the generation still holds,
         // and a finished Thread still pins its runnable's captures (lyric rows, bitmaps). Only
         // the dry run used to prune it, so a live generation kept one entry per lookup and per
         // card picture for its whole life.
-        final Runnable body = guarded(r);
         Thread t = new Thread(() -> {
             try {
-                body.run();
+                if (live()) {
+                    r.run();
+                } else if (skipped != null) {
+                    // Not thrown on: an uncaught throw here would take the process down on a
+                    // retired generation's behalf.
+                    try {
+                        skipped.run();
+                    } catch (Throwable e) {
+                        Xp.w("[MCGen] " + name + " skipped, and its pairing failed: " + e);
+                    }
+                }
             } finally {
                 threads.remove(Thread.currentThread());
             }

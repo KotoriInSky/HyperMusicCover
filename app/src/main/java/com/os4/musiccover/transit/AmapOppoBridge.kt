@@ -1,4 +1,5 @@
 package com.os4.musiccover.transit
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.content.ContentProviderClient
 import android.content.ContentResolver
@@ -331,11 +332,22 @@ internal object AmapOppoBridge {
                 val cbType = (method ?: plain)?.parameterTypes?.get(1) ?: return
                 // The service drops a begin whose callback is null, so a stand-in of the script's
                 // own kind is made; only the card's connection state ever goes to it.
+                // The service keeps it for the ride, past a retirement; a retired generation's
+                // copy answers nothing. Its identity is answered either way - null there was an
+                // NPE for whoever put it in a map.
                 val cb = java.lang.reflect.Proxy.newProxyInstance(
                     cbType.classLoader, arrayOf(cbType)
-                ) { _, m, args ->
-                    if (m.name == "callback") setBridged(key, "callback " + args?.firstOrNull())
-                    null
+                ) { self, m, args ->
+                    when (m.name) {
+                        "hashCode" -> System.identityHashCode(self)
+                        "equals" -> self === args?.firstOrNull()
+                        "toString" -> "MusicCover OPPO card callback"
+                        "callback" -> {
+                            if (Gen.live()) setBridged(key, "callback " + args?.firstOrNull())
+                            null
+                        }
+                        else -> null
+                    }
                 }
                 if (method != null) {
                     // The card's provider and intent come from the begin data (il3.onReceiveBizBeginData),
