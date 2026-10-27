@@ -30,3 +30,8 @@ local.properties
 # was tried, device quirks, and round-by-round debugging history. For whoever (whatever)
 # picks this up next, not for the repo's readers.
 /.workbuddy/
+
+# The maintainer's own rules for agents working on this checkout (CLAUDE.md is the shared one),
+# and Claude Code's per-user settings.
+/CLAUDE.local.md
+/.claude/settings.local.json
