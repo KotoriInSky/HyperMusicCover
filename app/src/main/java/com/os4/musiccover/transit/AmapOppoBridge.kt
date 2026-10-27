@@ -62,6 +62,16 @@ internal object AmapOppoBridge {
     private val acquires = AtomicInteger()
     private val shares = AtomicInteger()
 
+    /** The clients still out, for the next generation (HotReload.saveFeatures). */
+    fun save(): Array<Any?> = synchronized(ours) { ours.toTypedArray<Any?>() }
+
+    /** The previous generation's clients, taken as ours before the hooks go in. */
+    fun adopt(saved: Array<Any?>?) {
+        val clients = saved?.filterIsInstance<ContentProviderClient>() ?: return
+        ours.addAll(clients)
+        if (clients.isNotEmpty()) Xp.log(TAG + "adopted ${clients.size} stand-in client(s)")
+    }
+
     fun handle(cl: ClassLoader) {
         try {
             for (name in arrayOf("acquireUnstableContentProviderClient", "acquireContentProviderClient")) {

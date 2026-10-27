@@ -90,6 +90,10 @@ public class WallpaperProbe {
      * was re-cut on every hand-over. Cleared whole when the source changes, which is the only
      * time these stop being wanted.
      */
+    /**
+     * Guarded by itself: each screen's renderer fits on its own GL thread, and a retirement
+     * clears it from the main thread.
+     */
     private static final java.util.HashMap<Long, Bitmap> sScreenArts = new java.util.HashMap<>();
     private static Bitmap sScreenArtOf;
     private static volatile int sReportedW, sReportedH;
@@ -952,12 +956,15 @@ public class WallpaperProbe {
                     if (art != null) {
                         // Match the original exactly: updateDimensions/updateMatrix derive
                         // the GL matrix from these, so another size lands the wallpaper askew.
+                        // Read once: a retirement clears these from the main thread while
+                        // this is the GL thread's.
                         Bitmap fitted;
+                        Bitmap had = sFitted;
                         if (art.getWidth() == w && art.getHeight() == h) {
                             fitted = art;                   // composed at exactly this size
-                        } else if (sFitted != null && sFittedOf == art
-                                && sFitted.getWidth() == w && sFitted.getHeight() == h) {
-                            fitted = sFitted;               // already fitted for this texture
+                        } else if (had != null && sFittedOf == art
+                                && had.getWidth() == w && had.getHeight() == h) {
+                            fitted = had;                   // already fitted for this texture
                         } else {
                             fitted = centerCrop(art, w, h);
                             sFitted = fitted;
@@ -2830,8 +2837,10 @@ public class WallpaperProbe {
         sFitted = null;
         sFittedOf = null;
         dropFrosted();
-        sScreenArts.clear();
-        sScreenArtOf = null;
+        synchronized (sScreenArts) {
+            sScreenArts.clear();
+            sScreenArtOf = null;
+        }
         sShadeFitted = null;
         sShadeFitOf = null;
         // The two fade buffers are screen-sized each; the check section has already said no
@@ -3744,7 +3753,9 @@ public class WallpaperProbe {
                         .append(e.getKey() == sKeyguardTexture ? "  <- current" : "");
             }
         }
-        sb.append("\ncuts held: ").append(sScreenArts.size());
+        synchronized (sScreenArts) {
+            sb.append("\ncuts held: ").append(sScreenArts.size());
+        }
         sb.append("\nart: ").append(describe(sArt)).append("  orig: ").append(describe(sOrig));
         sb.append("\ntexture: ").append(sKeyguardTexture == null ? "not captured" : "captured");
         sb.append("\ngpu fade: on=").append(sGpuFadeOn).append(" hooked=").append(sDrawHooked)
@@ -5603,14 +5614,17 @@ public class WallpaperProbe {
         int w = sSurfaceW, h = sSurfaceH;
         if (!sTexFit || src == null || w <= 0 || h <= 0) return null;
         if (src.getWidth() == w && src.getHeight() == h) return null;
-        // A new source makes every cut of the old one useless at once.
-        if (sScreenArtOf != src) {
-            sScreenArts.clear();
-            sScreenArtOf = src;
-        }
         Long key = ((long) w << 32) | (h & 0xffffffffL);
-        Bitmap have = sScreenArts.get(key);
-        if (have != null && !have.isRecycled()) return have;
+        synchronized (sScreenArts) {
+            // A new source makes every cut of the old one useless at once.
+            if (sScreenArtOf != src) {
+                sScreenArts.clear();
+                sScreenArtOf = src;
+            }
+            Bitmap have = sScreenArts.get(key);
+            if (have != null && !have.isRecycled()) return have;
+        }
+        // Outside the lock: the other screen's upload should not wait on this one's crop.
         Bitmap fitted;
         try {
             fitted = centerCrop(src, w, h);
@@ -5623,9 +5637,15 @@ public class WallpaperProbe {
         // renderer can still be drawing from the cut this one is replacing, and a recycled
         // bitmap under GL is a black wallpaper, not an exception anyone sees. The collector
         // frees them once the map drops them.
-        sScreenArts.put(key, fitted);
+        int held;
+        synchronized (sScreenArts) {
+            // Another source arrived while this one was cropped: the cut is still right for
+            // this upload, it is only not kept.
+            if (sScreenArtOf == src) sScreenArts.put(key, fitted);
+            held = sScreenArts.size();
+        }
         Xp.log(TAG + "texture fitted to the screen: " + describe(src)
-                + " -> " + describe(fitted) + " (" + sScreenArts.size() + " cut(s) held)");
+                + " -> " + describe(fitted) + " (" + held + " cut(s) held)");
         return fitted;
     }
 

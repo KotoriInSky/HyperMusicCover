@@ -104,6 +104,14 @@ public final class Gen {
     private static final long R_FINISH_MS = 10_000L;
 
     /**
+     * Set while a committed retirement's teardown and sweep run. A JVM system property because
+     * it has to cross generations: the next one cannot see this class, but every class loader
+     * in the process shares java.lang.System. Gone with the process, so a crash mid-teardown
+     * leaves nothing behind.
+     */
+    private static final String TEARDOWN_MARK = "com.os4.musiccover.hr.teardown";
+
+    /**
      * The whole retirement as one main-thread task: [check] decides, and on its yes the
      * generation retires, [beforeSweep] gives the OEM its state back, and the ledger takes back
      * everything this generation registered. Returns null once committed, else the refusal.
@@ -137,8 +145,13 @@ public final class Gen {
                 } catch (Throwable t) {
                     why = "the check failed: " + t;
                 }
+                // Up before the commit can be seen: a caller that gives up waiting returns
+                // "retired", and the next generation must find this already set.
+                if (why == null) System.setProperty(TEARDOWN_MARK, Integer.toHexString(
+                        System.identityHashCode(Gen.class)));
                 if (why == null && !state.compareAndSet(R_CHECKING, R_COMMITTED)) {
                     why = "the caller gave up while the check ran";
+                    System.clearProperty(TEARDOWN_MARK);
                 }
                 if (why != null) {
                     refusal[0] = why;
@@ -146,11 +159,15 @@ public final class Gen {
                 }
                 quiescing = true;
                 retired = true;
-                if (beforeSweep != null) {
-                    Throwable t = teardown(beforeSweep);
-                    if (t != null) Xp.w("[MCGen] teardown before the sweep failed: " + t);
+                try {
+                    if (beforeSweep != null) {
+                        Throwable t = teardown(beforeSweep);
+                        if (t != null) Xp.w("[MCGen] teardown before the sweep failed: " + t);
+                    }
+                    sweep(false);
+                } finally {
+                    System.clearProperty(TEARDOWN_MARK);
                 }
-                sweep(false);
             } finally {
                 done.countDown();
             }
@@ -179,6 +196,31 @@ public final class Gen {
             return null;
         }
         return refusal[0];
+    }
+
+    /**
+     * The new generation's side: waits up to [timeoutMs] for the previous one's teardown, which
+     * a retirement that outlasted its caller's wait may still be running on the main thread -
+     * restoring OEM state the new hooks are about to write, and sweeping as they go in. False
+     * when it is still running.
+     */
+    static boolean awaitPredecessor(long timeoutMs) {
+        String mark = System.getProperty(TEARDOWN_MARK);
+        if (mark == null) return true;
+        long start = android.os.SystemClock.uptimeMillis();
+        long deadline = start + timeoutMs;
+        while (System.getProperty(TEARDOWN_MARK) != null) {
+            if (android.os.SystemClock.uptimeMillis() >= deadline) return false;
+            try {
+                Thread.sleep(20L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return System.getProperty(TEARDOWN_MARK) == null;
+            }
+        }
+        Xp.w("[MCGen] waited " + (android.os.SystemClock.uptimeMillis() - start)
+                + "ms for generation " + mark + "'s teardown");
+        return true;
     }
 
     private static boolean await(java.util.concurrent.CountDownLatch latch, long ms) {
@@ -1293,7 +1335,19 @@ public final class Gen {
 
     /** A host value we wrote, with the way back. */
     public static <T> void swap(Object owner, String what, T original, Runnable restore) {
-        swaps.add(new Swap(owner, what, original, restore));
+        swap(owner, what, original, restore, false);
+    }
+
+    /**
+     * The same, for a value written after installSystemUi from a path a dry run does not run
+     * again (the control-centre plugin's watch): [outlivesDryRun] keeps a dry run from giving
+     * it back, as markInstallScope does for what install wrote.
+     */
+    public static <T> void swap(Object owner, String what, T original, Runnable restore,
+                                boolean outlivesDryRun) {
+        Swap s = new Swap(owner, what, original, restore);
+        swaps.add(s);
+        if (outlivesDryRun) INSTALL_KEPT.add(s);
         Xp.d("[MCGen] swap " + what + " (had " + original + ")");
     }
 

@@ -12,6 +12,7 @@ import com.os4.musiccover.pickup.RearScreen;
 import com.os4.musiccover.shade.ShadeLayer;
 import com.os4.musiccover.transit.AmapFocus;
 import com.os4.musiccover.transit.AmapImmerse;
+import com.os4.musiccover.transit.AmapOppoBridge;
 import com.os4.musiccover.transit.AmapTransitShare;
 import com.os4.musiccover.transit.MetroCodeIsland;
 
@@ -289,6 +290,11 @@ public final class HotReload {
             // The fingerprint icon whose pointer listener was hooked on a long press.
             out.add(new Object[]{"fpq", new Object[]{FingerprintQuick.pointerIcon()}});
         }
+        if ("com.autonavi.minimap".equals(proc)) {
+            // The stand-in clients 高德 was handed: it may hold one across rides, and a call on
+            // it that the new generation does not know as ours would go to the real stand-in.
+            out.add(new Object[]{"amapclients", AmapOppoBridge.INSTANCE.save()});
+        }
         if ("com.miui.personalassistant".equals(proc)) {
             // The ride in progress: 小爱's cards start a trip and extend it in memory only, and
             // the station whose card already went up will not come again - a new generation
@@ -342,6 +348,13 @@ public final class HotReload {
         int from = state == null ? 0 : state.fromVersionCode;
         String brokenFrom = from != 0 && HotReloadPolicy.BROKEN_RETIRE.contains(from)
                 ? "build #" + from + " is known to retire badly" : null;
+        // The same kind of not-ours: the previous generation's retirement returned while its
+        // teardown was still on the main thread (Gen.retireOnMain gives up waiting), and hooks
+        // installed now would be written over by what it gives back.
+        if (brokenFrom == null && !Gen.awaitPredecessor(PREDECESSOR_WAIT_MS)) {
+            brokenFrom = "the previous generation's teardown did not finish in "
+                    + PREDECESSOR_WAIT_MS + "ms";
+        }
         // If this process does not survive the next few seconds, the marker is still here when
         // it comes back, and that cold start blocks this build until the next restart.
         // The version code is this generation's own constant: the marker names the build that is
@@ -375,6 +388,10 @@ public final class HotReload {
                 throw new IllegalStateException("no host class loader can load the process's classes");
             }
             adoptAppleState(state);
+            // Before the provider_call hook goes in, so no call falls between the two.
+            if ("com.autonavi.minimap".equals(proc)) {
+                AmapOppoBridge.INSTANCE.adopt(feature(state, "amapclients"));
+            }
             // Before the hooks go in: the wallpaper's upload path is live as soon as it is
             // installed, and an upload that found no cover would hand the OEM's own decode of
             // the wallpaper to the texture - the cover gone for the rest of the track.
@@ -539,6 +556,9 @@ public final class HotReload {
             throw new IllegalStateException("no installer for " + proc);
         }
     }
+
+    /** How long adoption waits for the previous generation's teardown; see Gen.awaitPredecessor. */
+    private static final long PREDECESSOR_WAIT_MS = 5000L;
 
     /** One feature's handover value, or null. */
     private static Object[] feature(HotReloadState.State state, String key) {

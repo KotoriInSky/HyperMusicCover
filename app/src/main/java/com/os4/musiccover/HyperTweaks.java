@@ -507,15 +507,30 @@ final class HyperTweaks {
                 if (args.length == 1 && args[0] instanceof Double
                         && (Double) args[0] == DEPTH_THRESHOLD_STOCK) {
                     args[0] = DEPTH_THRESHOLD_OPEN;
+                    sOpenedStock = true;
                 }
                 return chain.proceed(args);
             });
             Field image = evaluatorCls.getDeclaredField("IMAGE_THRESHOLD");
             image.setAccessible(true);
-            Object threshold = image.get(null);
-            Field rate = thresholdCls.getDeclaredField("rate");
+            final Object threshold = image.get(null);
+            final Field rate = thresholdCls.getDeclaredField("rate");
             rate.setAccessible(true);
+            // Given back at retirement: an inert successor writes nothing, and the open threshold
+            // would otherwise outlive the module in this process. Reading the field is what runs
+            // the initialiser, through the hook above - so an OPEN read here is the hook's own
+            // work, and what it replaced was the stock value.
+            double read = rate.getDouble(threshold);
+            final double had = read == DEPTH_THRESHOLD_OPEN && sOpenedStock
+                    ? DEPTH_THRESHOLD_STOCK : read;
             rate.setDouble(threshold, DEPTH_THRESHOLD_OPEN);
+            Gen.swap(threshold, "DepthEvaluator.IMAGE_THRESHOLD.rate", had, () -> {
+                try {
+                    rate.setDouble(threshold, had);
+                } catch (IllegalAccessException e) {
+                    throw new IllegalStateException(e);
+                }
+            });
             ok("depth-threshold:" + where);
         } catch (Throwable t) {
             failed("depth-threshold:" + where, t);
@@ -898,7 +913,7 @@ final class HyperTweaks {
             Class<?> themeUtils = Xp.findClass(CLS_SYSUI_THEME_UTILS, cl);
             Field flag = themeUtils.getDeclaredField("sDefaultSysUiTheme");
             flag.setAccessible(true);
-            flag.setBoolean(null, true);
+            forceStatic(flag, "ThemeUtils.sDefaultSysUiTheme", false);
             Class<?> config = Xp.findClass(CLS_CONFIG_CONTROLLER, cl);
             Xp.hookAll("sysui.glass.config_changed", config, "onConfigurationChanged", chain -> {
                 Object result = chain.proceed();
@@ -1018,11 +1033,43 @@ final class HyperTweaks {
             try {
                 Field f = themeUtils.getDeclaredField(name);
                 f.setAccessible(true);
-                f.setBoolean(null, true);
+                // Written from the plugin's watch and its update hooks, after install: a dry run
+                // does not come back through here, so it must not give these back either.
+                forceStatic(f, "plugin ThemeUtils." + name, true);
             } catch (Throwable ignored) {
                 // One of the two is missing on some builds; the other still holds.
             }
         }
+    }
+
+    /** Set when the threshold hook turned a stock value open; see openDepthThreshold. */
+    private static volatile boolean sOpenedStock;
+
+    /**
+     * The static booleans written so far, each recorded with its value from before the first.
+     * By equality, not identity: getDeclaredField hands out a new Field every call, and the
+     * plugin's update hooks look theirs up each time.
+     */
+    private static final java.util.Set<Field> FORCED =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    /**
+     * Sets a static boolean to true, recording the first time what it held so the retirement
+     * gives it back. The hooks that write it again later find it recorded already.
+     */
+    private static void forceStatic(final Field f, String what, boolean outlivesDryRun)
+            throws IllegalAccessException {
+        if (FORCED.add(f)) {
+            final boolean had = f.getBoolean(null);
+            Gen.swap(f.getDeclaringClass(), what, had, () -> {
+                try {
+                    f.setBoolean(null, had);
+                } catch (IllegalAccessException e) {
+                    throw new IllegalStateException(e);
+                }
+            }, outlivesDryRun);
+        }
+        f.setBoolean(null, true);
     }
 
     /** Newer builds keep their own copy of the answer; these are the two that ask. */
