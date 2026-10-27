@@ -140,6 +140,13 @@ public final class HotReload {
         if (blocked != null) {
             return refuse(blocked);
         }
+        // An inert generation never ran its hooks, so it learned nothing the next one could be
+        // handed - the wallpaper's engine, above all, is only seen as it is constructed. Adopted
+        // from, the next generation comes up half blind (measured 2026-10-27: engine=none); it
+        // stays inert until the process restarts instead.
+        if (Gen.inert) {
+            return refuse("this generation is inert; restart the process");
+        }
 
         // The two processes with state to give back run their own main-thread step before the
         // sweep: SystemUI's features give the OEM its state back - the clock's squeeze, the
