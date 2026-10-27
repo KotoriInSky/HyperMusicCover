@@ -24,9 +24,11 @@ final class HotReloadState {
     private static final int MIN_SCHEMA = 1;
 
     /** [0] magic, [1] schema, [2] build, [3] process, [4] host loader, [5] context, [6] features,
-     *  [7] how many generations this process has been through. */
+     *  [7] how many generations this process has been through, [8] the retiring build's version
+     *  code (appended within schema 1: a reader that predates it ignores it, and one that finds
+     *  it missing reads 0). */
     static Object[] encode(String build, String process, ClassLoader hostLoader, Context context,
-                           Object[][] features, int reloadCount) {
+                           Object[][] features, int reloadCount, int fromVersionCode) {
         if (features != null) {
             for (Object[] feature : features) {
                 check(feature[0]);
@@ -34,7 +36,7 @@ final class HotReloadState {
             }
         }
         return new Object[]{MAGIC, SCHEMA, build, process, hostLoader, context, features,
-                reloadCount};
+                reloadCount, fromVersionCode};
     }
 
     /** Null when [saved] is not ours or from a schema this build does not know. */
@@ -51,7 +53,8 @@ final class HotReloadState {
                 a.length > 4 && a[4] instanceof ClassLoader ? (ClassLoader) a[4] : null,
                 a.length > 5 && a[5] instanceof Context ? (Context) a[5] : null,
                 a.length > 6 && a[6] instanceof Object[][] ? (Object[][]) a[6] : new Object[0][],
-                a.length > 7 && a[7] instanceof Integer ? (Integer) a[7] : 1);
+                a.length > 7 && a[7] instanceof Integer ? (Integer) a[7] : 1,
+                a.length > 8 && a[8] instanceof Integer ? (Integer) a[8] : 0);
     }
 
     /**
@@ -90,9 +93,11 @@ final class HotReloadState {
         final Context context;
         final Object[][] features;
         final int reloadCount;
+        /** 0 from a build that did not send it. */
+        final int fromVersionCode;
 
         State(int schema, String fromBuild, String process, ClassLoader hostLoader,
-              Context context, Object[][] features, int reloadCount) {
+              Context context, Object[][] features, int reloadCount, int fromVersionCode) {
             this.schema = schema;
             this.fromBuild = fromBuild;
             this.process = process;
@@ -100,6 +105,7 @@ final class HotReloadState {
             this.context = context;
             this.features = features;
             this.reloadCount = reloadCount;
+            this.fromVersionCode = fromVersionCode;
         }
     }
 }

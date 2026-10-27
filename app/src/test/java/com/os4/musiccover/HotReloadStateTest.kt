@@ -19,6 +19,7 @@ class HotReloadStateTest {
         null,
         arrayOf(arrayOf<Any>("apple", arrayOf<Any>("held", "payload"))),
         3,
+        947063,
     )
 
     @Test
@@ -28,6 +29,7 @@ class HotReloadStateTest {
         assertEquals("0.9.48-hrstep4", state.fromBuild)
         assertEquals("com.android.systemui", state.process)
         assertEquals(3, state.reloadCount)
+        assertEquals(947063, state.fromVersionCode)
         assertEquals(1, state.features.size)
         assertEquals("apple", state.features[0][0])
         assertEquals("held", (state.features[0][1] as Array<*>)[0])
@@ -56,6 +58,7 @@ class HotReloadStateTest {
         assertNull(state.context)
         assertEquals(0, state.features.size)
         assertEquals(1, state.reloadCount)
+        assertEquals(0, state.fromVersionCode)
     }
 
     @Test
@@ -71,6 +74,7 @@ class HotReloadStateTest {
             HotReloadState.encode(
                 "build", "process", null, null,
                 arrayOf(arrayOf<Any>("core", ModuleThing())),
+                1,
                 1,
             )
         }

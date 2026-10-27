@@ -1119,7 +1119,23 @@ object MiniPlayerRuntime {
 
     /** For `op mini`. */
     private fun describeAodDim(): String = "aodDim=${if (aodDimArgs != null) "on" else "off"}/$aodDimFrames" +
+        " ${describeAodListeners()}" +
         " dimlog=[${synchronized(dimLog) { dimLog.joinToString(" ; ") }}]"
+
+    /**
+     * The controller's listener list: how long, how many of them are a MusicCover proxy (any
+     * generation's - they all print the same), and whether this generation's is one. After a hot
+     * reload the proxies should still be exactly one, and it ours.
+     */
+    private fun describeAodListeners(): String {
+        val c = aodController?.get() ?: return "aodListeners=(no controller)"
+        return runCatching {
+            val list = (Xp.getObjectField(c, "mListeners") as List<*>).toList()
+            val proxies = list.count { it != null && it.toString() == "MusicCover full-AOD dim" }
+            val oursIn = list.any { it === aodListener }
+            "aodListeners=${list.size} proxies=$proxies ours=$oursIn"
+        }.getOrElse { "aodListeners=? $it" }
+    }
 
     /**
      * The dim's events for `op mini`, uptime ms: the listener's frames (the blend's first colour,

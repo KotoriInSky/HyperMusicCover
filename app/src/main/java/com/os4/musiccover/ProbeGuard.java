@@ -142,16 +142,38 @@ public final class ProbeGuard {
      */
     public static void register(Context ctx, IntentFilter filter, String tag,
                          java.util.function.Supplier<? extends Receiver> make, String... trusted) {
+        register(ctx, filter, tag, make, true, trusted);
+    }
+
+    /**
+     * The same pair, outside the ledger: for an inert generation, whose ledger refuses every
+     * registration and whose receivers have all been swept. Never unregistered - the process
+     * has to restart to leave that state, and the pair goes with it.
+     */
+    static void registerOutsideLedger(Context ctx, IntentFilter filter, String tag,
+                         java.util.function.Supplier<? extends Receiver> make, String... trusted) {
+        register(ctx, filter, tag, make, false, trusted);
+    }
+
+    private static void register(Context ctx, IntentFilter filter, String tag,
+                         java.util.function.Supplier<? extends Receiver> make, boolean ledger,
+                         String... trusted) {
         Receiver open = make.get();
         open.trusted = trusted;
         open.tag = tag;
-        Gen.receiver(ctx, open, filter, Context.RECEIVER_EXPORTED);
         Receiver adb = make.get();
         adb.viaDump = true;
         adb.trusted = trusted;
         adb.tag = tag;
-        Gen.receiver(ctx, adb, new IntentFilter(filter), DUMP, null,
-                Context.RECEIVER_EXPORTED);
+        if (ledger) {
+            Gen.receiver(ctx, open, filter, Context.RECEIVER_EXPORTED);
+            Gen.receiver(ctx, adb, new IntentFilter(filter), DUMP, null,
+                    Context.RECEIVER_EXPORTED);
+        } else {
+            ctx.registerReceiver(open, filter, Context.RECEIVER_EXPORTED); // gen-ok
+            ctx.registerReceiver(adb, new IntentFilter(filter), DUMP, null, // gen-ok
+                    Context.RECEIVER_EXPORTED);
+        }
     }
 
     /** How often a refused sender is logged: a hostile app could otherwise flood the log. */

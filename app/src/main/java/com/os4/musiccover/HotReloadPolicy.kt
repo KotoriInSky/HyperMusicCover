@@ -42,12 +42,13 @@ object HotReloadPolicy {
     )
 
     /**
-     * Loaded version codes whose retirement is known to be broken.
+     * Released version codes whose retirement is known to be broken.
      *
-     * <p>Meant for the App, but nothing reads it today: the App's plan comes from
-     * [SUPPORTED] alone, and a build that crashes on its way in is caught by the module's own
-     * breaker (HotReload's pending/blocked files), not by a list. Kept because a broken
-     * retirement needs a place to be named; wiring it into LsposedService is the missing half.
+     * <p>Read by the generation that comes after one: the retiring build's version code travels
+     * in the saved state, and a build named here is not adopted from - by then its retirement
+     * has already run, so the new generation goes inert and the app's 「需要重启」 card restarts
+     * the process. A build that crashes on its way in needs no entry: the module's own breaker
+     * (HotReload's pending/blocked files) catches that.
      */
     @JvmField
     val BROKEN_RETIRE: Set<Int> = emptySet()

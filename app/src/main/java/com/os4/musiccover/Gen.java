@@ -26,11 +26,9 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import io.github.libxposed.api.XposedInterface;
@@ -523,8 +521,6 @@ public final class Gen {
                 }
             }
             threads.clear();
-
-            ioExecutor.shutdownNow();
         } else {
             // Not stopped in a dry run (see above), but a record of one that is already gone is
             // not something this generation holds. Plain threads take themselves out (thread());
@@ -588,10 +584,6 @@ public final class Gen {
     private static final List<OwnedView> ownViews = new CopyOnWriteArrayList<>();
     private static final List<OwnedWindow> ownWindows = new CopyOnWriteArrayList<>();
     private static final List<Animator> animators = new CopyOnWriteArrayList<>();
-
-    private static final AtomicInteger ioInFlight = new AtomicInteger();
-    private static final ExecutorService ioExecutor =
-            Executors.newCachedThreadPool(r -> new Thread(guarded(r), "mc-io"));
 
     private static final class PostedOn implements Runnable {
         final View view;
@@ -1060,22 +1052,6 @@ public final class Gen {
         return t;
     }
 
-    /** A background call with an in-flight count, so retirement can tell whether one is open. */
-    public static <T> Future<T> io(Callable<T> c) {
-        ioInFlight.incrementAndGet();
-        return ioExecutor.submit(() -> {
-            try {
-                return live() ? c.call() : null;
-            } finally {
-                ioInFlight.decrementAndGet();
-            }
-        });
-    }
-
-    public static int ioInFlight() {
-        return ioInFlight.get();
-    }
-
     // ---------------------------------------------------------------- host callbacks
 
     public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, int flags) {
@@ -1365,7 +1341,6 @@ public final class Gen {
                 + " swaps=" + swaps.size()
                 + " ownViews=" + ownViews.size()
                 + " ownWindows=" + ownWindows.size()
-                + " animators=" + animators.size()
-                + " ioInFlight=" + ioInFlight.get();
+                + " animators=" + animators.size();
     }
 }

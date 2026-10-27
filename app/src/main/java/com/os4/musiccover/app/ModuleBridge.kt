@@ -42,6 +42,11 @@ object ModuleBridge {
 
     data class State(
         val alive: Boolean = false,
+        /**
+         * SystemUI took a hot reload and could not adopt it: hooks pass through until it
+         * restarts. Not [alive] - none of the other values were answered.
+         */
+        val inert: Boolean = false,
         val cover: Boolean = false,
         val auto: Boolean = false,
         /** 启用音乐锁屏封面. On for a module too old to report it: it had no way to turn off. */
@@ -891,7 +896,9 @@ object ModuleBridge {
     }
 
     private fun fromBundle(b: Bundle?): State {
-        if (b == null || !b.getBoolean("alive", false)) return State()
+        if (b == null || !b.getBoolean("alive", false)) {
+            return State(inert = b?.getBoolean("inert", false) == true)
+        }
         return State(
             alive = true,
             cover = b.getBoolean("cover", false),

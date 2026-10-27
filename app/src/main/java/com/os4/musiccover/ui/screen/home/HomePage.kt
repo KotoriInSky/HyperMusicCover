@@ -162,7 +162,7 @@ fun HomePageView(
     // A restart blanks the screen and stops whatever the scoped apps were doing, so it asks.
     // Asked from the status card, which is the whole width of the page and where a scroll starts.
     var confirmRestart by remember { mutableStateOf(false) }
-    LaunchedEffect(current, resumeKey, service) {
+    LaunchedEffect(current, resumeKey, service, state.inert) {
         if (current) stale = withContext(Dispatchers.IO) { LsposedService.staleCount() }
     }
 
@@ -180,7 +180,8 @@ fun HomePageView(
             ) {
                 val darkTheme = isInDarkTheme()
                 val dynamicColor = MiuixTheme.isDynamicColor
-                val ok = state.alive
+                // An inert SystemUI is not a missing module: it is one more process to restart.
+                val ok = state.alive || state.inert
                 // Processes left on the build before this one. An answer about the module rather
                 // than about this app, so it can be true while the module is not answering at
                 // all - and then the card says the more urgent of the two things.

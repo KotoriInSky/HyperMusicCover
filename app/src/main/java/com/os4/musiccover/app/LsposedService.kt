@@ -102,11 +102,16 @@ object LsposedService {
      * than one that was never asked, and leaving it out would make the card disappear without
      * anything having changed.
      */
-    fun staleTargets(): List<HookedTarget>? =
-        runningTargets()?.filter {
-            (it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED) &&
+    fun staleTargets(): List<HookedTarget>? {
+        // An inert SystemUI is reported SUCCEEDED on the new build - its adoption failed after
+        // LSPosed's part was done - and only says so in its query answer.
+        val inert = ModuleBridge.lastAnswer()?.inert == true
+        return runningTargets()?.filter {
+            (it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED ||
+                (inert && it.processName == "com.android.systemui")) &&
                 !auxiliaryOfSupported(it.processName)
         }
+    }
 
     /**
      * 高德's :locationservice and :widgetProvider report the same package and carry their own

@@ -178,6 +178,8 @@ final class FingerprintQuick {
     private static Class<?> sUtils;
     private static Class<?> sUtil;
     private static boolean sPointerHooked;
+    /** The icon view whose listener is hooked: handed to the next generation (adoptPointer). */
+    private static Object sPointerIcon;
 
     /** Custom item -> what it shows and does. Identity keys: the OEM items do not override equals. */
     private static final Map<Object, Resolved> sCustom =
@@ -535,6 +537,7 @@ final class FingerprintQuick {
     private static synchronized void hookPointer(Object icon) {
         if (sPointerHooked) return;
         sPointerHooked = true;
+        sPointerIcon = icon;
         try {
             Object listener = Xp.getObjectField(icon, "listener");
             Xp.hookAll("sysui.fpq.pointer", listener.getClass(), "onPointerEvent", chain -> {
@@ -721,6 +724,20 @@ final class FingerprintQuick {
      * menu is rebuilt on every open, so nothing else of it has to be put back; the OEM's own
      * item list was emptied for the honeycomb and is rebuilt there too.
      */
+    /** For the hot-reload handover: null until the first long press hooked the listener. */
+    static Object pointerIcon() {
+        return sPointerIcon;
+    }
+
+    /**
+     * The new generation's half: the old one had the pointer listener hooked, and the press
+     * that would hook it again is the one whose first moves it exists for. So it goes back on
+     * now, inside the adoption, where it replaces the old handle rather than reporting it missing.
+     */
+    static void adoptPointer(Object icon) {
+        if (icon != null) hookPointer(icon);
+    }
+
     static void retire() {
         if (sDisc != null && sDisc.getParent() instanceof ViewGroup) {
             ((ViewGroup) sDisc.getParent()).removeView(sDisc);

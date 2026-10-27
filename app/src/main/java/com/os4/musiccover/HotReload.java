@@ -79,6 +79,8 @@ public final class HotReload {
     private static volatile String sBlocked = "";
     /** How the last adoption in this process paired the hooks, or empty. For `op=gen`. */
     private static volatile String sAdopted = "";
+    /** Why this generation went inert, or null. For `op=gen` and the app's query. */
+    private static volatile String sInert;
 
     // ---------------------------------------------------------------- module side
 
@@ -164,7 +166,8 @@ public final class HotReload {
                 // the encoding - and its check - happens here, where a failure still leaves us
                 // running.
                 param.setSavedInstanceState(HotReloadState.encode(
-                        build, proc, sHostLoader, Main.sAppCtx, saveFeatures(proc), sGen + 1));
+                        build, proc, sHostLoader, Main.sAppCtx, saveFeatures(proc), sGen + 1,
+                        BuildConfig.VERSION_CODE));
             } catch (Throwable t) {
                 return "could not save state: " + t;
             }
@@ -205,8 +208,8 @@ public final class HotReload {
      * the same task as the teardown (Gen.retireOnMain), so what it saw is still true then.
      */
     static String busy() {
-        int io = Gen.ioInFlight();
-        if (io > 0) return "a background request is still open (" + io + ")";
+        // A request still on the network is not a reason to wait: its thread is the old
+        // generation's, and what it posts back is refused once that generation is retired.
         // Each process asks its own features. SystemUI's display and keyguard reads come from
         // Main's cached sys reads, which only that process initialises (boot); in the
         // lightweight processes they answer "off" and refused every update - measured
@@ -266,6 +269,8 @@ public final class HotReload {
             // combine is collected once (stateIn Eagerly), so only those flows can still move it.
             out.add(new Object[]{"notifsink", Main.sNotificationSink.owners()});
             out.add(new Object[]{"notifpolicy", Main.sNotificationSink.policies()});
+            // The fingerprint icon whose pointer listener was hooked on a long press.
+            out.add(new Object[]{"fpq", new Object[]{FingerprintQuick.pointerIcon()}});
         }
         if ("com.miui.personalassistant".equals(proc)) {
             // The ride in progress: 小爱's cards start a trip and extend it in memory only, and
@@ -314,12 +319,21 @@ public final class HotReload {
         sRetired = false;
 
         Context ctx = appContext(state);
+        // A build named in BROKEN_RETIRE has already run its retirement by the time this is
+        // called; what it left behind is unknown, so nothing is built on it. Not this build's
+        // fault, so no pending marker: the restart that follows must not block it.
+        int from = state == null ? 0 : state.fromVersionCode;
+        String brokenFrom = from != 0 && HotReloadPolicy.BROKEN_RETIRE.contains(from)
+                ? "build #" + from + " is known to retire badly" : null;
         // If this process does not survive the next few seconds, the marker is still here when
         // it comes back, and that cold start blocks this build until the next restart.
         // The version code is this generation's own constant: the marker names the build that is
         // being adopted without depending on the extras (null under autoHotReload) or on a
         // package-manager query from a host that may not be allowed to see the module's APK.
-        writePending(ctx, pendingMark(BuildConfig.VERSION_CODE, build, System.currentTimeMillis()));
+        if (brokenFrom == null) {
+            writePending(ctx, pendingMark(BuildConfig.VERSION_CODE, build,
+                    System.currentTimeMillis()));
+        }
 
         Set<String> oldIds = new java.util.HashSet<>();
         for (XposedInterface.HookHandle h : param.getOldHookHandles()) oldIds.add(h.getId());
@@ -327,7 +341,9 @@ public final class HotReload {
         HandleStore store = new HandleStore(param.getOldHookHandles());
         sStore = store;
         boolean failed = false;
+        String failure = null;
         try {
+            if (brokenFrom != null) throw new IllegalStateException(brokenFrom);
             ClassLoader cl = hostLoader(proc, state, param.getOldHookHandles());
             if (cl == null) {
                 throw new IllegalStateException("no host class loader can load the process's classes");
@@ -352,10 +368,14 @@ public final class HotReload {
                 // (it is not reloaded), so the order this guard depends on still holds.
                 ClockGlass.armMiGlassGuard();
                 backfill(cl, param.getOldHookHandles());
+                final Object[] fpq = feature(state, "fpq");
+                final Object icon = fpq == null || fpq.length == 0 ? null : fpq[0];
+                step("fpq pointer", () -> FingerprintQuick.adoptPointer(icon));
             }
             adoptFeatures(proc, state, cl);
         } catch (Throwable t) {
             failed = true;
+            failure = String.valueOf(t);
             Xp.w(TAG + "adopt FAILED: " + t);
         } finally {
             sStore = null;
@@ -377,12 +397,58 @@ public final class HotReload {
             if (failed) {
                 // The install step may have registered receivers before it threw; nothing of
                 // ours has reached the host's views yet, so a sweep with no teardown is enough.
-                Gen.goInert(2000L, null);
+                goInert(proc, ctx, failure, null);
                 Xp.w(TAG + "adopt FAILED, module inert in this process until restart");
             } else {
                 // Five seconds is long enough for a crash in the first frame to leave the
                 // marker behind, and short enough that a later user restart is not blamed.
                 Gen.postDelayed(() -> clearPending(ctx), 5000L);
+            }
+        }
+    }
+
+    /**
+     * An adoption that could not finish: hooks pass through and everything this generation put
+     * up is taken down again (Gen.goInert). LSPosed reports the reload as a success all the same,
+     * so SystemUI - the one process the app asks anything of - keeps one answer up: its query
+     * says inert, and the home page counts it with the processes that need a restart.
+     */
+    private static void goInert(String proc, Context ctx, String why, Runnable teardown) {
+        sInert = why == null ? "?" : why;
+        Gen.goInert(2000L, teardown);
+        if (!"com.android.systemui".equals(proc)) return;
+        if (ctx == null) {
+            Xp.w(TAG + "inert with no context; the app cannot be told");
+            return;
+        }
+        try {
+            ProbeGuard.registerOutsideLedger(ctx, new android.content.IntentFilter(PROBE_ACTION),
+                    Main.TAG, InertAnswer::new, BuildConfig.APPLICATION_ID);
+        } catch (Throwable t) {
+            Xp.w(TAG + "could not register the inert answer: " + t);
+        }
+    }
+
+    private static final String PROBE_ACTION = "com.os4.musiccover.PROBE";
+
+    /**
+     * All an inert SystemUI still answers: the app's query, with nothing but that it is inert,
+     * and `op=gen` for adb. Every other op is the old receivers' and is left unanswered.
+     */
+    static final class InertAnswer extends ProbeGuard.Receiver {
+        @Override
+        public void onReceive(Context c, android.content.Intent i) {
+            if (!ProbeGuard.admit(this, i)) return;
+            String op = i.getStringExtra("op");
+            if ("query".equals(op)) {
+                Bundle out = new Bundle();
+                out.putBoolean("inert", true);
+                out.putString("inertwhy", sInert);
+                setResultExtras(out);
+            } else if ("gen".equals(op)) {
+                String report = Gen.report() + " " + status();
+                Xp.log(Main.TAG + "gen " + report);
+                setResultData(report);
             }
         }
     }
@@ -474,7 +540,8 @@ public final class HotReload {
                 // step is a half one: inert until restart rather than running hooks over state
                 // it never took back. The pending marker stays for the same reason.
                 if (!step("wallpaper main", () -> WallpaperProbe.adoptMain(wallCtx))) {
-                    Gen.goInert(2000L, WallpaperProbe::retireForReload);
+                    goInert(proc, wallCtx, "the wallpaper adoption did not finish",
+                            WallpaperProbe::retireForReload);
                     Xp.w(TAG + "wallpaper adoption did not finish; this generation is inert in"
                             + " this process until it restarts");
                 }
@@ -588,7 +655,8 @@ public final class HotReload {
                 // What boot and the attach path already put up is taken down again: receivers,
                 // session callbacks, our views and the OEM state they moved. Left up, they would
                 // keep running half a generation under hooks that already pass through.
-                Gen.goInert(2000L, SystemUiRetire::retireForReload);
+                goInert(proc, appContext(state), "the adoption did not finish on the main thread",
+                        SystemUiRetire::retireForReload);
                 Xp.w(TAG + "adoption did not finish on the main thread; this generation is inert"
                         + " in this process until it restarts");
             }
@@ -831,7 +899,8 @@ public final class HotReload {
     static String status() {
         return "blocked=" + (sBlocked.isEmpty() ? "-" : sBlocked)
                 + " gen=" + sGen + " class=" + sClassId + " retired=" + sRetired
-                + " adopted=" + (sAdopted.isEmpty() ? "-" : sAdopted);
+                + " adopted=" + (sAdopted.isEmpty() ? "-" : sAdopted)
+                + " inert=" + (sInert == null ? "-" : sInert);
     }
 
     // ---------------------------------------------------------------- hook installer
