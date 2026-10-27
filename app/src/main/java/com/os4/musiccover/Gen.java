@@ -1235,7 +1235,12 @@ public final class Gen {
         cameraCallbacks.removeIf(r -> r.manager == m && r.callback == cb);
     }
 
-    /** The process's default network (the motion-cover downloader's online gate). */
+    /**
+     * The process's default network (the motion-cover downloader's online gate). The permission
+     * is the host's - this runs inside SystemUI, not under the module's manifest - which is why
+     * MotionCover's caller was suppressed before the call moved here.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
     public static void networkCallback(ConnectivityManager m,
                                        ConnectivityManager.NetworkCallback cb, Handler h) {
         if (refused("a network callback")) return;
