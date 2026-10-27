@@ -1302,6 +1302,10 @@ public final class LockLyrics {
      * for the lyric again.
      */
     public static void retire() {
+        // A lookup still on its thread answers into this generation later; its gen check is what
+        // drops that answer instead of putting the page back up. Not in a dry run: the same
+        // generation comes straight back, and its lookup's answer is still the one it wants.
+        if (!com.os4.musiccover.Gen.live()) sGen++;
         Main.main().removeCallbacks(TICK);
         Main.main().removeCallbacks(WATCH);
         // The display listener is Gen's and goes with the sweep; this latch is what would stop

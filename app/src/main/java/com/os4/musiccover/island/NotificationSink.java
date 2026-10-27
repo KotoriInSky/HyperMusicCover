@@ -14,29 +14,15 @@ import java.util.List;
 public final class NotificationSink {
     private final List<WeakReference<Object>> policies = new ArrayList<>();
     /**
-     * The 7-element arrays this sink replaced with its 8-element ones. The OEM's own consumer is
-     * behind one of our hooks, so a retiring generation has to put the original back: the
-     * injected policy is a host object, but the array's shape is not something the OEM built.
+     * The combines whose input array holds one of our policies. The combine is stateIn(Eagerly):
+     * it is collected once, with the array it held then, so what a later generation writes into
+     * the field is never read. Kept for the handover's older half (see {@link #adopt}).
      */
-    private final List<Injected> injected = new ArrayList<>();
+    private final List<WeakReference<Object>> owners = new ArrayList<>();
     private int requestedMode;
     private long emissions;
     private final List<String> history = new ArrayList<>();
     private String hookStatus = "not installed";
-
-    private static final class Injected {
-        final WeakReference<Object> owner;
-        final Field field;
-        final Object original;
-        final Object[] replaced;
-
-        Injected(Object owner, Field field, Object original, Object[] replaced) {
-            this.owner = new WeakReference<>(owner);
-            this.field = field;
-            this.original = original;
-            this.replaced = replaced;
-        }
-    }
 
     public synchronized void hookStatus(String status) {
         hookStatus = status;
@@ -56,55 +42,70 @@ public final class NotificationSink {
     }
 
     /**
-     * Retirement: put back the array the OEM had, where it still holds ours. Checked rather than
-     * written blind - the OEM may have replaced it since, and an old array put back over a newer
-     * one would lose a state change rather than restore a shape.
+     * The combines this generation injected into, for the next generation. Host objects only.
+     * Nothing is put back on retirement: the running collection holds our 8-element array
+     * whatever the field says, so restoring the field only made the next generation inject a
+     * policy no one collects.
      */
-    public synchronized void restore() {
-        for (Injected i : injected) {
-            Object owner = i.owner.get();
-            if (owner == null) continue;
-            try {
-                if (i.field.get(owner) == i.replaced) i.field.set(owner, i.original);
-            } catch (Throwable ignored) {
-            }
-        }
-        injected.clear();
-        policies.clear();
-        requestedMode = 0;
+    public synchronized Object[] owners() {
+        return live(owners);
     }
 
     /**
-     * The live combines this generation injected into, for the next generation to re-attach
-     * to. Host objects only; the array field is found again by shape. Read before {@link
-     * #restore()}, which puts the originals back and forgets them.
+     * The policy flows themselves - kotlinx's MutableStateFlow from SystemUI's own loader, so a
+     * host object that may cross a generation. The one the running combine collects is in here,
+     * and it is the only input the next generation can still move the combine with.
      */
-    public synchronized Object[] owners() {
+    public synchronized Object[] policies() {
+        return live(policies);
+    }
+
+    private static Object[] live(List<WeakReference<Object>> refs) {
         List<Object> out = new ArrayList<>();
-        for (Injected i : injected) {
-            Object owner = i.owner.get();
-            if (owner != null) out.add(owner);
+        for (WeakReference<Object> r : refs) {
+            Object o = r.get();
+            if (o != null) out.add(o);
         }
         return out.toArray();
     }
 
     /**
-     * Takes the live combines over again after a hot reload: the retirement put the OEM's own
-     * arrays back, and the already-running combine flows will not call the factory again. Each
-     * failure leaves that flow exactly as it was before the module.
+     * Takes the live combines over after a hot reload. [handed] are the previous generation's
+     * policy flows, the ones actually collected: they become ours, and refresh() writes the mode
+     * into them. [owners] are its combines; a previous build put the OEM's 7-element array back
+     * into them on retirement, and those are injected into again - which only reaches a
+     * collection that starts later, but is all that can be done for a build that did not hand
+     * its flows over.
      */
-    public synchronized void adopt(Object[] owners, int mode) {
-        if (owners == null || owners.length == 0) return;
-        int n = 0;
-        for (Object owner : owners) {
-            try {
-                if (owner != null && attach(owner, mode)) n++;
-            } catch (Throwable t) {
-                Xp.log("[MCNotify] re-attach to a live combine failed: " + t);
+    public synchronized void adopt(Object[] owners, Object[] handed, int mode) {
+        int taken = 0;
+        if (handed != null) {
+            for (Object policy : handed) {
+                if (policy == null || contains(policies, policy)) continue;
+                policies.add(new WeakReference<>(policy));
+                taken++;
             }
         }
-        Xp.log("[MCNotify] re-attached to " + n + "/" + owners.length
-                + " live combine(s), mode=" + mode);
+        int attached = 0;
+        int total = owners == null ? 0 : owners.length;
+        if (owners != null) {
+            for (Object owner : owners) {
+                if (owner == null) continue;
+                try {
+                    if (attach(owner, mode)) attached++;
+                    else if (!contains(this.owners, owner)) this.owners.add(new WeakReference<>(owner));
+                } catch (Throwable t) {
+                    Xp.log("[MCNotify] re-attach to a live combine failed: " + t);
+                }
+            }
+        }
+        Xp.log("[MCNotify] adopted " + taken + " policy flow(s), re-attached to " + attached + "/"
+                + total + " combine(s), mode=" + mode);
+    }
+
+    private static boolean contains(List<WeakReference<Object>> refs, Object o) {
+        for (WeakReference<Object> r : refs) if (r.get() == o) return true;
+        return false;
     }
 
     public synchronized String describe() {
@@ -134,7 +135,7 @@ public final class NotificationSink {
             inputs[7] = policy;
             field.set(combinedFlow, inputs);
             policies.add(new WeakReference<>(policy));
-            injected.add(new Injected(combinedFlow, field, original, inputs));
+            owners.add(new WeakReference<>(combinedFlow));
             return true;
         }
         return false;

@@ -2459,7 +2459,9 @@ public class Main extends XposedModule {
     }
 
     public static Handler main() {
-        if (sMain == null) sMain = new Handler(Looper.getMainLooper());
+        // Gen's: nothing posted here is delivered once this generation has retired (a lookup
+        // thread still finishing then would otherwise run us against the next one's host).
+        if (sMain == null) sMain = Gen.liveHandler();
         return sMain;
     }
 

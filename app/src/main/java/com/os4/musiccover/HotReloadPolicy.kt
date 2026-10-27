@@ -4,9 +4,9 @@ package com.os4.musiccover
  * What the module and the app have to agree on for a hot reload: the protocol number in the
  * extras, the process list both sides work from, and the remote preferences that switch it off.
  *
- * The app picks a plan per running target from [SUPPORTED] and [BROKEN_RETIRE]; the module's
- * retirement checks the same [SUPPORTED] before it lets go of anything. One file on purpose -
- * two copies would let the app ask a process the module refuses, or the other way round.
+ * The app picks a plan per running target from [SUPPORTED]; the module's retirement checks the
+ * same [SUPPORTED] before it lets go of anything. One file on purpose - two copies would let the
+ * app ask a process the module refuses, or the other way round.
  */
 object HotReloadPolicy {
     /** Bumped when the extras or the saved state change shape; the app sends the same number. */
@@ -42,8 +42,12 @@ object HotReloadPolicy {
     )
 
     /**
-     * Loaded version codes whose retirement is known to be broken, so the app restarts them
-     * without trying. Each entry gets a comment saying what went wrong.
+     * Loaded version codes whose retirement is known to be broken.
+     *
+     * <p>Meant for the App, but nothing reads it today: the App's plan comes from
+     * [SUPPORTED] alone, and a build that crashes on its way in is caught by the module's own
+     * breaker (HotReload's pending/blocked files), not by a list. Kept because a broken
+     * retirement needs a place to be named; wiring it into LsposedService is the missing half.
      */
     @JvmField
     val BROKEN_RETIRE: Set<Int> = emptySet()
@@ -51,7 +55,10 @@ object HotReloadPolicy {
     /**
      * The first release that ships the whole matrix: every supported process reloads in place,
      * the circuit breaker is enforced, and the wallpaper process was verified on device.
-     * Builds older than this refuse by default, so a restart is the only thing that works.
+     *
+     * <p>A record for the release notes, not a gate: nothing compares it at runtime. An older
+     * module build cannot read a constant compiled into a newer one, so a runtime check here
+     * could never refuse anything that a build without it would accept.
      */
     const val FIRST_HOT_RELOAD_VERSION = 947058
 }

@@ -129,6 +129,8 @@ internal object MetroCodeIsland {
 
     /** LegacyFluidExitPolicy SINGLE_STATION_TIMEOUT: a first station's card, with no second one. */
     private const val ENTRY_MS = 5 * 60_000L
+    /** Separates a station from its lines in the handover; see [save]. */
+    private const val SEP = "\u0000"
     /**
      * TripManager's monitor ends a trip with no station for 5 min; a wait on the platform runs
      * past that off-peak, and the next station would then start a trip of its own and get a card.
@@ -159,6 +161,11 @@ internal object MetroCodeIsland {
 
     @Volatile private var ctx: Context? = null
     @Volatile private var shown: Station? = null
+    /**
+     * The previous generation's island is still up: [shown] is ours and cannot be handed over
+     * (Station is our class), so this is what lets [cancel] take that one down.
+     */
+    @Volatile private var inherited = false
     @Volatile private var lastKey: String? = null
     @Volatile private var updates = 0
     @Volatile private var lastSeen = "none"
@@ -173,8 +180,8 @@ internal object MetroCodeIsland {
         val stations = ArrayList<String>()
         /** The lines each station's card named, for where the trip changed ([MetroCommute.changes]). */
         val lines = HashMap<String, Set<String>>()
-        /** Wall clock at the first station: the commute's half hour. */
-        val startedAt = System.currentTimeMillis()
+        /** Wall clock at the first station: the commute's half hour. Replaced by [adopt]. */
+        var startedAt = System.currentTimeMillis()
         /** Where the commute this trip was matched to changes and ends ([MetroCommute.match]). */
         var learned: Set<String> = emptySet()
         /** When the newest station came, and when any card last said where the phone is. */
@@ -183,6 +190,74 @@ internal object MetroCodeIsland {
         /** The stations whose card has been up: once each (metroFluidMaxTimesPerStation). */
         val popped = HashSet<String>()
     }
+
+    /**
+     * The ride in progress, for the next generation (HotReload's saveFeatures). Strings and
+     * numbers only: the saved state refuses anything of ours, and [Station] is ours.
+     * [Trip.newAt]/[Trip.seenAt] and [planAt] are elapsed realtime - the same boot, so they stay
+     * valid across a reload; [Trip.startedAt] is wall clock, as [MetroCommute] wants it.
+     */
+    @Synchronized
+    fun save(): Array<Any?>? {
+        val t = trip
+        if (t == null && planStops.isEmpty() && planAt == 0L) return null
+        return arrayOf(
+            t?.city,
+            t?.stations?.toTypedArray(),
+            t?.lines?.map { (station, lines) -> station + SEP + lines.joinToString(",") }?.toTypedArray(),
+            t?.startedAt ?: 0L,
+            t?.learned?.toTypedArray(),
+            t?.newAt ?: 0L,
+            t?.seenAt ?: 0L,
+            t?.popped?.toTypedArray(),
+            planStops.toTypedArray(),
+            planAt,
+        )
+    }
+
+    /** [save]'s other half, in the new generation, before the next card arrives. */
+    @Synchronized
+    fun adopt(a: Array<Any?>?) {
+        if (a == null) return
+        val city = a.getOrNull(0) as? String
+        val stations = strings(a.getOrNull(1))
+        if (city != null && stations.isNotEmpty()) {
+            val now = SystemClock.elapsedRealtime()
+            val t = Trip(now, city)
+            t.stations.addAll(stations)
+            for (row in strings(a.getOrNull(2))) {
+                val at = row.indexOf(SEP)
+                if (at <= 0) continue
+                val lines = row.substring(at + SEP.length).split(",").filter { it.isNotEmpty() }.toSet()
+                if (lines.isNotEmpty()) t.lines[row.substring(0, at)] = lines
+            }
+            t.startedAt = (a.getOrNull(3) as? Number)?.toLong() ?: t.startedAt
+            t.learned = strings(a.getOrNull(4)).toSet()
+            t.newAt = (a.getOrNull(5) as? Number)?.toLong() ?: t.newAt
+            t.seenAt = (a.getOrNull(6) as? Number)?.toLong() ?: t.seenAt
+            t.popped.addAll(strings(a.getOrNull(7)))
+            trip = t
+            Xp.log(TAG + "trip carried over at ${stations.last()} (station ${stations.size})")
+            // The first station's card has a timeout on it, and the reload took it off the
+            // main queue with everything else.
+            if (t.stations.size == 1) {
+                val left = ENTRY_MS - (now - t.newAt)
+                // Due while the reload was under way: run now rather than never.
+                Gen.postDelayed(entryOver, left.coerceAtLeast(0L))
+            }
+        }
+        // The island the old generation posted, if it is still up.
+        inherited = shown == null && runCatching {
+            ctx?.getSystemService(NotificationManager::class.java)
+                ?.activeNotifications?.any { it.id == ID }
+        }.getOrNull() == true
+        if (inherited) Xp.log(TAG + "the previous generation's island is still up")
+        planStops = strings(a.getOrNull(8)).toSet()
+        planAt = (a.getOrNull(9) as? Number)?.toLong() ?: 0L
+    }
+
+    private fun strings(v: Any?): List<String> =
+        (v as? Array<*>)?.mapNotNull { it as? String }.orEmpty()
 
     private var trip: Trip? = null
     /** The commutes learned so far, in 小爱建议's no-backup storage ([register]). */
@@ -287,6 +362,7 @@ internal object MetroCodeIsland {
             override fun onReceive(c: Context, i: Intent) {
                 // Swiped away, or timed out (a timeout sends the delete intent too): down for now,
                 // put up again at the trip's next station ([Trip.popped] keeps this one down).
+                inherited = false
                 val s = shown ?: return
                 shown = null
                 lastKey = null
@@ -561,8 +637,9 @@ internal object MetroCodeIsland {
     }
 
     private fun cancel(c: Context, why: String) {
-        if (shown == null) return
+        if (shown == null && !inherited) return
         shown = null
+        inherited = false
         lastKey = null
         c.getSystemService(NotificationManager::class.java)?.cancel(ID)
         Xp.log(TAG + "taken down: $why")
@@ -608,6 +685,7 @@ internal object MetroCodeIsland {
         if (official != null) {
             nm.notify(ID, official)
             shown = s
+            inherited = false
             lastKey = key
             lastError = null
             Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} (official card)")
@@ -675,6 +753,7 @@ internal object MetroCodeIsland {
             .addExtras(extras)
         nm.notify(ID, b.build())
         shown = s
+        inherited = false
         lastKey = key
         lastError = null
         Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} [$lineText] -> " +

@@ -66,7 +66,11 @@ final class SystemUiRetire {
         // post a refresh back into the tree we are about to sweep.
         Gen.quiescing = true;
         try {
-            retireAll(warnings);
+            // The same in-place gate a real retirement opens: without it every OEM hand-back
+            // (the cut-out, the glass, the clock) is queued and then dropped, so the rehearsal
+            // proved nothing about the step that puts the host back the way it was.
+            Throwable broke = Gen.teardown(() -> retireAll(warnings));
+            if (broke != null) warnings.add("teardown: " + broke);
             if (!Gen.sweepForDryRun(2000L)) warnings.add("sweep timed out");
             // The reading the acceptance is about: what is left between the teardown and the
             // rebuild. Install-scoped registrations and the long-lived threads stay by design.
@@ -174,13 +178,13 @@ final class SystemUiRetire {
     // Filled in with their features: batches 2 and 3.
 
     /**
-     * 4. The default notification state the islands moved, the 8-element arrays the sink put in
-     * the OEM's combine, and the presence answer (which the OEM takes back by itself once its
-     * hook passes through).
+     * 4. The default notification state the islands moved, and the presence answer (which the
+     * OEM takes back by itself once its hook passes through). The sink's 8-element arrays stay:
+     * the running combine collects ours whatever the field holds, and its policy flows are
+     * handed to the next generation instead (HotReload's "notifpolicy").
      */
     private static void retireNotifications() {
         NumState.release();
-        Main.sNotificationSink.restore();
         NotifPresence.recheck(true);
     }
 

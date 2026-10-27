@@ -206,8 +206,13 @@ public final class HotReload {
         // cached sys reads, which only that process initialises (boot). In the lightweight
         // processes they answer "off" and refused every update - measured 2026-10-25, all five
         // supported processes failed with "the screen is off" after an install.
-        if ("com.miui.miwallpaper".equals(sProcessName)) return WallpaperProbe.busyReason();
-        if (!"com.android.systemui".equals(sProcessName)) return null;
+        //
+        // Resolved the same way the retirement resolves it: sProcessName can be null when
+        // ActivityThread would not answer at load time, and supportedProcess() is what let the
+        // update through in the first place. Reading the raw field here skipped every check.
+        String proc = supportedProcess();
+        if ("com.miui.miwallpaper".equals(proc)) return WallpaperProbe.busyReason();
+        if (!"com.android.systemui".equals(proc)) return null;
         // The user never taps "update" while looking at the lock screen; anything on it is
         // someone using the phone, and every one of those transitions has a view mid-flight.
         if (Main.keyguardShowing() && Main.screenOn()) return "the lock screen is up and lit";
@@ -250,9 +255,16 @@ public final class HotReload {
             out.add(new Object[]{"clock", Main.sContainer});
             out.add(new Object[]{"mediacard", MediaCard.save()});
             out.add(new Object[]{"island", MiniPlayerRuntime.save()});
-            // Read before the teardown's restore() puts the OEM's arrays back: the live
-            // combines are what the next generation has to inject into again.
+            // The combines, and the policy flows the running collection actually reads: the
+            // combine is collected once (stateIn Eagerly), so only those flows can still move it.
             out.add(new Object[]{"notifsink", Main.sNotificationSink.owners()});
+            out.add(new Object[]{"notifpolicy", Main.sNotificationSink.policies()});
+        }
+        if ("com.miui.personalassistant".equals(proc)) {
+            // The ride in progress: 小爱's cards start a trip and extend it in memory only, and
+            // the station whose card already went up will not come again - a new generation
+            // would read the next one as "it starts here" and lose the stops so far.
+            out.add(new Object[]{"metro", MetroCodeIsland.INSTANCE.save()});
         }
         if ("com.miui.miwallpaper".equals(proc)) {
             // The other side of SystemUI's token, the cover on the texture and the wallpaper it
@@ -350,7 +362,9 @@ public final class HotReload {
             Xp.log(TAG + "HotReload adopted gen=" + sGen + " process=" + proc + " " + sAdopted
                     + " new=" + store.newIds());
             if (failed) {
-                Gen.inert = true;
+                // The install step may have registered receivers before it threw; nothing of
+                // ours has reached the host's views yet, so a sweep with no teardown is enough.
+                Gen.goInert(2000L, null);
                 Xp.w(TAG + "adopt FAILED, module inert in this process until restart");
             } else {
                 // Five seconds is long enough for a crash in the first frame to leave the
@@ -443,18 +457,29 @@ public final class HotReload {
             final Context wallCtx = state != null && state.context != null
                     ? state.context : appContext(state);
             Gen.post(() -> {
-                try {
-                    WallpaperProbe.adoptMain(wallCtx);
-                } catch (Throwable t) {
-                    Xp.w(TAG + "wallpaper adoption on the main thread failed: " + t);
+                // The texture already holds the cover, so a generation that cannot finish this
+                // step is a half one: inert until restart rather than running hooks over state
+                // it never took back. The pending marker stays for the same reason.
+                if (!step("wallpaper main", () -> WallpaperProbe.adoptMain(wallCtx))) {
+                    Gen.goInert(2000L, WallpaperProbe::retireForReload);
+                    Xp.w(TAG + "wallpaper adoption did not finish; this generation is inert in"
+                            + " this process until it restarts");
                 }
             });
+            return;
+        }
+        if ("com.miui.personalassistant".equals(proc)) {
+            // No main-thread step: the trip is plain data, and register() already ran inside
+            // install(). Only the entry timeout is re-armed, and it posts from here.
+            final Object[] metro = state == null ? null : feature(state, "metro");
+            if (metro != null) step("metro", () -> MetroCodeIsland.INSTANCE.adopt(metro));
             return;
         }
         if (!"com.android.systemui".equals(proc)) return;
         Object[][] features = state == null ? new Object[0][] : state.features;
         sAdoptingBoot = true;
         Gen.post(() -> {
+            boolean broken = false;
             try {
                 Context ctx = state != null && state.context != null
                         ? state.context : appContext(state);
@@ -462,9 +487,10 @@ public final class HotReload {
                 Object card = null;
                 Object[] island = null;
                 Object[] notifSink = null;
+                Object[] notifPolicy = null;
                 android.view.View container = null;
                 for (Object[] f : features) {
-                    if (!(f[0] instanceof String)) continue;
+                    if (f == null || f.length < 2 || !(f[0] instanceof String)) continue;
                     switch ((String) f[0]) {
                         case "core":
                             if (f[1] instanceof Object[]) core = (Object[]) f[1];
@@ -483,44 +509,92 @@ public final class HotReload {
                         case "notifsink":
                             if (f[1] instanceof Object[]) notifSink = (Object[]) f[1];
                             break;
+                        case "notifpolicy":
+                            if (f[1] instanceof Object[]) notifPolicy = (Object[]) f[1];
+                            break;
                         default:
                             break;
                     }
                 }
-                if (core != null) applyCore(core);
-                if (ctx != null) {
-                    Main.boot(ctx);
-                } else {
+                final Object[] fCore = core;
+                final Object fCard = card;
+                final Object[] fIsland = island;
+                final Object[] fNotifSink = notifSink;
+                final Object[] fNotifPolicy = notifPolicy;
+                final android.view.View fContainer = container;
+                if (fCore != null) step("core", () -> applyCore(fCore));
+                if (ctx == null) {
+                    // Not a failure: the state carried no context, and the attach path will run
+                    // boot when the keyguard comes back.
                     Xp.w(TAG + "no context yet; boot waits for the next container attach");
+                } else if (!step("boot", () -> Main.boot(ctx))) {
+                    // Everything after this builds on boot; carrying on would run half of a
+                    // generation. The pending marker stays (the delayed clear is refused once
+                    // inert), so a restart inside the window blocks this build.
+                    broken = true;
                 }
-                if (notifSink != null) {
-                    // The retirement put the OEM's own 7-element arrays back; the live combine
-                    // flows will not call the factory again, so this generation takes them over
-                    // with the mode the state file just loaded.
-                    Main.sNotificationSink.adopt(notifSink, Fingerprint.sFpAvoid);
-                    Main.refreshNotificationSink();
-                } else {
-                    Xp.w(TAG + "no notification sink handover; the bound-mode policy waits for"
-                            + " the next collection");
-                }
-                if (card != null) MediaCard.adopt(card, host);
-                if (island != null) {
-                    MiniPlayerRuntime.adopt(
-                            island[0] instanceof android.view.View
-                                    ? (android.view.View) island[0] : null,
-                            island.length > 1 ? island[1] : null);
-                }
-                if (container != null) {
-                    Main.onContainerAttached(container);
-                } else {
-                    Xp.log(TAG + "adopted with no clock container; the next attach puts it up");
+                if (!broken) {
+                    if (fNotifSink != null || fNotifPolicy != null) {
+                        // The policy flows the running combine collects become this generation's,
+                        // and the mode the state file just loaded goes into them. A build that
+                        // handed only the combines (it put the OEM's arrays back) gets them
+                        // injected into again.
+                        step("notif sink", () -> {
+                            Main.sNotificationSink.adopt(fNotifSink, fNotifPolicy,
+                                    Fingerprint.sFpAvoid);
+                            Main.refreshNotificationSink();
+                        });
+                    } else {
+                        Xp.w(TAG + "no notification sink handover; the bound-mode policy waits"
+                                + " for the next collection");
+                    }
+                    if (fCard != null) step("media card", () -> MediaCard.adopt(fCard, host));
+                    if (fIsland != null) {
+                        step("island", () -> MiniPlayerRuntime.adopt(
+                                fIsland[0] instanceof android.view.View
+                                        ? (android.view.View) fIsland[0] : null,
+                                fIsland.length > 1 ? fIsland[1] : null));
+                    }
+                    if (fContainer != null) {
+                        if (!step("container", () -> Main.onContainerAttached(fContainer))) {
+                            broken = true;
+                        }
+                    } else {
+                        Xp.log(TAG + "adopted with no clock container; the next attach puts it up");
+                    }
                 }
             } catch (Throwable t) {
+                // Outside every step: a malformed handover, say. Thrown from here it would be an
+                // uncaught exception on SystemUI's main thread.
                 Xp.w(TAG + "adopt on main failed: " + t);
+                broken = true;
             } finally {
                 sAdoptingBoot = false;
             }
+            if (broken) {
+                // What boot and the attach path already put up is taken down again: receivers,
+                // session callbacks, our views and the OEM state they moved. Left up, they would
+                // keep running half a generation under hooks that already pass through.
+                Gen.goInert(2000L, SystemUiRetire::retireForReload);
+                Xp.w(TAG + "adoption did not finish on the main thread; this generation is inert"
+                        + " in this process until it restarts");
+            }
         });
+    }
+
+    /**
+     * One adoption step. The steps are independent - a feature that cannot take its state back
+     * must not take the rest of the adoption with it - so only the two the others build on
+     * (boot, the container attach) are allowed to fail the generation.
+     */
+    private static boolean step(String what, Runnable r) {
+        try {
+            r.run();
+            return true;
+        } catch (Throwable t) {
+            Xp.w(TAG + "adopt step '" + what + "' failed: " + t);
+            return false;
+        }
     }
 
     /** The token and the two flags that only the retiring generation knew. */

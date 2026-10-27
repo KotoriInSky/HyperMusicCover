@@ -165,7 +165,7 @@ public final class ImmersiveHost {
     /** The open scene has given way to the cover, which came after it. See the class comment. */
     private static boolean sYield;
     /** The lock screen is held for a page: open, with a page. See Main.clockHeld(). */
-    private static boolean sHolding;
+    private static volatile boolean sHolding;
     /** The page is on screen. */
     private static boolean sShown;
 

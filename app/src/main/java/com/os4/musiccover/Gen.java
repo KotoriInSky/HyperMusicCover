@@ -68,8 +68,9 @@ public final class Gen {
      */
     private static volatile boolean tearingDown;
 
-    /** Whether this generation may still do its work. */
-    static boolean live() {
+    /** Whether this generation may still do its work. Public for features that have to tell
+     *  "the user closed this" from "the retirement is taking it down" (CountdownScene's ground). */
+    public static boolean live() {
         return !retired && !inert;
     }
 
@@ -82,7 +83,9 @@ public final class Gen {
             return true;
         }
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-        if (!Main.main().post(() -> {
+        // A plain Handler, not Main.main(): that one drops everything once this generation is no
+        // longer live, and the retirement's own step is posted after retired is set.
+        if (!new Handler(android.os.Looper.getMainLooper()).post(() -> {
             try {
                 task.run();
             } finally {
@@ -132,19 +135,50 @@ public final class Gen {
                 new java.util.concurrent.atomic.AtomicBoolean();
         boolean ran = onMain(timeoutMs, () -> {
             if (!tooLate.get() && beforeSweep != null) {
-                tearingDown = true;
-                try {
-                    beforeSweep.run();
-                } catch (Throwable t) {
-                    Xp.w("[MCGen] teardown before the sweep failed: " + t);
-                } finally {
-                    tearingDown = false;
-                }
+                Throwable t = teardown(beforeSweep);
+                if (t != null) Xp.w("[MCGen] teardown before the sweep failed: " + t);
             }
             sweep(false);
         });
         if (!ran) tooLate.set(true);
         return ran;
+    }
+
+    /**
+     * An adoption that could not finish: this generation answers nothing from here on. Hooks
+     * already pass through once inert is set, but what boot or the attach path registered before
+     * the failure - receivers, session callbacks, our views, the OEM state they changed - would
+     * keep running half a generation. So the same teardown and sweep a retirement runs, on the
+     * main thread; [teardown] may be null for a process with no host state to give back.
+     */
+    static void goInert(long timeoutMs, Runnable teardown) {
+        quiescing = true;
+        inert = true;
+        boolean ran = onMain(timeoutMs, () -> {
+            if (teardown != null) {
+                Throwable t = teardown(teardown);
+                if (t != null) Xp.w("[MCGen] teardown of an inert generation failed: " + t);
+            }
+            sweep(false);
+        });
+        if (!ran) Xp.w("[MCGen] inert generation's sweep did not finish in time");
+    }
+
+    /**
+     * Run a teardown with the in-place gate open: the OEM state handed back from inside it must
+     * not be queued (the gate is already closed, and the sweep would drop it). The dry run uses
+     * this too - a rehearsal that dropped the hand-backs was not rehearsing the real path.
+     */
+    static Throwable teardown(Runnable beforeSweep) {
+        tearingDown = true;
+        try {
+            beforeSweep.run();
+            return null;
+        } catch (Throwable t) {
+            return t;
+        } finally {
+            tearingDown = false;
+        }
     }
 
     /**
@@ -233,7 +267,11 @@ public final class Gen {
             } catch (Throwable ignored) {
             }
         }
-        mainHandlers.clear();
+        // The queues are cleared in both runs, the ledger only in a real retirement: the dry run
+        // puts the same generation back up, and its features do not register these again (they
+        // are static finals and lazy singletons), so dropping them here would leave the next,
+        // real retirement unable to clear what is queued on them.
+        if (!dryRun) mainHandlers.clear();
 
         for (PostedOn p : postedOn) {
             try {
@@ -708,7 +746,22 @@ public final class Gen {
      * refresh queued here runs on this generation's code, which by then must not run at all.
      */
     public static android.os.Handler handler() {
-        return watchHandler(new android.os.Handler(android.os.Looper.getMainLooper()));
+        return watchHandler(liveHandler());
+    }
+
+    /**
+     * A main-looper Handler that delivers nothing once this generation is retired or inert. The
+     * sweep clears the queues it knows of, but a thread of ours that was mid-lookup at retirement
+     * finishes later and posts its answer then; delivered, it would run this generation's code
+     * against the host the next one now owns (Main.main() is one of these too).
+     */
+    static android.os.Handler liveHandler() {
+        return new android.os.Handler(android.os.Looper.getMainLooper()) {
+            @Override
+            public void dispatchMessage(android.os.Message msg) {
+                if (live()) super.dispatchMessage(msg);
+            }
+        };
     }
 
     /** A Handler the feature had to subclass (a Messenger's, say): same registration, handed back. */
@@ -874,7 +927,18 @@ public final class Gen {
     }
 
     public static Thread thread(String name, Runnable r) {
-        Thread t = new Thread(guarded(r), name);
+        // Out of the ledger when the work is done: this list is what the generation still holds,
+        // and a finished Thread still pins its runnable's captures (lyric rows, bitmaps). Only
+        // the dry run used to prune it, so a live generation kept one entry per lookup and per
+        // card picture for its whole life.
+        final Runnable body = guarded(r);
+        Thread t = new Thread(() -> {
+            try {
+                body.run();
+            } finally {
+                threads.remove(Thread.currentThread());
+            }
+        }, name);
         threads.add(t);
         t.start();
         return t;
@@ -899,12 +963,14 @@ public final class Gen {
     // ---------------------------------------------------------------- host callbacks
 
     public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, int flags) {
+        if (refused("a receiver")) return null;
         Intent sticky = c.registerReceiver(r, f, flags);
         receivers.add(new ReceiverReg(c, r));
         return sticky;
     }
 
     public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f) {
+        if (refused("a receiver")) return null;
         Intent sticky = c.registerReceiver(r, f);
         receivers.add(new ReceiverReg(c, r));
         return sticky;
@@ -920,6 +986,7 @@ public final class Gen {
 
     public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, String permission,
                            Handler handler) {
+        if (refused("a receiver")) return null;
         Intent sticky = c.registerReceiver(r, f, permission, handler);
         receivers.add(new ReceiverReg(c, r));
         return sticky;
@@ -927,18 +994,21 @@ public final class Gen {
 
     public static Intent receiver(Context c, BroadcastReceiver r, IntentFilter f, String permission,
                            Handler handler, int flags) {
+        if (refused("a receiver")) return null;
         Intent sticky = c.registerReceiver(r, f, permission, handler, flags);
         receivers.add(new ReceiverReg(c, r));
         return sticky;
     }
 
     public static void observer(ContentResolver cr, Uri uri, boolean descendants, ContentObserver o) {
+        if (refused("an observer")) return;
         cr.registerContentObserver(uri, descendants, o);
         observers.add(new ObserverReg(cr, o));
     }
 
     public static void prefListener(SharedPreferences p,
                              SharedPreferences.OnSharedPreferenceChangeListener l) {
+        if (refused("a preference listener")) return;
         p.registerOnSharedPreferenceChangeListener(l);
         prefListeners.add(new PrefReg(p, l));
     }
@@ -950,6 +1020,7 @@ public final class Gen {
     }
 
     public static void sessionCallback(MediaController c, MediaController.Callback cb, Handler h) {
+        if (refused("a session callback")) return;
         c.registerCallback(cb, h);
         sessionCallbacks.add(new SessionReg(c, cb));
     }
@@ -964,6 +1035,7 @@ public final class Gen {
     public static void activeSessionsListener(MediaSessionManager m,
                                               MediaSessionManager.OnActiveSessionsChangedListener l,
                                               Handler h) {
+        if (refused("an active-session listener")) return;
         m.addOnActiveSessionsChangedListener(l, null, h);
         activeSessions.add(new ActiveSessionsReg(m, l));
     }
@@ -977,6 +1049,7 @@ public final class Gen {
     /** Which cameras are in use (the pickup card's video-call gate, PickupCamera). */
     public static void cameraCallback(CameraManager m, CameraManager.AvailabilityCallback cb,
                                       Handler h) {
+        if (refused("a camera callback")) return;
         m.registerAvailabilityCallback(cb, h);
         cameraCallbacks.add(new CameraReg(m, cb));
     }
@@ -989,6 +1062,7 @@ public final class Gen {
     /** The process's default network (the motion-cover downloader's online gate). */
     public static void networkCallback(ConnectivityManager m,
                                        ConnectivityManager.NetworkCallback cb, Handler h) {
+        if (refused("a network callback")) return;
         m.registerDefaultNetworkCallback(cb, h);
         networkCallbacks.add(new NetworkReg(m, cb));
     }
@@ -1010,12 +1084,14 @@ public final class Gen {
     // ---------------------------------------------------------------- view listeners
 
     public static void preDraw(View v, ViewTreeObserver.OnPreDrawListener l) {
+        if (refused("a pre-draw")) return;
         v.getViewTreeObserver().addOnPreDrawListener(l);
         preDraws.add(new PreDrawReg(v, l));
     }
 
     /** For a call site that holds the observer rather than the view it belongs to. */
     public static void preDraw(ViewTreeObserver vto, ViewTreeObserver.OnPreDrawListener l) {
+        if (refused("a pre-draw")) return;
         vto.addOnPreDrawListener(l);
         preDraws.add(new PreDrawReg(null, l));
     }
@@ -1032,6 +1108,7 @@ public final class Gen {
     }
 
     public static void attachState(View v, View.OnAttachStateChangeListener l) {
+        if (refused("an attach listener")) return;
         v.addOnAttachStateChangeListener(l);
         attachStates.add(new AttachReg(v, l));
     }
@@ -1042,6 +1119,7 @@ public final class Gen {
     }
 
     public static void layoutChange(View v, View.OnLayoutChangeListener l) {
+        if (refused("a layout listener")) return;
         v.addOnLayoutChangeListener(l);
         layoutChanges.add(new LayoutReg(v, l));
     }
@@ -1053,6 +1131,7 @@ public final class Gen {
 
     public static void displayListener(DisplayManager dm, DisplayManager.DisplayListener l,
                                        Handler h) {
+        if (refused("a display listener")) return;
         dm.registerDisplayListener(l, h);
         displayListeners.add(new DisplayReg(dm, l));
     }
@@ -1071,6 +1150,15 @@ public final class Gen {
     }
 
     public static void ownView(ViewGroup parent, View v) {
+        // Added by a generation that has already let go (a late answer on one of its threads):
+        // the ledger has been swept and nothing would ever take this view out again.
+        if (refused("a view")) {
+            try {
+                if (parent != null) parent.removeView(v);
+            } catch (Throwable ignored) {
+            }
+            return;
+        }
         // A view put back into a rebuilt tree would otherwise be recorded once per attach; the
         // sweep only ever needs the latest parent.
         ownViews.removeIf(o -> o.view == v);
@@ -1078,6 +1166,13 @@ public final class Gen {
     }
 
     public static void ownWindow(WindowManager manager, View v) {
+        if (refused("a window")) {
+            try {
+                manager.removeViewImmediate(v);
+            } catch (Throwable ignored) {
+            }
+            return;
+        }
         ownWindows.removeIf(o -> o.view == v);
         ownWindows.add(new OwnedWindow(manager, v));
     }
@@ -1093,6 +1188,16 @@ public final class Gen {
     }
 
     // ---------------------------------------------------------------- guard and report
+
+    /**
+     * Whether a registration must be refused: this generation has retired or gone inert, so its
+     * ledger has been (or is being) swept, and anything recorded now would never be taken back.
+     */
+    private static boolean refused(String what) {
+        if (live()) return false;
+        Xp.w("[MCGen] refused " + what + ": this generation is no longer live");
+        return true;
+    }
 
     private static Runnable guarded(Runnable r) {
         return () -> {

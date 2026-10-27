@@ -197,6 +197,10 @@ public final class CountdownScene implements ImmersiveScene {
 
     @Override
     public void release() {
+        // Every release, the dry run's included: a teardown can drop the ground's completion
+        // post (refused while quiescing, or cleared by the sweep), and the gate would then stay
+        // shut for the rest of the process. The reset bumps sSeq, so a blur still in flight
+        // when the user closes the page lands on nothing instead of opening the gate twice.
         Ground.reset();
         CountdownView v = mView;
         if (v == null) return;
@@ -921,6 +925,10 @@ public final class CountdownScene implements ImmersiveScene {
         private static int sId = Integer.MIN_VALUE;
         private static boolean sBusy;
         private static java.lang.ref.WeakReference<GroundSurface> sWaiting;
+        /** Which wallpaper the waiting view asked for; the reply carries its own id. */
+        private static int sWaitingId = Integer.MIN_VALUE;
+        /** Bumped by [reset] so a completion that is already on its way is dropped. */
+        private static int sSeq;
 
         private Ground() {
         }
@@ -931,6 +939,7 @@ public final class CountdownScene implements ImmersiveScene {
          * process. Nothing is held any more, so the gate opens with the page gone.
          */
         static void reset() {
+            sSeq++;
             sBusy = false;
             sWaiting = null;
         }
@@ -952,9 +961,11 @@ public final class CountdownScene implements ImmersiveScene {
                 return;
             }
             sWaiting = new java.lang.ref.WeakReference<>(view);
+            sWaitingId = id;
             if (sBusy) return;
             sBusy = true;
             final int wantId = id;
+            final int seq = ++sSeq;
             Gen.thread("mc-countdown-ground", () -> {
                 long t0 = SystemClock.uptimeMillis();
                 android.graphics.Bitmap made = null;
@@ -971,6 +982,9 @@ public final class CountdownScene implements ImmersiveScene {
                 final android.graphics.Bitmap done = made;
                 final long ms = SystemClock.uptimeMillis() - t0;
                 Gen.post(() -> {
+                    // A reset (a retirement took the page down) superseded this one; the gate
+                    // belongs to whoever is waiting now.
+                    if (seq != sSeq) return;
                     sBusy = false;
                     sBitmap = done;
                     sId = wantId;
@@ -979,7 +993,14 @@ public final class CountdownScene implements ImmersiveScene {
                             + " in " + ms + "ms");
                     GroundSurface v = sWaiting == null ? null : sWaiting.get();
                     sWaiting = null;
-                    if (v != null && done != null) v.setBitmap(done);
+                    if (v == null || done == null) return;
+                    if (sWaitingId == wantId) {
+                        v.setBitmap(done);
+                        return;
+                    }
+                    // The page is waiting for another wallpaper than the one just made: this
+                    // picture would be the wrong one on it, so ask again for what it wants.
+                    request(v.getContext(), v);
                 });
             });
         }

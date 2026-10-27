@@ -149,14 +149,27 @@ final class LyricWindow {
     private static void setHost(View layer) {
         ViewTreeObserver old = sHostVto;
         LyricView v = sView;
-        if (old != null && v != null && old.isAlive()) Gen.unpreDraw(v, v.preDrawListener());
+        if (old != null && v != null && old.isAlive()) Gen.unpreDraw(old, HOST_PRE_DRAW);
         sHost = layer;
         sHostVto = null;
         if (layer == null || v == null) return;
         ViewTreeObserver vto = layer.getViewTreeObserver();
-        Gen.preDraw(v, v.preDrawListener());
+        // The keyguard's observer, not the view's: the view is a window of its own, and its own
+        // tree only draws when the window does. This is what makes it step on the keyguard's
+        // frames (the swipe's fade and zoom, the bouncer) the way it did as a child.
+        Gen.preDraw(vto, HOST_PRE_DRAW);
         sHostVto = vto;
     }
+
+    /**
+     * The pre-draw on the keyguard's tree, a different object from {@link LyricView}'s own: the
+     * ledger tells registrations apart by listener identity and drops every entry with the same
+     * listener, so one object on both trees would make removing either remove both.
+     */
+    private static final ViewTreeObserver.OnPreDrawListener HOST_PRE_DRAW = () -> {
+        LyricView v = sView;
+        return v == null || v.preDrawListener().onPreDraw();
+    };
 
     /** The keyguard's own root view, for the lookups the view used to do from its own root. */
     static View hostRoot() {

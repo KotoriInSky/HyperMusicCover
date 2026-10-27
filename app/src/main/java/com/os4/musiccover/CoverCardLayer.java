@@ -18,7 +18,8 @@ import android.view.ViewTreeObserver;
 
 /** The module's own square artwork. The OEM clock and media card remain above this layer. */
 public final class CoverCardLayer extends View implements Choreographer.FrameCallback {
-    private static CoverCardLayer sView;
+    /** Volatile: the hot-reload check reads animating() from the framework's thread. */
+    private static volatile CoverCardLayer sView;
     private static volatile Prepared sPending;
     private static volatile int sGeneration;
     private static volatile CoverCardStyle sStyle = CoverCardStyle.defaults();
@@ -42,7 +43,8 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
     private Prepared current, previous;
     private long changedAt;
     private long lastFrame;
-    private boolean ticking;
+    /** Volatile: written on the main thread, read by the hot-reload check off it. */
+    private volatile boolean ticking;
     private float opacity;
     private final CardSpring scale = new CardSpring();
     private boolean playing = sPlayingState;

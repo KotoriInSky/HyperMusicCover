@@ -16,7 +16,8 @@ import android.view.ViewGroup;
 
 /** Temporary, non-interactive artwork shared between the OEM thumbnail and the cover. */
 final class CoverMorphLayer extends View implements Choreographer.FrameCallback {
-    private static CoverMorphLayer sView;
+    /** Volatile: the hot-reload check reads active() from the framework's thread. */
+    private static volatile CoverMorphLayer sView;
 
     private final CoverMorphMotion motion = new CoverMorphMotion();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -34,7 +35,8 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     private long lastFrame, startedAt;
     private boolean awaitArtworkPush;
     private float fullAlpha;
-    private boolean running;
+    /** Volatile: written on the main thread, read by the hot-reload check off it. */
+    private volatile boolean running;
     /** The far end is the mini player's artwork slot, not the OEM card's thumbnail. */
     private boolean mini;
 
@@ -160,7 +162,12 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         Gen.frame(v);
     }
 
-    static boolean active() { return sView != null && sView.running; }
+    static boolean active() {
+        // One read: the hot-reload check calls this off the main thread, which can end the
+        // morph (sView = null) between a null check and a second read.
+        CoverMorphLayer v = sView;
+        return v != null && v.running;
+    }
 
     /** How quickly an end catches up with where its live box has moved to, in seconds. */
     private static final double ENDPOINT_TAU = 0.06;
