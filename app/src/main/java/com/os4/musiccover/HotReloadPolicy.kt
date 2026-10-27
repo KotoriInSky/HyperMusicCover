@@ -18,6 +18,16 @@ object HotReloadPolicy {
     const val KEY_FAULT = "hr_fi"
 
     /**
+     * The app's question to one package's processes: which of you went inert? Only an inert
+     * generation registers for it (HotReload.goInert), so a healthy process has no receiver and
+     * the ordered broadcast comes straight back empty. LSPosed reports such a process as up to
+     * date - the adoption failed after its part was done - so this is the only way to learn it.
+     */
+    const val ACTION_INERT = "com.os4.musiccover.INERT"
+    /** The answer's process names, accumulated across the package's processes. */
+    const val KEY_INERT_PROCS = "hr_inert_procs"
+
+    /**
      * Processes (not packages) whose retirement and adoption are implemented and have passed
      * the on-device matrix: Apple Music, 背屏, 高德, AOD, 小爱, SystemUI and the wallpaper
      * process. The module matches the exact process name - 高德's :locationservice and
@@ -28,7 +38,8 @@ object HotReloadPolicy {
      * on the main thread, and its adoption boots and re-attaches the keyguard container the old
      * generation handed over. The wallpaper process hands over the cover it is drawing instead
      * of putting it back: the texture is the OEM's and stays as it is. A failed adoption leaves
-     * that generation inert and the app's existing 「需要重启」 path restarts the process.
+     * that generation inert; it says so when the app asks ([ACTION_INERT], and SystemUI's own
+     * query), and the home page counts it with the processes its 「需要重启」 restarts.
      */
     @JvmField
     val SUPPORTED: Set<String> = setOf(

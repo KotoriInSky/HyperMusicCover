@@ -473,6 +473,7 @@ internal object PickupIsland {
     fun retire() {
         receivers = false
         PickupObserver.retire()
+        PickupPark.retire()
     }
 
     private fun receivers(ctx: Context) {

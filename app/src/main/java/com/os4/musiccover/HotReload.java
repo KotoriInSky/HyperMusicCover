@@ -164,7 +164,7 @@ public final class HotReload {
             // A feature that is in the middle of something it cannot stop reports it here.
             String busy = busy();
             if (busy != null) return busy;
-            if (BuildConfig.DEBUG && extras != null
+            if ((BuildConfig.DEBUG || BuildConfig.HR_FAULTS) && extras != null
                     && "check".equals(extras.getString(HotReloadPolicy.KEY_FAULT))) {
                 return "fault injection: check";
             }
@@ -246,6 +246,16 @@ public final class HotReload {
         // A page has the lock screen: the clock is small and the cut-out gone for it, and the
         // depth group would be refused by the hold if it tried to give them back.
         if (ImmersiveHost.holdsClock()) return "an immersive page has the lock screen";
+        // An order page waiting on the hidden display, or an order being watched: neither is
+        // handed over, and a page left on a display nobody can see is lost to the user until
+        // SystemUI restarts (the island's tap would bring it up there). Like 高德's trip, the
+        // next install after the order lands.
+        if (com.os4.musiccover.pickup.PickupPark.INSTANCE.anyParked()) {
+            return "an order page is parked on the hidden display";
+        }
+        if (com.os4.musiccover.pickup.PickupObserver.INSTANCE.observing()) {
+            return "an order is being watched";
+        }
         return null;
     }
 
@@ -351,6 +361,15 @@ public final class HotReload {
         String failure = null;
         try {
             if (brokenFrom != null) throw new IllegalStateException(brokenFrom);
+            // Test builds only (debug, or -PmcHrFaults=true): the inert path on purpose, in every process or one. Read from a system
+            // property because autoHotReload sends no extras: `setprop debug.mc.hr_fault adopt`
+            // (or `adopt:<process>`) before installing, `setprop debug.mc.hr_fault ""` after.
+            if (BuildConfig.DEBUG || BuildConfig.HR_FAULTS) {
+                String fault = sysProp("debug.mc.hr_fault");
+                if ("adopt".equals(fault) || ("adopt:" + proc).equals(fault)) {
+                    throw new IllegalStateException("fault injection: adopt");
+                }
+            }
             ClassLoader cl = hostLoader(proc, state, param.getOldHookHandles());
             if (cl == null) {
                 throw new IllegalStateException("no host class loader can load the process's classes");
@@ -417,17 +436,25 @@ public final class HotReload {
     /**
      * An adoption that could not finish: hooks pass through and everything this generation put
      * up is taken down again (Gen.goInert). LSPosed reports the reload as a success all the same,
-     * so SystemUI - the one process the app asks anything of - keeps one answer up: its query
-     * says inert, and the home page counts it with the processes that need a restart.
+     * so the process keeps one answer up: every process answers the app's
+     * {@link HotReloadPolicy#ACTION_INERT} question, and SystemUI its query as well. The home
+     * page counts it with the processes that need a restart.
      */
     private static void goInert(String proc, Context ctx, String why, Runnable teardown) {
         sInert = why == null ? "?" : why;
         Gen.goInert(2000L, teardown);
-        if (!"com.android.systemui".equals(proc)) return;
         if (ctx == null) {
             Xp.w(TAG + "inert with no context; the app cannot be told");
             return;
         }
+        try {
+            ProbeGuard.registerOutsideLedger(ctx,
+                    new android.content.IntentFilter(HotReloadPolicy.ACTION_INERT),
+                    TAG, InertAnswer::new, BuildConfig.APPLICATION_ID);
+        } catch (Throwable t) {
+            Xp.w(TAG + "could not register the inert answer: " + t);
+        }
+        if (!"com.android.systemui".equals(proc)) return;
         try {
             ProbeGuard.registerOutsideLedger(ctx, new android.content.IntentFilter(PROBE_ACTION),
                     Main.TAG, InertAnswer::new, BuildConfig.APPLICATION_ID);
@@ -439,13 +466,31 @@ public final class HotReload {
     private static final String PROBE_ACTION = "com.os4.musiccover.PROBE";
 
     /**
-     * All an inert SystemUI still answers: the app's query, with nothing but that it is inert,
-     * and `op=gen` for adb. Every other op is the old receivers' and is left unanswered.
+     * All an inert generation still answers: the app's per-package question, and in SystemUI
+     * the app's query, with nothing but that it is inert, and `op=gen` for adb. Every other op
+     * is the old receivers' and is left unanswered.
      */
     static final class InertAnswer extends ProbeGuard.Receiver {
         @Override
         public void onReceive(Context c, android.content.Intent i) {
             if (!ProbeGuard.admit(this, i)) return;
+            if (HotReloadPolicy.ACTION_INERT.equals(i.getAction())) {
+                // Ordered across the package's processes: add this one to what the others said.
+                try {
+                    Bundle out = getResultExtras(true);
+                    java.util.ArrayList<String> procs =
+                            out.getStringArrayList(HotReloadPolicy.KEY_INERT_PROCS);
+                    if (procs == null) procs = new java.util.ArrayList<>();
+                    String name = sProcessName != null ? sProcessName : sProcess;
+                    procs.add(name);
+                    out.putStringArrayList(HotReloadPolicy.KEY_INERT_PROCS, procs);
+                    out.putString("inertwhy:" + name, sInert);
+                    setResultExtras(out);
+                } catch (Throwable t) {
+                    Xp.w(TAG + "inert answer failed: " + t);
+                }
+                return;
+            }
             String op = i.getStringExtra("op");
             if ("query".equals(op)) {
                 Bundle out = new Bundle();
@@ -516,6 +561,16 @@ public final class HotReload {
             if (!"apple".equals(f[0]) || !(f[1] instanceof Object[])) continue;
             Object[] a = (Object[]) f[1];
             AppleLyrics.adoptState(str(a, 0), str(a, 1), str(a, 2), str(a, 3));
+        }
+    }
+
+    private static String sysProp(String key) {
+        try {
+            Object v = Class.forName("android.os.SystemProperties")
+                    .getMethod("get", String.class, String.class).invoke(null, key, "");
+            return v instanceof String ? (String) v : "";
+        } catch (Throwable t) {
+            return "";
         }
     }
 

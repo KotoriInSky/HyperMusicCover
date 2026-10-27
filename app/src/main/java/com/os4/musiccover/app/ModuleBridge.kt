@@ -1,6 +1,7 @@
 package com.os4.musiccover.app
 import com.os4.musiccover.transit.MetroCodeIsland
 import com.os4.musiccover.island.MiniPlayerConfig
+import com.os4.musiccover.HotReloadPolicy
 import com.os4.musiccover.ProbeGuard
 import com.os4.musiccover.R
 import android.content.BroadcastReceiver
@@ -818,6 +819,23 @@ object ModuleBridge {
         extras: Intent.() -> Unit = {},
     ): Bundle? = broadcast(context.applicationContext, intent(op).apply(extras))?.extras
 
+    /**
+     * Which of [pkg]'s processes say their module went inert after a hot reload (see
+     * [HotReloadPolicy.ACTION_INERT]). Only an inert generation has a receiver for it, so a
+     * healthy package answers at once with nothing; a package that does not answer in time is
+     * taken as healthy too - this adds to what LSPosed reports, it never takes away.
+     */
+    suspend fun inertIn(context: Context, pkg: String): List<String> {
+        val intent = Intent(HotReloadPolicy.ACTION_INERT).apply {
+            setPackage(pkg)
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        }
+        val reply = broadcast(context.applicationContext, intent, INERT_TIMEOUT_MS) ?: return emptyList()
+        return reply.extras?.getStringArrayList(HotReloadPolicy.KEY_INERT_PROCS).orEmpty()
+    }
+
+    private const val INERT_TIMEOUT_MS = 1500L
+
     private class Reply(val code: Int, val extras: Bundle?, val data: String? = null)
 
     /**
@@ -1046,11 +1064,22 @@ object ModuleBridge {
      * success.
      */
     fun restartStale(): Boolean {
-        val stale = LsposedService.staleTargets() ?: return false
-        if (stale.isEmpty()) return true
+        // An inert SystemUI answered the query itself, so it is known without the service and
+        // is counted then (LsposedService.staleCount); it is killed by name when no pid lists it.
+        val sysuiInert = lastQuery?.inert == true
+        val stale = LsposedService.staleTargets()
+        if (stale == null) {
+            if (!sysuiInert) return false
+            restartingSince = SystemClock.elapsedRealtime()
+            return kill(TARGET)
+        }
+        val sysuiUnlisted = sysuiInert && stale.none { it.processName == TARGET }
+        if (stale.isEmpty() && !sysuiUnlisted) return true
         restartingSince = SystemClock.elapsedRealtime()
-        return stale.map { killPid(it.pid) }.all { it }
+        val killed = stale.map { killPid(it.pid) }.all { it }
+        return if (sysuiUnlisted) kill(TARGET) && killed else killed
     }
+
 
     /** The packages in the APK's own scope.list, one a line; null when it cannot be read. */
     private fun shippedScope(): List<String>? = runCatching {

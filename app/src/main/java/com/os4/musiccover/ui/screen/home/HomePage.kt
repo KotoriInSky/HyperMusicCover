@@ -168,7 +168,11 @@ fun HomePageView(
     // Asked from the status card, which is the whole width of the page and where a scroll starts.
     var confirmRestart by remember { mutableStateOf(false) }
     LaunchedEffect(current, resumeKey, service, state.inert) {
-        if (current) stale = withContext(Dispatchers.IO) { LsposedService.staleCount() }
+        if (current) stale = withContext(Dispatchers.IO) {
+            // The other processes' inert answer first: LSPosed lists them as up to date.
+            LsposedService.refreshInert(context)
+            LsposedService.staleCount()
+        }
     }
 
     PageScaffold(
@@ -190,7 +194,12 @@ fun HomePageView(
                 // Processes left on the build before this one. An answer about the module rather
                 // than about this app, so it can be true while the module is not answering at
                 // all - and then the card says the more urgent of the two things.
-                val staleHere = ok && stale > 0
+                //
+                // An inert SystemUI is one of those whatever the count says: the count needs
+                // LSPosed's service and arrives after the answer, and green in the meantime - or
+                // for good, without the service - would call a module that does nothing active.
+                val staleHere = ok && (stale > 0 || state.inert)
+                val staleShown = if (state.inert) maxOf(stale, 1) else stale
                 // The card is one card with three things to say, and two of them are the same
                 // news: the module is not answering, or it is answering in some processes as the
                 // version before. Both are red, both wear the cross, and only the words and what
@@ -231,7 +240,7 @@ fun HomePageView(
                 // nothing the previous answer had not already said.
                 val lineTwo = when {
                     checked && !ok -> stringResource(R.string.home_status_inactive_hint)
-                    staleHere -> stringResource(R.string.home_stale_summary, stale)
+                    staleHere -> stringResource(R.string.home_stale_summary, staleShown)
                     else -> moduleVersion
                 }
                 // The card's bottom-left corner names the app, not the layout: there is
@@ -417,6 +426,13 @@ fun HomePageView(
                         // saying so.
                         stale = if (restarted) 0
                         else withContext(Dispatchers.IO) { LsposedService.staleCount() }
+                        // The inert answer belonged to the SystemUI that was just killed; held
+                        // on to, it kept the card red over a module that had come back. Asked
+                        // again - queryAlive keeps polling through the restart - for the new one's.
+                        if (restarted && state.inert) {
+                            state = state.copy(inert = false)
+                            refresh()
+                        }
                     }
                 },
                 colors = ButtonDefaults.textButtonColorsPrimary(),

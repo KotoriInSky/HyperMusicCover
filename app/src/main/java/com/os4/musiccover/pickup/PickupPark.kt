@@ -269,6 +269,8 @@ internal object PickupPark {
     @Volatile private var ownMoveUntil = 0L
     private const val OWN_MOVE = 2_000L
     private var watching = false
+    /** The ITaskStackListener registered in system_server, for [retire] to take back out. */
+    private var watcher: Any? = null
 
     /**
      * A parked task brought to the front by its own app - the mini program opened from 微信's list
@@ -326,6 +328,7 @@ internal object PickupPark {
             val proxy = stub.getMethod("asInterface", android.os.IBinder::class.java).invoke(null, listener)
             val atm = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null)
             atm.javaClass.methods.first { it.name == "registerTaskStackListener" }.invoke(atm, proxy)
+            watcher = proxy
             Xp.log(TAG + "watching for a parked task opened by its app (codes $restart/$front)")
         }.onFailure {
             watching = false
@@ -382,6 +385,29 @@ internal object PickupPark {
         parked = parked + task
         Xp.log(TAG + "parked task $task on $id (${parked.size} there)")
         return "$made, $moved"
+    }
+
+    /**
+     * Retirement (main thread, SystemUiRetire through PickupIsland). The busy check refuses
+     * while a task is parked, so normally only an idle display is left - one waiting out
+     * [LET_GO_AFTER]. Both it and the task-stack listener are let go here: the listener sits in
+     * system_server and holds this generation's loader, and with it the display, for as long as
+     * the process runs. Not through [bg]: the sweep quits that thread right after.
+     */
+    fun retire() {
+        val proxy = watcher
+        watcher = null
+        watching = false
+        if (proxy != null) {
+            runCatching {
+                val atm = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null)
+                atm.javaClass.methods.first { it.name == "unregisterTaskStackListener" }.invoke(atm, proxy)
+            }.onFailure { Xp.log(TAG + "task-stack listener not removed: $it") }
+        }
+        // Only reached past a busy check that failed to see one; back to the phone's display.
+        for (task in parked) move(task, 0)
+        parked = emptySet()
+        letGo()
     }
 
     fun isParked(task: Int): Boolean = task >= 0 && task in parked

@@ -7,6 +7,9 @@ import androidx.core.content.edit
 import io.github.libxposed.service.HookedTarget
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -103,29 +106,54 @@ object LsposedService {
      * anything having changed.
      */
     fun staleTargets(): List<HookedTarget>? {
-        // An inert SystemUI is reported SUCCEEDED on the new build - its adoption failed after
-        // LSPosed's part was done - and only says so in its query answer.
-        val inert = ModuleBridge.lastAnswer()?.inert == true
+        // An inert generation is reported up to date on the new build - its adoption failed after
+        // LSPosed's part was done. SystemUI says so in its query answer, the others when asked
+        // ([refreshInert]).
+        val sysuiInert = ModuleBridge.lastAnswer()?.inert == true
+        val inert = inertProcesses
+        // Every process on an older build counts, a supported package's sub-processes included:
+        // 高德's :locationservice, the AOD's :keyguardeditor and SystemUI's own extra processes
+        // carry the module's hooks too, are refused a reload by process name, and nothing else
+        // ever restarts them - the main process reloads in place and is not on this list.
         return runningTargets()?.filter {
-            (it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED ||
-                (inert && it.processName == "com.android.systemui")) &&
-                !auxiliaryOfSupported(it.processName)
+            it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED ||
+                (sysuiInert && it.processName == SYSTEMUI) || it.processName in inert
         }
     }
 
+    private const val SYSTEMUI = "com.android.systemui"
+
+    /** The processes other than SystemUI that said they are inert, as of [refreshInert]. */
+    @Volatile private var inertProcesses: Set<String> = emptySet()
+
     /**
-     * 高德's :locationservice and :widgetProvider report the same package and carry their own
-     * copies of the hooks, but have no installer: the module refuses them by process name (a
-     * package match would retire them and then fail to adopt, leaving an inert process), so a
-     * reload of one can only ever end FAILED. Their host app's restart is what brings them the
-     * new build; the card must not count them as something this module failed on.
+     * Asks every up-to-date process of a supported package whether its module went inert (see
+     * [ModuleBridge.inertIn]); SystemUI is left to its own query. Called before the home page
+     * counts, so the count and the restart both see the answer.
      */
-    private fun auxiliaryOfSupported(process: String?): Boolean {
-        val name = process ?: return false
-        val colon = name.indexOf(':')
-        return colon > 0 && HotReloadPolicy.SUPPORTED.contains(name.substring(0, colon))
+    suspend fun refreshInert(context: Context) {
+        val targets = runningTargets() ?: return
+        val pkgs = targets.asSequence()
+            .filter { it.state == HookedTarget.State.UP_TO_DATE && it.processName != SYSTEMUI }
+            .map { it.processName.substringBefore(':') }
+            .filter { it in HotReloadPolicy.SUPPORTED && it != SYSTEMUI }
+            .toSet()
+        inertProcesses = if (pkgs.isEmpty()) emptySet() else coroutineScope {
+            pkgs.map { async { ModuleBridge.inertIn(context, it) } }.awaitAll().flatten().toSet()
+        }
+        if (inertProcesses.isNotEmpty()) Log.w("MCHotReloadApp", "inert: $inertProcesses")
     }
 
-    /** How many of those still run a build older than the one installed; 0 without the service. */
-    fun staleCount(): Int = staleTargets()?.size ?: 0
+    /**
+     * How many processes the home page's restart would take, an inert SystemUI included even
+     * when the service is not there to list it (restartStale kills it by name then); 0 without
+     * the service and nothing inert.
+     */
+    fun staleCount(): Int {
+        val stale = staleTargets()
+        val n = stale?.size ?: 0
+        val sysuiUnlisted = ModuleBridge.lastAnswer()?.inert == true &&
+            stale?.none { it.processName == SYSTEMUI } != false
+        return n + if (sysuiUnlisted) 1 else 0
+    }
 }

@@ -39,6 +39,10 @@ android {
         versionCode = (findProperty("mcVersionCode") as String?)?.toInt() ?: 2
         versionName = ((findProperty("mcVersionName") as String?) ?: "0.0.1") +
                 ((findProperty("mcVersionSuffix") as String?) ?: "")
+        // The hot reload's fault injection (HotReload), for a release-signed test build on the
+        // phone: -PmcHrFaults=true. Off in every build CI makes.
+        buildConfigField("boolean", "HR_FAULTS",
+                ((findProperty("mcHrFaults") as String?) == "true").toString())
     }
 
     signingConfigs {

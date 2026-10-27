@@ -53,6 +53,13 @@ internal object PickupObserver {
         PickupCamera.retire()
     }
 
+    /**
+     * Whether an order is being waited on, for the hot reload's busy check (main thread). The
+     * map is [bg]'s; its size read from another thread can only be a moment stale, which the
+     * check tolerates - a task that ends in that moment just refuses one reload.
+     */
+    fun observing(): Boolean = tasks.isNotEmpty()
+
 
     private const val TAG = "MCPickupObs: "
 
