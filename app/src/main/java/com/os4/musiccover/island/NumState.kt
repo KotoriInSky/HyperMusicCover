@@ -97,7 +97,10 @@ internal object NumState {
         folding = on
         trace("folding=$on")
         forceDefault(on)
-        if (!on) hideCount(false)
+        if (!on) {
+            main.removeCallbacks(foldCheck)
+            hideCount(false)
+        }
     }
 
     private fun handsUp(model: Any, info: Any?, target: Float): Float? {
