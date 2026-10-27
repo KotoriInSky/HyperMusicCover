@@ -76,12 +76,19 @@ object LsposedService {
         bound.value?.let {
             runCatching { it.runningTargets }.getOrNull()?.also { list ->
                 // What the framework says it can reload, for a bug report and for testing a
-                // process whose automatic reload did not arrive.
-                Log.d("MCHotReloadApp", "targets: " + list.joinToString { t ->
+                // process whose automatic reload did not arrive. Only when it changes: the home
+                // page asks on every resume and every count.
+                val line = list.joinToString { t ->
                     "${t.processName}/${t.pid}/${t.state}/${t.loadedVersionCode}"
-                })
+                }
+                if (line != lastTargets) {
+                    lastTargets = line
+                    Log.d("MCHotReloadApp", "targets: $line")
+                }
             }
         }
+
+    @Volatile private var lastTargets: String? = null
 
     /**
      * Those of [runningTargets] still on a build older than the one installed, or whose hot

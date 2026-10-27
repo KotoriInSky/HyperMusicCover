@@ -188,7 +188,7 @@ final class Diagnostics {
     static void dumpGeom() {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "geom: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 try {
@@ -394,7 +394,7 @@ final class Diagnostics {
     static void dumpInk() {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "ink: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 for (View root : Main.clockRoots()) {
@@ -494,7 +494,7 @@ final class Diagnostics {
     static void pokeGlassData(final int idx, final float value) {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "no clock container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 for (View root : Main.clockRoots()) {
@@ -747,7 +747,7 @@ final class Diagnostics {
     static void dumpClockViewTypes() {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "viewtypes: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 Class<?> cvt;
@@ -1428,7 +1428,7 @@ final class Diagnostics {
     static void dumpOemTranslation(final float y) {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "oemtrans: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 Object helper = null, anim = null, tr = null;

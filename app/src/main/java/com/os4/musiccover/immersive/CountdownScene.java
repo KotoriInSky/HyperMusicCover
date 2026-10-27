@@ -292,7 +292,7 @@ public final class CountdownScene implements ImmersiveScene {
                 : Main.sAppCtx.getSystemService(SensorManager.class);
         if (sm == null) return;
         if (!on) {
-            sm.unregisterListener(mProximity);
+            Gen.unsensorListener(sm, mProximity);
             mProximity = null;
             mCovered = false;
             return;
@@ -313,7 +313,7 @@ public final class CountdownScene implements ImmersiveScene {
             public void onAccuracyChanged(Sensor sensor, int accuracy) {
             }
         };
-        sm.registerListener(mProximity, s, SensorManager.SENSOR_DELAY_NORMAL, mMain);
+        Gen.sensorListener(sm, mProximity, s, SensorManager.SENSOR_DELAY_NORMAL, mMain);
     }
 
     // ---------------------------------------------------------------- the page

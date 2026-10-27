@@ -151,24 +151,30 @@ object MiniPlayerRuntime {
         // The OEM's full-AOD controller is a singleton and holds the proxy directly. Left
         // there, it is a host reference into this class loader - and `added` was a local, so
         // the next generation could never add its own listener to that controller.
+        // The proxy and the reflected methods stay: they are install-time, a dry run does not
+        // install again, and only this generation's own statics hold them.
         val c = aodController?.get()
         val l = aodListener
         val remove = aodRemove
+        // For a dry run's reattach, which has no handover to read the controller from.
+        lastAodController = c?.let(::WeakReference)
         aodController = null
-        aodListener = null
-        aodRemove = null
         aodListenerAdded = false
-        if (c != null && l != null && remove != null) {
-            runCatching { remove.invoke(c, l) }
-                .onFailure { Xp.log("MCMini: full-AOD listener not removed: $it") }
+        if (c != null && l != null) {
+            runCatching {
+                if (remove != null) {
+                    remove.invoke(c, l)
+                } else {
+                    @Suppress("UNCHECKED_CAST")
+                    val list = Xp.getObjectField(c, "mListeners") as MutableList<Any?>
+                    list.remove(l)
+                }
+            }.onFailure { Xp.log("MCMini: full-AOD listener not removed: $it") }
         }
         aodDimFrames = 0
         aodDimLook = null
         aodDimDepth = -1f
         aodDimFlat = false
-        blendMethod = null
-        glassMethod = null
-        blurOpenedMethod = null
         // The AOD dressing belongs to the views that just went; left here it would hand the
         // next run a listener per orphaned view.
         aodDimHandler.removeCallbacks(aodDimSettle)
@@ -176,7 +182,11 @@ object MiniPlayerRuntime {
         dressedViews.clear()
         notificationDressedViews.clear()
         // Rows the transient-removal hook is holding for a morph: with the controllers gone the
-        // morph will not land, and the map must not keep telling the stack to keep them.
+        // morph will not land, and the map must not keep telling the stack to keep them. One the
+        // stack already tried to take away is waiting on us for it, so it is let go now.
+        for (row in heldTransients.filterValues { it }.keys.toList()) {
+            runCatching { releaseTransient(row) }
+        }
         heldTransients.clear()
         passTransient = false
     }
@@ -188,6 +198,7 @@ object MiniPlayerRuntime {
      */
     @JvmStatic
     fun reattach() {
+        adoptAod(lastAodController?.get())
         lastRoot?.get()?.let { root ->
             if (root.isAttachedToWindow) scheduleInstall(root, lastShortcutController?.get())
         }
@@ -197,14 +208,17 @@ object MiniPlayerRuntime {
      * What a hot reload hands over: the shortcut row the last controller hung off and the OEM
      * controller it was built from. Both are host objects. Without them the new generation has
      * nothing to reattach to - a hot reload does not rebuild the keyguard, so the shortcut hook
-     * that normally supplies this pair will not fire again.
+     * that normally supplies this pair will not fire again. The full-AOD controller goes along
+     * for the same reason (see [adoptAod]).
      */
     @JvmStatic
-    fun save(): Array<Any?> = arrayOf(lastRoot?.get(), lastShortcutController?.get())
+    fun save(): Array<Any?> =
+        arrayOf(lastRoot?.get(), lastShortcutController?.get(), aodController?.get())
 
     /** The new generation's half; see [save]. Main thread, like the attach path. */
     @JvmStatic
-    fun adopt(root: View?, shortcutController: Any?) {
+    fun adopt(root: View?, shortcutController: Any?, aod: Any?) {
+        adoptAod(aod)
         if (root == null || !root.isAttachedToWindow) {
             Xp.log("MCMini: no shortcut row to adopt ($root)")
             return
@@ -870,7 +884,10 @@ object MiniPlayerRuntime {
     /** The proxy the OEM's full-AOD controller holds, and the way back out of it. */
     private var aodListener: Any? = null
     private var aodListenerAdded = false
+    private var aodAdd: Method? = null
     private var aodRemove: Method? = null
+    /** The controller retire() took our listener off, for a dry run's reattach. */
+    private var lastAodController: WeakReference<Any>? = null
     private var aodDimFrames = 0
     private var blendMethod: Method? = null
     private var glassMethod: Method? = null
@@ -894,13 +911,14 @@ object MiniPlayerRuntime {
                 .getDeclaredMethod("isBackgroundBlurOpened", Context::class.java).apply { isAccessible = true }
         }.getOrNull()
         val add = controller.getDeclaredMethod("addCallback", listener).apply { isAccessible = true }
-        aodRemove = runCatching { controller.getDeclaredMethod("removeCallback", listener) }
-            .getOrElse {
-                controller.declaredMethods.firstOrNull {
-                    it.name == "removeCallback" && it.parameterTypes.size == 1
-                } ?: throw NoSuchMethodException("removeCallback")
-            }
-            .apply { isAccessible = true }
+        aodAdd = add
+        // Optional: HyperOS 3's controller (17 Pro Max, 2026-10-27) has addCallback and no way
+        // back, and requiring one threw here and took the whole AOD dim down with it. Without
+        // it, retire() takes the proxy out of the controller's mListeners itself.
+        aodRemove = (runCatching { controller.getDeclaredMethod("removeCallback", listener) }.getOrNull()
+            ?: controller.declaredMethods.firstOrNull {
+                it.name == "removeCallback" && it.parameterTypes.size == 1
+            })?.apply { isAccessible = true }
         val ours = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(listener)) { self, m, args ->
             when (m.name) {
                 "updateFullAodAnimState" -> { runCatching { onAodDim(args!!) }; null }
@@ -930,6 +948,29 @@ object MiniPlayerRuntime {
             }
             result
         }
+    }
+
+    /**
+     * The full-AOD controller a previous generation (or a dry run's retire) had our listener on.
+     * It is SystemUI's singleton and its callbacks are added once, early: the addCallback hook
+     * that normally brings us in will not fire again, so the listener is added here.
+     */
+    private fun adoptAod(controller: Any?) {
+        if (controller == null || aodListenerAdded) return
+        val add = aodAdd ?: return
+        val ours = aodListener ?: return
+        aodController = WeakReference(controller)
+        aodListenerAdded = true
+        runCatching { add.invoke(controller, ours) }
+            .onSuccess {
+                materialGeneration++
+                refresh()
+                Xp.log("MCMini: full-AOD listener adopted")
+            }
+            .onFailure {
+                aodListenerAdded = false
+                Xp.log("MCMini: full-AOD listener not adopted: $it")
+            }
     }
 
     private fun onAodDim(args: Array<Any?>) {

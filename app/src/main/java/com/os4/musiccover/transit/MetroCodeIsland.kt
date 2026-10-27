@@ -215,7 +215,11 @@ internal object MetroCodeIsland {
         )
     }
 
-    /** [save]'s other half, in the new generation, before the next card arrives. */
+    /**
+     * [save]'s other half, in the new generation, before [install]: install registers the
+     * receiver, and a card that arrived before the trip was back would be read as "it starts
+     * here". Plain data only; what needs the context waits for [adopted].
+     */
     @Synchronized
     fun adopt(a: Array<Any?>?) {
         if (a == null) return
@@ -238,13 +242,21 @@ internal object MetroCodeIsland {
             t.popped.addAll(strings(a.getOrNull(7)))
             trip = t
             Xp.log(TAG + "trip carried over at ${stations.last()} (station ${stations.size})")
-            // The first station's card has a timeout on it, and the reload took it off the
-            // main queue with everything else.
-            if (t.stations.size == 1) {
-                val left = ENTRY_MS - (now - t.newAt)
-                // Due while the reload was under way: run now rather than never.
-                Gen.postDelayed(entryOver, left.coerceAtLeast(0L))
-            }
+        }
+        planStops = strings(a.getOrNull(8)).toSet()
+        planAt = (a.getOrNull(9) as? Number)?.toLong() ?: 0L
+    }
+
+    /** The rest of the adoption, after [install]: the context is there now. */
+    @Synchronized
+    fun adopted() {
+        val t = trip
+        // The first station's card has a timeout on it, and the reload took it off the main
+        // queue with everything else.
+        if (t != null && t.stations.size == 1) {
+            val left = ENTRY_MS - (SystemClock.elapsedRealtime() - t.newAt)
+            // Due while the reload was under way: run now rather than never.
+            Gen.postDelayed(entryOver, left.coerceAtLeast(0L))
         }
         // The island the old generation posted, if it is still up.
         inherited = shown == null && runCatching {
@@ -252,8 +264,6 @@ internal object MetroCodeIsland {
                 ?.activeNotifications?.any { it.id == ID }
         }.getOrNull() == true
         if (inherited) Xp.log(TAG + "the previous generation's island is still up")
-        planStops = strings(a.getOrNull(8)).toSet()
-        planAt = (a.getOrNull(9) as? Number)?.toLong() ?: 0L
     }
 
     private fun strings(v: Any?): List<String> =

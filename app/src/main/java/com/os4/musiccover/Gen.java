@@ -8,6 +8,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.database.ContentObserver;
+import android.hardware.Sensor;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.hardware.camera2.CameraManager;
 import android.hardware.display.DisplayManager;
 import android.media.session.MediaController;
@@ -94,54 +97,99 @@ public final class Gen {
         })) {
             return false;
         }
+        return await(latch, timeoutMs);
+    }
+
+    /** retireOnMain's task: not started, deciding, committed, or given up by the caller. */
+    private static final int R_WAITING = 0, R_CHECKING = 1, R_COMMITTED = 2, R_ABANDONED = 3;
+    /** How long the caller waits for a committed retirement to finish its teardown. */
+    private static final long R_FINISH_MS = 10_000L;
+
+    /**
+     * The whole retirement as one main-thread task: [check] decides, and on its yes the
+     * generation retires, [beforeSweep] gives the OEM its state back, and the ledger takes back
+     * everything this generation registered. Returns null once committed, else the refusal.
+     *
+     * <p>One task, because the check reads main-thread state - the lock screen, a morph, the
+     * shade - and so does the teardown. Checked on the binder thread and torn down later on
+     * the main thread, a morph could start in between and be pulled out from under the frame
+     * that was drawing it.
+     *
+     * <p>The caller waits [timeoutMs]. A main thread that has not got to the task by then never
+     * runs it: the task's first step claims it, the caller's timeout abandons it, and only one
+     * of the two can win. A check that is still running when the caller gives up is abandoned
+     * the same way, before anything has been let go. Once committed there is no refusing - the
+     * caller waits for the teardown to finish instead.
+     *
+     * <p>The hooks are not touched: the next generation replaces or unhooks them through
+     * HotReload, and until then they pass through because [retired] is set. The sweep is best
+     * effort on purpose: every step is independent and a failure is left for the next one.
+     */
+    static String retireOnMain(long timeoutMs, java.util.function.Supplier<String> check,
+                               Runnable beforeSweep) {
+        final AtomicInteger state = new AtomicInteger(R_WAITING);
+        final String[] refusal = {null};
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        Runnable task = () -> {
+            if (!state.compareAndSet(R_WAITING, R_CHECKING)) return;
+            try {
+                String why;
+                try {
+                    why = check.get();
+                } catch (Throwable t) {
+                    why = "the check failed: " + t;
+                }
+                if (why == null && !state.compareAndSet(R_CHECKING, R_COMMITTED)) {
+                    why = "the caller gave up while the check ran";
+                }
+                if (why != null) {
+                    refusal[0] = why;
+                    return;
+                }
+                quiescing = true;
+                retired = true;
+                if (beforeSweep != null) {
+                    Throwable t = teardown(beforeSweep);
+                    if (t != null) Xp.w("[MCGen] teardown before the sweep failed: " + t);
+                }
+                sweep(false);
+            } finally {
+                done.countDown();
+            }
+        };
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            task.run();
+            return refusal[0];
+        }
+        // A plain Handler, not Main.main(): the task sets retired, and that one drops what is
+        // queued on it once this generation is no longer live.
+        if (!new Handler(android.os.Looper.getMainLooper()).post(task)) {
+            return "the main thread is not running";
+        }
+        if (!await(done, timeoutMs)) {
+            if (state.compareAndSet(R_WAITING, R_ABANDONED)) {
+                return "the main thread did not get to the retirement in " + timeoutMs + "ms";
+            }
+            if (state.compareAndSet(R_CHECKING, R_ABANDONED)) {
+                return "the main thread's check did not finish in " + timeoutMs + "ms";
+            }
+            // Committed: the generation has already let go, and refusing now would leave the
+            // framework keeping a generation that is no longer there.
+            if (!await(done, R_FINISH_MS)) {
+                Xp.w("[MCGen] retirement committed but its teardown has not finished");
+            }
+            return null;
+        }
+        return refusal[0];
+    }
+
+    private static boolean await(java.util.concurrent.CountDownLatch latch, long ms) {
         try {
-            return latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            return latch.await(ms, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
         }
-    }
-
-    /**
-     * Take back everything this generation registered. Called from the commit step of a hot
-     * reload, after which nothing here may call into this generation again.
-     *
-     * <p>The hooks are not touched: the next generation replaces or unhooks them through
-     * HotReload, and until then they pass through because [retired] is set. What is left is the
-     * callbacks and posts that would keep invoking our classes from the host: receivers,
-     * observers, preference and display listeners, media-session callbacks, view listeners,
-     * queued messages and frame callbacks, our threads, and our views.
-     *
-     * <p>Best effort on purpose: this runs after retirement is committed, when refusing is no
-     * longer possible. Every step is independent and a failure is left for the next one.
-     */
-    static boolean retire(long timeoutMs) {
-        return retire(timeoutMs, null);
-    }
-
-    /**
-     * As {@link #retire(long)}, but with one main-thread step in front of the sweep. SystemUI's
-     * teardown runs there: the features give the OEM its state back while our views are still
-     * in the tree, and only then does the ledger take the views themselves.
-     */
-    static boolean retire(long timeoutMs, Runnable beforeSweep) {
-        quiescing = true;
-        retired = true;
-        // The teardown gives OEM state back; run late - after the framework has moved on to the
-        // next generation - it would shrink the clock or hide the print under the new code. The
-        // sweep is safe to run late (it only touches this generation's own registrations), so
-        // only the step in front of it is guarded.
-        final java.util.concurrent.atomic.AtomicBoolean tooLate =
-                new java.util.concurrent.atomic.AtomicBoolean();
-        boolean ran = onMain(timeoutMs, () -> {
-            if (!tooLate.get() && beforeSweep != null) {
-                Throwable t = teardown(beforeSweep);
-                if (t != null) Xp.w("[MCGen] teardown before the sweep failed: " + t);
-            }
-            sweep(false);
-        });
-        if (!ran) tooLate.set(true);
-        return ran;
     }
 
     /**
@@ -211,6 +259,7 @@ public final class Gen {
         INSTALL_KEPT.addAll(activeSessions);
         INSTALL_KEPT.addAll(cameraCallbacks);
         INSTALL_KEPT.addAll(networkCallbacks);
+        INSTALL_KEPT.addAll(sensorListeners);
         INSTALL_KEPT.addAll(preDraws);
         INSTALL_KEPT.addAll(attachStates);
         INSTALL_KEPT.addAll(layoutChanges);
@@ -239,7 +288,7 @@ public final class Gen {
     }
 
     private static void sweepNow(boolean dryRun) {
-        for (java.util.Map.Entry<Runnable, Runnable> e : MAIN_POSTED.entrySet()) {
+        for (java.util.Map.Entry<Runnable, MainPost> e : MAIN_POSTED.entrySet()) {
             try {
                 Main.main().removeCallbacks(e.getValue());
             } catch (Throwable ignored) {
@@ -375,11 +424,22 @@ public final class Gen {
         }
         retain(dryRun, networkCallbacks);
 
+        for (SensorReg r : sensorListeners) {
+            if (kept(dryRun, r)) continue;
+            try {
+                r.manager.unregisterListener(r.listener);
+            } catch (Throwable ignored) {
+            }
+        }
+        retain(dryRun, sensorListeners);
+
         for (PreDrawReg p : preDraws) {
             if (kept(dryRun, p)) continue;
             try {
                 if (p.view != null) {
                     p.view.getViewTreeObserver().removeOnPreDrawListener(p.listener);
+                } else if (p.vto != null && p.vto.isAlive()) {
+                    p.vto.removeOnPreDrawListener(p.listener);
                 }
             } catch (Throwable ignored) {
             }
@@ -466,11 +526,9 @@ public final class Gen {
 
             ioExecutor.shutdownNow();
         } else {
-            // Threads are not ours to stop in a dry run, but their records are: every lookup and
-            // every card video added one, and 50 runs left 64 of them in a ledger that is
-            // supposed to be a count of what is held now. Only the finished ones go - the
-            // module's long-lived threads and pools are still alive and still theirs.
-            threads.removeIf(t -> !t.isAlive());
+            // Not stopped in a dry run (see above), but a record of one that is already gone is
+            // not something this generation holds. Plain threads take themselves out (thread());
+            // these two kinds have no such exit.
             handlerThreads.removeIf(t -> !t.isAlive());
             executors.removeIf(ExecutorService::isShutdown);
         }
@@ -520,6 +578,7 @@ public final class Gen {
     private static final List<ActiveSessionsReg> activeSessions = new CopyOnWriteArrayList<>();
     private static final List<CameraReg> cameraCallbacks = new CopyOnWriteArrayList<>();
     private static final List<NetworkReg> networkCallbacks = new CopyOnWriteArrayList<>();
+    private static final List<SensorReg> sensorListeners = new CopyOnWriteArrayList<>();
     private static final List<TreeReg> treeListeners = new CopyOnWriteArrayList<>();
     private static final List<PreDrawReg> preDraws = new CopyOnWriteArrayList<>();
     private static final List<AttachReg> attachStates = new CopyOnWriteArrayList<>();
@@ -554,9 +613,15 @@ public final class Gen {
         }
     }
 
-    /** The wrapper posted on the caller's behalf; see frame(). */
+    /**
+     * The wrapper posted on the caller's behalf; see frame(). One per callback, counted like
+     * MainPost: posted twice before a frame, the first run must not drop the entry the second
+     * copy is still queued under, or unframe would leave that copy behind.
+     */
     private static final class Frame implements Choreographer.FrameCallback {
         final Choreographer.FrameCallback callback;
+        /** Copies still queued; only changed inside the frames map's compute. */
+        int pending;
 
         Frame(Choreographer.FrameCallback callback) {
             this.callback = callback;
@@ -567,9 +632,10 @@ public final class Gen {
             try {
                 if (live()) callback.doFrame(frameTimeNanos);
             } finally {
-                // Only still ours if the callback did not re-post: a finished loop leaves
-                // nothing behind, and an in-flight one was replaced by frame() already.
-                frames.remove(callback, this);
+                // After the callback, so a loop that re-posts from inside its own frame has
+                // already counted the next copy and keeps its entry.
+                frames.computeIfPresent(callback,
+                        (k, v) -> v != this || --v.pending > 0 ? v : null);
             }
         }
     }
@@ -656,6 +722,16 @@ public final class Gen {
         }
     }
 
+    private static final class SensorReg {
+        final SensorManager manager;
+        final SensorEventListener listener;
+
+        SensorReg(SensorManager manager, SensorEventListener listener) {
+            this.manager = manager;
+            this.listener = listener;
+        }
+    }
+
     private static final class LayoutReg {
         final View view;
         final View.OnLayoutChangeListener listener;
@@ -667,11 +743,14 @@ public final class Gen {
     }
 
     private static final class PreDrawReg {
+        /** The view, or null for a call site that only holds the observer (then [vto]). */
         final View view;
+        final ViewTreeObserver vto;
         final ViewTreeObserver.OnPreDrawListener listener;
 
-        PreDrawReg(View view, ViewTreeObserver.OnPreDrawListener listener) {
+        PreDrawReg(View view, ViewTreeObserver vto, ViewTreeObserver.OnPreDrawListener listener) {
             this.view = view;
+            this.vto = vto;
             this.listener = listener;
         }
     }
@@ -734,11 +813,29 @@ public final class Gen {
 
     /**
      * The wrapper posted for each runnable, so removeCallbacks can find it: a guarded copy is
-     * a different object from the one the caller holds. A runnable that has run takes itself
-     * out, so this only holds what is still queued.
+     * a different object from the one the caller holds. One wrapper per runnable however many
+     * times it is queued (the mini player posts the same retry now and 250ms later), counted, so
+     * the copy that runs first does not take the entry out from under the one still waiting -
+     * removeCallbacks would then miss it. Only what is still queued is held.
      */
-    private static final java.util.Map<Runnable, Runnable> MAIN_POSTED =
+    private static final java.util.Map<Runnable, MainPost> MAIN_POSTED =
             new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final class MainPost implements Runnable {
+        final Runnable key;
+        /** Copies of this wrapper still queued; only changed inside MAIN_POSTED's compute. */
+        int pending;
+
+        MainPost(Runnable key) {
+            this.key = key;
+        }
+
+        @Override
+        public void run() {
+            MAIN_POSTED.computeIfPresent(key, (k, v) -> v != this || --v.pending > 0 ? v : null);
+            if (live()) key.run();
+        }
+    }
 
     /**
      * A main-looper Handler of the module's own, for features that need their own queue rather
@@ -786,35 +883,50 @@ public final class Gen {
         return true;
     }
 
-    /** Post to the module's main handler; refused once quiescing or inert. */
-    public static void post(Runnable r) {
-        if (runInTeardown(r)) return;
-        if (quiescing || inert) return;
-        Main.main().post(mainGuarded(r));
+    /**
+     * Post to the module's main handler; refused once quiescing or inert. False when [r] will
+     * not run - a caller that counted something in flight has to count it back out itself.
+     */
+    public static boolean post(Runnable r) {
+        if (runInTeardown(r)) return true;
+        if (quiescing || inert) return false;
+        MainPost g = mainGuarded(r);
+        if (Main.main().post(g)) return true;
+        unguard(g);
+        return false;
     }
 
-    public static void postDelayed(Runnable r, long ms) {
+    public static boolean postDelayed(Runnable r, long ms) {
         // Only an immediate step is a hand-back; a delayed one (a fade, a parked swap) is
         // something the teardown is meant to cancel, not run in the middle of itself.
-        if (ms <= 0L && runInTeardown(r)) return;
-        if (quiescing || inert) return;
-        Main.main().postDelayed(mainGuarded(r), ms);
+        if (ms <= 0L && runInTeardown(r)) return true;
+        if (quiescing || inert) return false;
+        MainPost g = mainGuarded(r);
+        if (Main.main().postDelayed(g, ms)) return true;
+        unguard(g);
+        return false;
     }
 
-    /** The counterpart of post/postDelayed; only the handler Gen posted through is targeted. */
+    /**
+     * The counterpart of post/postDelayed; only the handler Gen posted through is targeted.
+     * Every queued copy goes: the Handler removes a wrapper wherever it is queued.
+     */
     public static void removeCallbacks(Runnable r) {
-        Runnable g = MAIN_POSTED.remove(r);
+        MainPost g = MAIN_POSTED.remove(r);
         Main.main().removeCallbacks(g == null ? r : g);
     }
 
-    private static Runnable mainGuarded(Runnable r) {
-        return MAIN_POSTED.computeIfAbsent(r, key -> new Runnable() {
-            @Override
-            public void run() {
-                MAIN_POSTED.remove(key);
-                if (live()) key.run();
-            }
+    private static MainPost mainGuarded(Runnable r) {
+        return MAIN_POSTED.compute(r, (k, v) -> {
+            MainPost g = v != null ? v : new MainPost(k);
+            g.pending++;
+            return g;
         });
+    }
+
+    /** A post the Handler would not take: one copy fewer than mainGuarded counted. */
+    private static void unguard(MainPost g) {
+        MAIN_POSTED.computeIfPresent(g.key, (k, v) -> v != g || --v.pending > 0 ? v : null);
     }
 
     /** Post on a host view, and remember it so retirement can take it back out. */
@@ -875,11 +987,15 @@ public final class Gen {
     /** Post a frame callback, and remember the wrapper so retirement (or unframe) can take it back. */
     public static void frame(Choreographer.FrameCallback cb) {
         if (quiescing || inert) return;
-        Frame wrapped = new Frame(cb);
-        frames.put(cb, wrapped);
+        Frame wrapped = frames.compute(cb, (k, v) -> {
+            Frame f = v != null ? v : new Frame(k);
+            f.pending++;
+            return f;
+        });
         Choreographer.getInstance().postFrameCallback(wrapped);
     }
 
+    /** Every queued copy: Choreographer removes a callback wherever it is queued. */
     public static void unframe(Choreographer.FrameCallback cb) {
         Frame wrapped = frames.remove(cb);
         Choreographer.getInstance().removeFrameCallback(wrapped == null ? cb : wrapped);
@@ -1073,6 +1189,20 @@ public final class Gen {
         networkCallbacks.removeIf(r -> r.manager == m && r.callback == cb);
     }
 
+    /** A sensor of the process's SensorManager (the proximity checks of the lock-screen pages). */
+    public static boolean sensorListener(SensorManager m, SensorEventListener l, Sensor s,
+                                         int rate, Handler h) {
+        if (refused("a sensor listener")) return false;
+        boolean ok = m.registerListener(l, s, rate, h);
+        if (ok) sensorListeners.add(new SensorReg(m, l));
+        return ok;
+    }
+
+    public static void unsensorListener(SensorManager m, SensorEventListener l) {
+        m.unregisterListener(l);
+        sensorListeners.removeIf(r -> r.manager == m && r.listener == l);
+    }
+
     /**
      * A listener on a host view whose type varies (pre-draw, layout, attach). Recorded here so
      * retirement can find it; the typed removal is the caller's, by kind.
@@ -1086,14 +1216,14 @@ public final class Gen {
     public static void preDraw(View v, ViewTreeObserver.OnPreDrawListener l) {
         if (refused("a pre-draw")) return;
         v.getViewTreeObserver().addOnPreDrawListener(l);
-        preDraws.add(new PreDrawReg(v, l));
+        preDraws.add(new PreDrawReg(v, null, l));
     }
 
     /** For a call site that holds the observer rather than the view it belongs to. */
     public static void preDraw(ViewTreeObserver vto, ViewTreeObserver.OnPreDrawListener l) {
         if (refused("a pre-draw")) return;
         vto.addOnPreDrawListener(l);
-        preDraws.add(new PreDrawReg(null, l));
+        preDraws.add(new PreDrawReg(null, vto, l));
     }
 
     public static void unpreDraw(View v, ViewTreeObserver.OnPreDrawListener l) {
@@ -1223,6 +1353,7 @@ public final class Gen {
                 + " activeSessions=" + activeSessions.size()
                 + " cameraCallbacks=" + cameraCallbacks.size()
                 + " networkCallbacks=" + networkCallbacks.size()
+                + " sensorListeners=" + sensorListeners.size()
                 + " treeListeners=" + treeListeners.size()
                 + " preDraws=" + preDraws.size()
                 + " attachStates=" + attachStates.size()

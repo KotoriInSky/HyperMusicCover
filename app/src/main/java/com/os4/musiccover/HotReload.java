@@ -12,6 +12,7 @@ import com.os4.musiccover.pickup.RearScreen;
 import com.os4.musiccover.shade.ShadeLayer;
 import com.os4.musiccover.transit.AmapFocus;
 import com.os4.musiccover.transit.AmapImmerse;
+import com.os4.musiccover.transit.AmapTransitShare;
 import com.os4.musiccover.transit.MetroCodeIsland;
 
 import java.io.File;
@@ -137,41 +138,42 @@ public final class HotReload {
         if (blocked != null) {
             return refuse(blocked);
         }
-        // A feature that is in the middle of something it cannot stop reports it here; the
-        // first ones arrive with their retire() in Steps 5-7.
-        String busy = busy();
-        if (busy != null) {
-            return refuse(busy);
-        }
-        if (BuildConfig.DEBUG && extras != null
-                && "check".equals(extras.getString(HotReloadPolicy.KEY_FAULT))) {
-            return refuse("fault injection: check");
-        }
 
-        try {
-            // The commit step may not throw; the framework also refuses our own classes, so the
-            // encoding - and its check - happens here, where a failure still leaves us running.
-            param.setSavedInstanceState(HotReloadState.encode(
-                    build, proc, sHostLoader, Main.sAppCtx, saveFeatures(proc), sGen + 1));
-        } catch (Throwable t) {
-            return refuse("could not save state: " + t);
-        }
-
-        // Commit. From here the old hookers pass through and nothing new is posted; the ledger
-        // takes back the receivers, observers, listeners, posts, threads and views it recorded.
-        // SystemUI's features first give the OEM its state back - the clock's squeeze, the
-        // hidden print, the card's listeners, the islands - on the main thread, while our views
-        // are still in the tree. The other processes only unregister, which takes a moment.
-        sRetired = true;
-        // The two processes with state to give back run their own main-thread step first; the
-        // wallpaper's hands its caches and the cover-video player over, the cover itself is
-        // handed to the next generation through the saved state instead.
+        // The two processes with state to give back run their own main-thread step before the
+        // sweep: SystemUI's features give the OEM its state back - the clock's squeeze, the
+        // hidden print, the card's listeners, the islands - while our views are still in the
+        // tree; the wallpaper's hands its caches and the cover-video player over, the cover
+        // itself going to the next generation through the saved state instead.
         Runnable teardown = null;
         if ("com.android.systemui".equals(proc)) teardown = SystemUiRetire::retireForReload;
         else if ("com.miui.miwallpaper".equals(proc)) teardown = WallpaperProbe::retireForReload;
-        if (!Gen.retire(teardown == null ? 2000L : 4000L, teardown)) {
-            Xp.w(TAG + "retirement sweep did not finish in time; guarded callbacks are inert");
+        // From the busy check to the sweep, one main-thread task: what busy() reads is the main
+        // thread's, and a check made here on the binder thread could be stale by the time the
+        // teardown ran (see Gen.retireOnMain). On its yes the old hookers pass through, nothing
+        // new is posted, and the ledger takes back everything it recorded.
+        String refusal = Gen.retireOnMain(teardown == null ? 2000L : 4000L, () -> {
+            // A feature that is in the middle of something it cannot stop reports it here.
+            String busy = busy();
+            if (busy != null) return busy;
+            if (BuildConfig.DEBUG && extras != null
+                    && "check".equals(extras.getString(HotReloadPolicy.KEY_FAULT))) {
+                return "fault injection: check";
+            }
+            try {
+                // The commit step may not throw; the framework also refuses our own classes, so
+                // the encoding - and its check - happens here, where a failure still leaves us
+                // running.
+                param.setSavedInstanceState(HotReloadState.encode(
+                        build, proc, sHostLoader, Main.sAppCtx, saveFeatures(proc), sGen + 1));
+            } catch (Throwable t) {
+                return "could not save state: " + t;
+            }
+            return null;
+        }, teardown);
+        if (refusal != null) {
+            return refuse(refusal);
         }
+        sRetired = true;
         // The two ClassValue caches live on the host's Class objects and would keep this
         // generation (and its loader) reachable for as long as the process runs.
         Xp.dropClassValues();
@@ -198,20 +200,25 @@ public final class HotReload {
         return null;
     }
 
-    /** The feature that cannot be interrupted right now, or null. Filled in with the features. */
+    /**
+     * The feature that cannot be interrupted right now, or null. Runs on the main thread, in
+     * the same task as the teardown (Gen.retireOnMain), so what it saw is still true then.
+     */
     static String busy() {
         int io = Gen.ioInFlight();
         if (io > 0) return "a background request is still open (" + io + ")";
-        // Everything below is SystemUI's: the display and keyguard reads come from Main's
-        // cached sys reads, which only that process initialises (boot). In the lightweight
-        // processes they answer "off" and refused every update - measured 2026-10-25, all five
-        // supported processes failed with "the screen is off" after an install.
+        // Each process asks its own features. SystemUI's display and keyguard reads come from
+        // Main's cached sys reads, which only that process initialises (boot); in the
+        // lightweight processes they answer "off" and refused every update - measured
+        // 2026-10-25, all five supported processes failed with "the screen is off".
         //
         // Resolved the same way the retirement resolves it: sProcessName can be null when
         // ActivityThread would not answer at load time, and supportedProcess() is what let the
         // update through in the first place. Reading the raw field here skipped every check.
         String proc = supportedProcess();
         if ("com.miui.miwallpaper".equals(proc)) return WallpaperProbe.busyReason();
+        // A trip is not handed over: its cards end on timers this generation's sweep takes.
+        if ("com.autonavi.minimap".equals(proc)) return AmapTransitShare.busyReason();
         if (!"com.android.systemui".equals(proc)) return null;
         // The user never taps "update" while looking at the lock screen; anything on it is
         // someone using the phone, and every one of those transitions has a view mid-flight.
@@ -331,6 +338,12 @@ public final class HotReload {
             // the wallpaper to the texture - the cover gone for the rest of the track.
             if ("com.miui.miwallpaper".equals(proc)) {
                 WallpaperProbe.adoptState(feature(state, "wall"));
+            }
+            // The same for 小爱's ride: install registers the receiver, and a card arriving
+            // before the trip was back would start a new one at this station.
+            if ("com.miui.personalassistant".equals(proc)) {
+                final Object[] metro = feature(state, "metro");
+                if (metro != null) step("metro", () -> MetroCodeIsland.INSTANCE.adopt(metro));
             }
             install(proc, cl);
             if ("com.android.systemui".equals(proc)) {
@@ -469,10 +482,9 @@ public final class HotReload {
             return;
         }
         if ("com.miui.personalassistant".equals(proc)) {
-            // No main-thread step: the trip is plain data, and register() already ran inside
-            // install(). Only the entry timeout is re-armed, and it posts from here.
-            final Object[] metro = state == null ? null : feature(state, "metro");
-            if (metro != null) step("metro", () -> MetroCodeIsland.INSTANCE.adopt(metro));
+            // No main-thread step: the trip came back before install(), and register() ran
+            // inside it. What needs the context - the entry timeout, the island still up - now.
+            step("metro", MetroCodeIsland.INSTANCE::adopted);
             return;
         }
         if (!"com.android.systemui".equals(proc)) return;
@@ -553,7 +565,8 @@ public final class HotReload {
                         step("island", () -> MiniPlayerRuntime.adopt(
                                 fIsland[0] instanceof android.view.View
                                         ? (android.view.View) fIsland[0] : null,
-                                fIsland.length > 1 ? fIsland[1] : null));
+                                fIsland.length > 1 ? fIsland[1] : null,
+                                fIsland.length > 2 ? fIsland[2] : null));
                     }
                     if (fContainer != null) {
                         if (!step("container", () -> Main.onContainerAttached(fContainer))) {

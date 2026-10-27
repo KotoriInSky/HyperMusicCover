@@ -1328,6 +1328,10 @@ public final class LockLyrics {
             watchProximity(false);
             if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
         }
+        // With no page up the proximity listener is still Gen's, and the sweep takes it; its
+        // latch has to go with it.
+        sProximity = null;
+        sCovered = false;
         // The window last: it is a window of its own when the HDR switch is on, and it is not
         // reachable through the keyguard's tree.
         LyricWindow.remove();
@@ -2071,7 +2075,7 @@ public final class LockLyrics {
                 : Main.sAppCtx.getSystemService(android.hardware.SensorManager.class);
         if (sm == null) return;
         if (!on) {
-            sm.unregisterListener(sProximity);
+            Gen.unsensorListener(sm, sProximity);
             sProximity = null;
             sCovered = false;
             return;
@@ -2096,7 +2100,7 @@ public final class LockLyrics {
             public void onAccuracyChanged(android.hardware.Sensor s, int accuracy) {
             }
         };
-        sm.registerListener(sProximity, sensor,
+        Gen.sensorListener(sm, sProximity, sensor,
                 android.hardware.SensorManager.SENSOR_DELAY_NORMAL, Main.main());
     }
 

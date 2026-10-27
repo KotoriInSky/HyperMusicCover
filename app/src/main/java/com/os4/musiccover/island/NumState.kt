@@ -96,7 +96,7 @@ internal object NumState {
         trace("folding=$on")
         forceDefault(on)
         if (!on) {
-            main.removeCallbacks(foldCheck)
+            Gen.removeCallbacks(foldCheck)
             hideCount(false)
         }
     }

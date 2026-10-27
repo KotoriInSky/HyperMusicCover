@@ -95,11 +95,11 @@ internal object AmapTransitShare {
     // ------------------------------------------------------------------ what 高德 has sent
 
     /** Whether 高德's trip card channel is open: a navigation is under way. */
-    private var navigating = false
+    @Volatile private var navigating = false
     /** The last plans 高德 sent, newest first; the one that fits the trip's capsules is used. */
     private val plans = ArrayDeque<JSONObject>()
     /** The trip's legs, one capsule each (the latest card's `planData`). */
-    private var capsules: JSONArray? = null
+    @Volatile private var capsules: JSONArray? = null
     /** The latest card with words, and the latest one for each leg. */
     private var card: JSONObject? = null
     private val cardFor = HashMap<Int, JSONObject>()
@@ -275,6 +275,21 @@ internal object AmapTransitShare {
             }
             Xp.log(TAG + "walk to $name -> " + AmapFootNavi.start(cl, lat, lng, name))
         }
+    }
+
+    /**
+     * Why 高德's process may not be hot reloaded now, or null. A trip is not handed over: its
+     * state is this thread's, and the cards after a navigation is left - the end card, the last
+     * walk - go away on timers the retirement's sweep would take, leaving them up for good. So a
+     * trip, or anything SystemUI still shows of one, refuses; the next install after it lands.
+     */
+    @JvmStatic
+    fun busyReason(): String? = when {
+        simulating -> "a simulated trip is playing"
+        navigating -> "a transit navigation is under way"
+        capsules != null -> "a trip is still being followed"
+        lastSent != null -> "a trip card is still up"
+        else -> null
     }
 
     /** Runs [r] on the trip's own thread. */

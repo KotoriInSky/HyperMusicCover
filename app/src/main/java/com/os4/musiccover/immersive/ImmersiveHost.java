@@ -827,6 +827,9 @@ public final class ImmersiveHost {
         sMain.removeCallbacks(LIFT_RELEASE);
         // The display listener is Gen's and the sweep takes it; the latch must not stay on.
         sDisplayWatched = false;
+        // So is the proximity listener, and sProximity is its latch.
+        sProximity = null;
+        sCovered = false;
         sLiftView = null;
         sLiftUp = false;
         sLiftDrawnUp = false;
@@ -1075,7 +1078,7 @@ public final class ImmersiveHost {
                 : Main.sAppCtx.getSystemService(android.hardware.SensorManager.class);
         if (sm == null) return;
         if (!on) {
-            sm.unregisterListener(sProximity);
+            Gen.unsensorListener(sm, sProximity);
             sProximity = null;
             sCovered = false;
             return;
@@ -1096,7 +1099,8 @@ public final class ImmersiveHost {
             public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {
             }
         };
-        sm.registerListener(sProximity, s, android.hardware.SensorManager.SENSOR_DELAY_NORMAL, sMain);
+        Gen.sensorListener(sm, sProximity, s,
+                android.hardware.SensorManager.SENSOR_DELAY_NORMAL, sMain);
     }
 
     private static boolean litNow() {

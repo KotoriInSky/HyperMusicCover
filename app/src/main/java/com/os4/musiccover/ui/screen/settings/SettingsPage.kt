@@ -165,24 +165,22 @@ fun SettingsPageView(
                 Card(
                     modifier = Modifier.nextCard()
                 ) {
-                    Column {
-                        val levelNames = listOf(
-                            stringResource(R.string.log_level_normal),
-                            stringResource(R.string.log_level_verbose),
-                        )
-                        val levelValues = listOf(LogLevel.NORMAL, LogLevel.VERBOSE)
-                        var level by remember { mutableStateOf(LsposedService.logLevel(context)) }
-                        WindowDropdownPreference(
-                            title = stringResource(R.string.log_level),
-                            summary = stringResource(R.string.log_level_summary),
-                            items = levelNames,
-                            selectedIndex = levelValues.indexOf(level).coerceAtLeast(0),
-                            onSelectedIndexChange = {
-                                level = levelValues[it]
-                                LsposedService.setLogLevel(context, level)
-                            },
-                        )
-                    }
+                    val levelNames = listOf(
+                        stringResource(R.string.log_level_normal),
+                        stringResource(R.string.log_level_verbose),
+                    )
+                    val levelValues = listOf(LogLevel.NORMAL, LogLevel.VERBOSE)
+                    var level by remember { mutableStateOf(LsposedService.logLevel(context)) }
+                    WindowDropdownPreference(
+                        title = stringResource(R.string.log_level),
+                        summary = stringResource(R.string.log_level_summary),
+                        items = levelNames,
+                        selectedIndex = levelValues.indexOf(level).coerceAtLeast(0),
+                        onSelectedIndexChange = {
+                            level = levelValues[it]
+                            LsposedService.setLogLevel(context, level)
+                        },
+                    )
                 }
 
                 SmallTitle(text = stringResource(R.string.settings_data))

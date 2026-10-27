@@ -192,9 +192,9 @@ internal class MiniPlayerController(
             val c = controller ?: return@post
             if (destroyed) return@post
             val own = runCatching { MediaController(context, c.sessionToken) }.getOrNull() ?: return@post
-            runCatching { c.unregisterCallback(mediaListener) }
+            runCatching { Gen.unsessionCallback(c, mediaListener) }
             controller = own
-            runCatching { own.registerCallback(mediaListener, handler) }
+            runCatching { Gen.sessionCallback(own, mediaListener, handler) }
             // Not followLive: the gap a player between two tracks is given runs on (#26).
             liveFor = null
             liveState = own.playbackState
@@ -7235,7 +7235,7 @@ internal class MiniPlayerController(
         Gen.preDraw(host, preDraw)
         Gen.layoutChange(left, leftLayoutListener)
         Gen.layoutChange(right, rightLayoutListener)
-        runCatching { sessions?.addOnActiveSessionsChangedListener(sessionListener, null, handler) }
+        runCatching { sessions?.let { Gen.activeSessionsListener(it, sessionListener, handler) } }
         LockIslands.addListener(islandListener)
         // Posted: run here, it came before the properties declared below this block were
         // made, and failed on the first of them (focusLotties) every time SystemUI started.
@@ -7248,8 +7248,8 @@ internal class MiniPlayerController(
         runCatching { Gen.unpreDraw(host, preDraw) }
         runCatching { Gen.unlayoutChange(left, leftLayoutListener) }
         runCatching { Gen.unlayoutChange(right, rightLayoutListener) }
-        runCatching { sessions?.removeOnActiveSessionsChangedListener(sessionListener) }
-        runCatching { controller?.unregisterCallback(mediaListener) }
+        runCatching { sessions?.let { Gen.unactiveSessionsListener(it, sessionListener) } }
+        runCatching { controller?.let { Gen.unsessionCallback(it, mediaListener) } }
         followLive(null)
         morph?.cancel()
         if (piles.isNotEmpty() || pileMoving) finishPile(true)
@@ -7941,9 +7941,9 @@ internal class MiniPlayerController(
             if (chosen == null && previous != null && !isUsable(previous)) {
                 MiniPlayerRuntime.endSession(previous.sessionToken, "playback inactive")
             }
-            runCatching { previous?.unregisterCallback(mediaListener) }
+            runCatching { previous?.let { Gen.unsessionCallback(it, mediaListener) } }
             controller = chosen
-            runCatching { chosen?.registerCallback(mediaListener, handler) }
+            runCatching { chosen?.let { Gen.sessionCallback(it, mediaListener, handler) } }
             followLive(chosen)
             musicSince = System.currentTimeMillis()
             cachedCover = null

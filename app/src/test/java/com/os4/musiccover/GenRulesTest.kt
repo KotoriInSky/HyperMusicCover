@@ -31,6 +31,26 @@ class GenRulesTest {
         Regex("registerDisplayListener\\("),
         Regex("Executors\\."),
         Regex("Thread\\s*\\{"),
+        Regex("postFrameCallbackDelayed\\("),
+        // A media controller's callback, the active-session list, a sensor.
+        Regex("\\.registerCallback\\("),
+        Regex("addOnActiveSessionsChangedListener\\("),
+        Regex("\\.registerListener\\("),
+        // A main-looper Handler of a feature's own: its queue is ours, and only one Gen knows
+        // of (Gen.handler(), or one wrapped in Gen.watchHandler) is cleared at retirement.
+        Regex("Handler\\((android\\.os\\.)?Looper\\.getMainLooper\\(\\)\\)"),
+        // A post on a host view (Gen.postOn and its siblings). The receiver's type is not in the
+        // source, so this goes by name - views, roots, hosts, layers, parents and a bare `v` -
+        // and misses what is named otherwise; a Handler that happens to match says `// gen-ok`.
+        Regex("(\\b[A-Za-z_]*([Vv]iew|[Rr]oot|[Hh]ost|[Ll]ayer|[Pp]arent)[A-Za-z_0-9]*|\\bv)" +
+            "\\??\\.post(Delayed|OnAnimation(Delayed)?)?\\("),
+    )
+
+    /** A raw call that is fine where it is, said so on its own line. */
+    private val allowed = listOf(
+        Regex("// gen-ok\\b"),
+        // Registered, so the sweep clears its queue.
+        Regex("Gen\\.watchHandler\\("),
     )
 
     @Test
@@ -51,7 +71,9 @@ class GenRulesTest {
                     rel == "MainActivity.kt" || rel in baseline
                 ) return@forEach
                 file.readLines().forEachIndexed { index, line ->
-                    if (forbidden.any { it.containsMatchIn(line) }) {
+                    if (forbidden.any { it.containsMatchIn(line) } &&
+                        allowed.none { it.containsMatchIn(line) }
+                    ) {
                         bad += "$rel:${index + 1}: ${line.trim()}"
                     }
                 }

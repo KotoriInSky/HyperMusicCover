@@ -479,7 +479,7 @@ final class WallpaperVideo {
             sDecoded++;
             sFrameWaiting = true;
             WallpaperProbe.videoFrame();
-        }, new Handler(Looper.getMainLooper()));
+        }, Gen.handler());
         sPendingTexture = st;
         Gen.post(() -> attachPlayer(st));
 

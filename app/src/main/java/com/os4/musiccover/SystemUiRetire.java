@@ -97,8 +97,9 @@ final class SystemUiRetire {
 
     /**
      * The real retirement's main-thread step, called by {@link HotReload} through
-     * {@code Gen.retire(timeout, this)}. Unlike the dry run there is no put-it-back afterwards:
-     * the next generation rebuilds from the state file and the container the old one handed over.
+     * {@code Gen.retireOnMain}, in the same task as the busy check. Unlike the dry run there is
+     * no put-it-back afterwards: the next generation rebuilds from the state file and the
+     * container the old one handed over.
      */
     static void retireForReload() {
         List<String> warnings = new ArrayList<>();

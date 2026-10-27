@@ -2616,8 +2616,8 @@ public class WallpaperProbe {
     /**
      * The feature that cannot be interrupted right now, or null.
      *
-     * Every read here is a volatile field, on the binder thread the hot reload arrives on. The
-     * rule is SystemUI's, only wider: a wallpaper restart is a flash the user barely sees, so
+     * Asked on the main thread, in the same task as the teardown (Gen.retireOnMain); the
+     * composer's counters are atomics. The rule is SystemUI's, only wider: a wallpaper restart is a flash the user barely sees, so
      * anything mid-GL, mid-compose or mid-video is refused rather than handed over.
      */
     static String busyReason() {
@@ -2657,7 +2657,9 @@ public class WallpaperProbe {
             S_DESK_ON_LOCK = 32, S_SHADE = 33, S_SHADE_AT = 34, S_LOCK_VIDEO = 35,
             S_FRAME_REQ = 36, S_KEEP_DIM = 37, S_KEEP_FROM = 38, S_KEEP_TO = 39,
             S_KEEP_AT = 40, S_KEEP_MS = 41, S_GL_TID = 42, S_ASKS = 43, S_TOKEN = 44,
-            S_CTX = 45, S_LEN = 46;
+            S_CTX = 45, S_TEX_SIZES = 46;
+    /** What every build of this schema hands over; later fields are read only when present. */
+    private static final int S_LEN = 46;
 
     /**
      * The runtime state the next generation cannot look up again, and nothing else: settings
@@ -2676,8 +2678,25 @@ public class WallpaperProbe {
                 sDesktopRenderer, sOemDarken, sOemDarkenKnown, sHomeDarken, sHomeDarkenKnown,
                 sSharedLock, sDesktopKgShown, sDesktopOnLock, sShadeOn, sShadeAt, sLockIsVideo,
                 sFrameReq, sKeepDim, sKeepFrom, sKeepTo, sKeepAt, sKeepDurMs,
-                sKeyguardGlTid, sAsks, ProbeGuard.learnedToken(), sCtx,
+                sKeyguardGlTid, sAsks, ProbeGuard.learnedToken(), sCtx, texSizes(),
         };
+    }
+
+    /**
+     * Every keyguard texture's last upload size, as texture, Rect pairs. A foldable has one
+     * texture per screen, and the dimension hook answers each from this map; handing over only
+     * sKeyguardTexture's left the other screen's on the OEM's own size until its next upload.
+     */
+    private static Object[] texSizes() {
+        synchronized (sTexSizes) {
+            Object[] out = new Object[sTexSizes.size() * 2];
+            int i = 0;
+            for (java.util.Map.Entry<Object, android.graphics.Rect> e : sTexSizes.entrySet()) {
+                out[i++] = e.getKey();
+                out[i++] = new android.graphics.Rect(e.getValue());
+            }
+            return out;
+        }
     }
 
     /**
@@ -2737,6 +2756,15 @@ public class WallpaperProbe {
         sAsks = intAt(f, S_ASKS, sAsks);
         sTexShowsCover = sArt != null;
         if (f[S_CTX] instanceof Context) sCtx = (Context) f[S_CTX];
+        // Here rather than in adoptMain: the dimension hook is live as soon as install() runs.
+        if (f.length > S_TEX_SIZES && f[S_TEX_SIZES] instanceof Object[]) {
+            Object[] sizes = (Object[]) f[S_TEX_SIZES];
+            for (int i = 0; i + 1 < sizes.length; i += 2) {
+                if (sizes[i] != null && sizes[i + 1] instanceof android.graphics.Rect) {
+                    sTexSizes.put(sizes[i], (android.graphics.Rect) sizes[i + 1]);
+                }
+            }
+        }
         ProbeGuard.adoptLearnedToken(f[S_TOKEN] instanceof String ? (String) f[S_TOKEN] : null);
     }
 
@@ -2772,7 +2800,9 @@ public class WallpaperProbe {
                 Xp.w(TAG + "engine names not resolved after the reload: " + t);
             }
         }
-        if (sKeyguardTexture != null && sReportedW > 0 && sReportedH > 0) {
+        // A build that handed over no size map: the one texture it knew of, at the last size.
+        if (sKeyguardTexture != null && sReportedW > 0 && sReportedH > 0
+                && !sTexSizes.containsKey(sKeyguardTexture)) {
             sTexSizes.put(sKeyguardTexture,
                     new android.graphics.Rect(0, 0, sReportedW, sReportedH));
         }
@@ -3207,7 +3237,7 @@ public class WallpaperProbe {
                 }
                 // Still counted until the picture is up: the check section must not let the
                 // process retire between the composition and the thread that applies it.
-                Gen.post(new Runnable() {
+                Runnable apply = new Runnable() {
                     @Override
                     public void run() {
                         try {
@@ -3226,7 +3256,10 @@ public class WallpaperProbe {
                             sComposing.decrementAndGet();
                         }
                     }
-                });
+                };
+                // Refused while a dry run has the gate closed: nothing will apply it, and a
+                // count left up here would refuse every hot reload after it.
+                if (!Gen.post(apply)) sComposing.decrementAndGet();
             }
         });
     }
@@ -4126,7 +4159,7 @@ public class WallpaperProbe {
     private static final String COVER_VIDEO_BLUR_FILE = "mc_cover_blur.mp4";
     private static java.util.concurrent.ExecutorService sVideoWorker;
 
-    /** The cover video's encoder, built on first use so retirement owns it (Gen.retire). */
+    /** The cover video's encoder, built on first use so retirement owns it (Gen.retireOnMain). */
     private static synchronized java.util.concurrent.ExecutorService videoWorker() {
         if (sVideoWorker == null) sVideoWorker = Gen.executor("mc-wall-video");
         return sVideoWorker;
