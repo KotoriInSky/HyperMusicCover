@@ -708,6 +708,9 @@ object ModuleBridge {
     data class Preview(
         /** False when nothing answered - the module is gone, not merely without a picture. */
         val alive: Boolean = true,
+        /** False when no fields came back (a timeout, or the preview failing on the module's
+         *  side): everything below is a default, not the module's answer. */
+        val answered: Boolean = true,
         val track: String = "",
         val art: Bitmap? = null,
         val artUnchanged: Boolean = false,
@@ -755,8 +758,12 @@ object ModuleBridge {
             putExtra("shots", shots)
         })
         // Back without extras is nobody there; not back at all is a SystemUI too busy to answer
-        // within the timeout, which is not a reason to grey the page out.
-        val b = reply?.extras ?: return Preview(alive = reply == null)
+        // within the timeout, which is not a reason to grey the page out. Back with the receipt
+        // but no extras is the module there and the preview failing on its side: called gone,
+        // the page asked again, the query answered, and the poll sent the failing preview
+        // straight back - a loop with no delay on SystemUI's main thread.
+        val b = reply?.extras
+            ?: return Preview(alive = reply == null || reply.code == OP_ACK, answered = false)
         val same = b.getBoolean("same", false)
         return Preview(
             track = if (same) have else (b.getString("track") ?: ""),
