@@ -210,6 +210,13 @@ class PickupParseTest {
     }
 
     @Test
+    fun aPricesLabelIsNotTheItem() {
+        // 瑞幸's 「券后价」 before the figure was taken for the drink (#115).
+        assertEquals("生椰拿铁", PickupParse.product(listOf("生椰拿铁", "大杯/冰/标准甜", "券后价", "¥", "9.9", "x1")))
+        assertNull(PickupParse.product(listOf("券后价", "¥", "9.9", "x1")))
+    }
+
+    @Test
     fun theItemBeatsTheRecognizersList() {
         val r = PickupParse.choose(n("订单信息", "A307", "制作中", "芋泥啵啵奶绿", "默认糖", "x1"),
             PickupParse.Oem("A307", true, "uncompleted", "芋泥啵啵牛奶", ""))!!

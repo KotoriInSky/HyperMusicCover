@@ -315,13 +315,20 @@ internal object PickupIsland {
         val now = SystemClock.elapsedRealtime()
         if ((muted["$brand|${r.code}"] ?: 0L) > now) return
         val ctx = Main.appContext() ?: return
+        // The same order read in another task: the card up for it moves over rather than a second
+        // one going up. 微信 makes a new task for the same page whenever the old one could not be
+        // brought back - a parked task that would not move back to the phone's display, a mini
+        // program closed and opened again - and with one card per task the same code stood on the
+        // lock screen twice (#115, 肯德基's A0038).
+        val moved = if (cards[page.task]?.key == null) adopt(brand, r.code, page.task) else null
         val card = cards.getOrPut(page.task) { Card(page) }
         card.page = page
         // The notification goes by itself once its timeout is up, and the island with it; nothing on
         // that path tells us (a timeout is not a dismissal, so no delete intent). So ask the system:
         // with the card gone, its key is not evidence of anything, and what comes next is fresh.
         if (card.key != null && up(ctx, card) == false) clear(card)
-        if (key == card.key) return
+        // Moved, it is posted again all the same: its taps still carry the old task.
+        if (key == card.key && moved == null) return
         // A new code floats the island open; so does the order turning ready to collect. A state
         // changing again while it is already ready only updates, and so does the shop.
         val sameCode = card.key?.startsWith("$brand|${r.code}|") == true
@@ -335,6 +342,22 @@ internal object PickupIsland {
     }
 
     private fun ready(status: String?): Boolean = PickupParse.isReady(status)
+
+    /**
+     * Another task's card for [brand]'s [code], moved to [task]; the task it moves from, or null
+     * when there is none. That task's wait ends - the order is read from the new one now, and the
+     * old one, if it is still about, would only put the card back where it was on its next round.
+     */
+    private fun adopt(brand: String, code: String, task: Int): Int? {
+        val from = cards.entries.firstOrNull { (t, c) ->
+            t != task && c.key?.startsWith("$brand|$code|") == true
+        }?.key ?: return null
+        val card = cards.remove(from) ?: return null
+        cards[task] = card
+        Xp.log(TAG + "$brand $code: card moved from task $from to $task")
+        PickupObserver.end(from, "the order is read in task $task")
+        return from
+    }
 
     /** A colour out of the rules XML as `#RRGGBB`, or the fallback when it cannot be read. */
     private fun colour(value: String?, fallback: String): String = runCatching {
