@@ -37,6 +37,8 @@ internal class AmapTransitMilestones {
     val seen = ArrayList<String>()
 
     private var lastRemain = -1
+    /** Whether the ride under way has been given a count yet. */
+    val counted get() = lastRemain >= 0
     private var departed = false
     private var stopAt = 0L
 
@@ -102,6 +104,11 @@ internal class AmapTransitMilestones {
         } else if (remain < lastRemain) {
             departed = true
             stopAt = now
+        } else if (remain > lastRemain) {
+            // More left than before: the count before was wrong, not the train going back. Read
+            // again as at first sight - all of the ride ahead is still 候车.
+            if (total > 0) departed = remain < total
+            if (remain > boardRemain) boardRemain = remain
         }
         lastRemain = remain
         if (stop.isNotEmpty() && seen.lastOrNull() != stop) seen.add(stop)

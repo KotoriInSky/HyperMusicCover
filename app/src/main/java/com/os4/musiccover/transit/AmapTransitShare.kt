@@ -124,6 +124,15 @@ internal object AmapTransitShare {
     private var nearLeg = -1
     /** What the ride last said of its stops left, so each change is logged once. */
     private var lastHeard = ""
+    /**
+     * The ride whose card's count of stops left is believed, and the count its first card came
+     * with. A ride's card can come up still holding the leg before's count - a walk's card carries
+     * a `remainStations` too, 1 on 10-05 - and the last ride's next stop was its end until 高德 said
+     * it again (user, 10-27). Believed once 高德's live data is on the ride or the card's count moves.
+     */
+    private var countLeg = -1
+    private var firstCountLeg = -1
+    private var firstCount = -1
 
     /** A trip being played from its own plan (`transit sim`): 高德's own payloads wait meanwhile. */
     @Volatile private var simulating = false
@@ -355,6 +364,9 @@ internal object AmapTransitShare {
         walkMsg = null
         nearLeg = -1
         lastHeard = ""
+        countLeg = -1
+        firstCountLeg = -1
+        firstCount = -1
     }
 
     // ------------------------------------------------------------------ the trip
@@ -415,6 +427,15 @@ internal object AmapTransitShare {
             val step = milestones.rideStatus(info.remain, at == n - 1, tip == 48, plan != null, now)
             status = step.status
             wake = step.wakeAt
+            // The last ride's end card was set going, and the ride is plainly still under way: two
+            // stops and more left. A wrong count had it read as over, so the end card is let go.
+            if (finalPending() && at == n - 1 && info.remain >= 2 &&
+                status != AmapTransitCard.ARRIVE_LINE_DESTINATION) {
+                worker.removeCallbacks(finalCard)
+                finalAt = 0L
+                finalOnExit = false
+                Xp.log(TAG + "end card let go: ride $at has ${info.remain} stops left")
+            }
         }
         if (wake > now) worker.postDelayed(tick, wake - now)
         // Near the station the card is still the walk's: its 「(E口)」 is the way in, not the ride's exit.
@@ -475,15 +496,27 @@ internal object AmapTransitShare {
         val cardCount = loc?.optInt("remainStations", -1) ?: -1
         val liveCount = where?.optInt("remainStopNum", -1) ?: -1
         val said = Regex("(\\d+)\\s*站").find(AmapTransitEntity.sentence(c))?.groupValues?.get(1)?.toIntOrNull() ?: -1
-        // A bus counts its own stops more finely than the card; a subway's card is its own count.
-        val remain = listOf(if (bus) liveCount else cardCount, cardCount, liveCount, said)
-            .firstOrNull { it >= 0 } ?: 0
         val cur = where?.optString("curStopName").orEmpty().replace(" ", "").trim()
         val seg = plan?.optJSONArray("segmentlist")?.optJSONObject(rideNumber(caps, at))
         val total = (seg?.optJSONArray("via_st_list")?.length() ?: -1) + 1
+        // The card's count believed only once 高德 has shown it is about this ride ([countLeg]).
+        if (firstCountLeg != at) {
+            firstCountLeg = at
+            firstCount = cardCount
+        } else if (cardCount != firstCount) countLeg = at
+        if (where != null) countLeg = at
+        val believed = countLeg == at || total <= 0
+        // A bus counts its own stops more finely than the card; a subway's card is its own count.
+        // Not yet believed, the ride is all ahead of it, as the plan has it.
+        val counted = if (believed) listOf(if (bus) liveCount else cardCount, cardCount, liveCount, said)
+            .firstOrNull { it >= 0 } else total
+        // No count at all: 0 only once the ride has been counted - seen first with none, it is the
+        // plan's whole ride rather than its end.
+        val remain = counted ?: if (milestones.counted || total <= 0) 0 else total
         // Every count 高德 gives, and the one its stop name implies (named), once per change: the
         // island ran a stop ahead early in a subway ride (user, 10-13) - which count moved first.
-        val heard = "card=$cardCount live=$liveCount said=$said cur=$cur named=${byName(seg, cur)}"
+        val heard = "card=$cardCount live=$liveCount said=$said cur=$cur named=${byName(seg, cur)}" +
+            if (believed) "" else " (card not yet believed)"
         if (heard != lastHeard) {
             lastHeard = heard
             Xp.log(TAG + "ride $at/$total: $heard -> $remain")
