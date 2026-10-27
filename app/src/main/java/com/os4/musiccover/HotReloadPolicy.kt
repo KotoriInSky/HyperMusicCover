@@ -30,9 +30,13 @@ object HotReloadPolicy {
     /**
      * Processes (not packages) whose retirement and adoption are implemented and have passed
      * the on-device matrix: Apple Music, 背屏, 高德, AOD, 小爱, SystemUI and the wallpaper
-     * process. The module matches the exact process name - 高德's :locationservice and
-     * :widgetProvider report the same package and carry their own copies of the hooks, but have
-     * no installer of their own.
+     * process. The module matches the exact process name.
+     *
+     * 高德's :locationservice and :widgetProvider report the same package and get the same hooks
+     * from the same installer (AmapImmerse.handle), so they reload the way its main process does.
+     * Refused, they failed every update and sat on the old build until something killed them -
+     * frozen in the background, for as long as forty minutes. A sub-process 高德 adds later is
+     * refused until it is named here, and the home page counts it meanwhile.
      *
      * SystemUI is the one with views to put back: its retirement runs SystemUiRetire's groups
      * on the main thread, and its adoption boots and re-attaches the keyguard container the old
@@ -46,6 +50,8 @@ object HotReloadPolicy {
         "com.apple.android.music",
         "com.xiaomi.subscreencenter",
         "com.autonavi.minimap",
+        "com.autonavi.minimap:locationservice",
+        "com.autonavi.minimap:widgetProvider",
         "com.miui.aod",
         "com.miui.personalassistant",
         "com.android.systemui",

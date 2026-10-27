@@ -16,7 +16,8 @@ import org.junit.Test
 class HotReloadProcessTest {
 
     private val literal = Regex("\"([^\"]*)\"")
-    private val idShape = Regex("^[a-z][a-z0-9_]*\\.[a-z0-9_.]+$")
+    // A package, or a package's process (高德's com.autonavi.minimap:locationservice).
+    private val idShape = Regex("^[a-z][a-z0-9_]*\\.[a-z0-9_.]+(:[A-Za-z][A-Za-z0-9_]*)?$")
 
     private fun read(path: String) = File("src/main/java/com/os4/musiccover/$path").readText()
 

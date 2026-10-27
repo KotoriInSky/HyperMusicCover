@@ -102,9 +102,8 @@ public final class HotReload {
 
     /**
      * The process name, not the package: 高德's :locationservice and :widgetProvider report the
-     * same package in onPackageLoaded and own their own copies of the hooks, but neither has an
-     * installer. Matching them would retire them and then fail to adopt, leaving inert
-     * processes - a restart fixes them, but refusing up front is better.
+     * same package in onPackageLoaded and own their own copies of the hooks; whether a process
+     * reloads is decided by its own name (HotReloadPolicy.SUPPORTED).
      */
     private static String processName() {
         try {
@@ -199,6 +198,14 @@ public final class HotReload {
         return false;
     }
 
+    /**
+     * 高德's main process or one of its supported sub-processes: each gets the same installer,
+     * and only the main process ever has a trip on it - the others answer not busy.
+     */
+    private static boolean isAmap(String proc) {
+        return proc != null && (proc.equals(AmapImmerse.PKG) || proc.startsWith(AmapImmerse.PKG + ":"));
+    }
+
     /** The process this module is supported under, or null. See HotReloadPolicy.SUPPORTED. */
     private static String supportedProcess() {
         String name = sProcessName;
@@ -229,7 +236,7 @@ public final class HotReload {
         String proc = supportedProcess();
         if ("com.miui.miwallpaper".equals(proc)) return WallpaperProbe.busyReason();
         // A trip is not handed over: its cards end on timers this generation's sweep takes.
-        if ("com.autonavi.minimap".equals(proc)) return AmapTransitShare.busyReason();
+        if (isAmap(proc)) return AmapTransitShare.busyReason();
         if (!"com.android.systemui".equals(proc)) return null;
         // The user never taps "update" while looking at the lock screen; anything on it is
         // someone using the phone, and every one of those transitions has a view mid-flight.
@@ -290,7 +297,7 @@ public final class HotReload {
             // The fingerprint icon whose pointer listener was hooked on a long press.
             out.add(new Object[]{"fpq", new Object[]{FingerprintQuick.pointerIcon()}});
         }
-        if ("com.autonavi.minimap".equals(proc)) {
+        if (isAmap(proc)) {
             // The stand-in clients 高德 was handed: it may hold one across rides, and a call on
             // it that the new generation does not know as ours would go to the real stand-in.
             out.add(new Object[]{"amapclients", AmapOppoBridge.INSTANCE.save()});
@@ -389,7 +396,7 @@ public final class HotReload {
             }
             adoptAppleState(state);
             // Before the provider_call hook goes in, so no call falls between the two.
-            if ("com.autonavi.minimap".equals(proc)) {
+            if (isAmap(proc)) {
                 AmapOppoBridge.INSTANCE.adopt(feature(state, "amapclients"));
             }
             // Before the hooks go in: the wallpaper's upload path is live as soon as it is
@@ -544,7 +551,10 @@ public final class HotReload {
             AppleLyrics.handle(cl);
         } else if ("com.xiaomi.subscreencenter".equals(proc)) {
             RearScreen.handle(cl);
-        } else if ("com.autonavi.minimap".equals(proc)) {
+        } else if ("com.autonavi.minimap".equals(proc)
+                || "com.autonavi.minimap:locationservice".equals(proc)
+                || "com.autonavi.minimap:widgetProvider".equals(proc)) {
+            // Named one by one, like SUPPORTED: HotReloadProcessTest holds the two lists equal.
             AmapImmerse.handle(cl);
         } else if ("com.miui.aod".equals(proc)) {
             HyperTweaks.aod(cl);
