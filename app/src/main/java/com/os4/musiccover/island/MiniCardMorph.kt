@@ -1,6 +1,7 @@
 package com.os4.musiccover.island
 import com.os4.musiccover.CoverMorphMotion
 import com.os4.musiccover.Main
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.graphics.Matrix
 import android.graphics.Outline
@@ -150,10 +151,10 @@ internal class MiniCardMorph(
     } finally { android.os.Trace.endSection() } }
 
     private fun observe(on: Boolean) {
-        observed?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnPreDrawListener(preDraw)
+        observed?.let { Gen.unpreDraw(it, preDraw) }
         observed = null
         if (!on) return
-        header.viewTreeObserver.addOnPreDrawListener(preDraw)
+        Gen.preDraw(header, preDraw)
         observed = header
     }
 
@@ -205,7 +206,7 @@ internal class MiniCardMorph(
             return false
         }
         observe(true)
-        Choreographer.getInstance().postFrameCallback(this)
+        Gen.frame(this)
         Xp.log("MCMini: container morph to=${if (toNative) "native" else "mini"} " +
             "paired=${pieces.count { it.paired }}")
         return true
@@ -374,12 +375,12 @@ internal class MiniCardMorph(
         if (dragging) {
             // The finger writes the progress; this only keeps the far end live under it. A
             // leader posing it this frame has done that already.
-            if (SystemClock.uptimeMillis() - ledAt < LED_FRESH_MS) Choreographer.getInstance().postFrameCallback(this)
+            if (SystemClock.uptimeMillis() - ledAt < LED_FRESH_MS) Gen.frame(this)
             else if (!apply()) {
                 lastCancel = geometryWhy()
                 finish(false)
             }
-            else Choreographer.getInstance().postFrameCallback(this)
+            else Gen.frame(this)
             return
         }
         // Stepped by the real gap, as CoverMorphLayer does: holding a slow frame read worse.
@@ -397,7 +398,7 @@ internal class MiniCardMorph(
         val late = SystemClock.uptimeMillis() - startedAt > SETTLE_LIMIT_MS
         if (motion.atRest() && nudge.atRest() && nudgeX.atRest()
             && (late || listener.canSettle(this, toNative))) finish(true)
-        else Choreographer.getInstance().postFrameCallback(this)
+        else Gen.frame(this)
     } finally { android.os.Trace.endSection() } }
 
     /**
@@ -568,7 +569,7 @@ internal class MiniCardMorph(
     private fun finish(completed: Boolean) {
         if (!running) return
         running = false
-        Choreographer.getInstance().removeFrameCallback(this)
+        Gen.unframe(this)
         observe(false)
         placedBox = null
         restore()

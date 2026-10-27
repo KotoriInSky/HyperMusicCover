@@ -1,5 +1,6 @@
 package com.os4.musiccover.transit
 import com.os4.musiccover.ProbeGuard
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.content.Intent
 import android.os.Handler
@@ -86,7 +87,7 @@ internal object AmapTransitShare {
     /** 高德's own walking island, posted every second while its walking navigation runs. */
     private const val WALK_ISLAND_STALE_MS = 5_000L
 
-    private val worker: Handler = Handler(HandlerThread("mc-transit").apply { start() }.looper)
+    private val worker: Handler = Handler(Gen.handlerThread("mc-transit").looper)
 
     /** What a line on rails has in its name, where its type does not say so (AmapTransitScene). */
     private val RAIL = arrayOf("号线", "地铁", "城际", "轨道", "铁路", "有轨", "APM", "轻轨", "磁浮", "云巴")
@@ -94,11 +95,11 @@ internal object AmapTransitShare {
     // ------------------------------------------------------------------ what 高德 has sent
 
     /** Whether 高德's trip card channel is open: a navigation is under way. */
-    private var navigating = false
+    @Volatile private var navigating = false
     /** The last plans 高德 sent, newest first; the one that fits the trip's capsules is used. */
     private val plans = ArrayDeque<JSONObject>()
     /** The trip's legs, one capsule each (the latest card's `planData`). */
-    private var capsules: JSONArray? = null
+    @Volatile private var capsules: JSONArray? = null
     /** The latest card with words, and the latest one for each leg. */
     private var card: JSONObject? = null
     private val cardFor = HashMap<Int, JSONObject>()
@@ -167,7 +168,7 @@ internal object AmapTransitShare {
             val module = Xp.findClass(WEARABLE, cl)
             for (name in arrayOf("bizBegin", "bizBeginWithData", "bizEnd", "sendMessage")) {
                 try {
-                    Xp.hookAll(module, name) { chain ->
+                    Xp.hookAll("amap.share." + Xp.slug(name), module, name) { chain ->
                         val a = chain.args
                         val biz = a.firstOrNull { it is Int } as Int?
                         val text = a.firstOrNull { it is String } as String?
@@ -274,6 +275,21 @@ internal object AmapTransitShare {
             }
             Xp.log(TAG + "walk to $name -> " + AmapFootNavi.start(cl, lat, lng, name))
         }
+    }
+
+    /**
+     * Why 高德's process may not be hot reloaded now, or null. A trip is not handed over: its
+     * state is this thread's, and the cards after a navigation is left - the end card, the last
+     * walk - go away on timers the retirement's sweep would take, leaving them up for good. So a
+     * trip, or anything SystemUI still shows of one, refuses; the next install after it lands.
+     */
+    @JvmStatic
+    fun busyReason(): String? = when {
+        simulating -> "a simulated trip is playing"
+        navigating -> "a transit navigation is under way"
+        capsules != null -> "a trip is still being followed"
+        lastSent != null -> "a trip card is still up"
+        else -> null
     }
 
     /** Runs [r] on the trip's own thread. */

@@ -178,6 +178,8 @@ final class FingerprintQuick {
     private static Class<?> sUtils;
     private static Class<?> sUtil;
     private static boolean sPointerHooked;
+    /** The icon view whose listener is hooked: handed to the next generation (adoptPointer). */
+    private static Object sPointerIcon;
 
     /** Custom item -> what it shows and does. Identity keys: the OEM items do not override equals. */
     private static final Map<Object, Resolved> sCustom =
@@ -424,7 +426,7 @@ final class FingerprintQuick {
     private static void hookTiming(ClassLoader cl) {
         try {
             Class<?> manager = Xp.findClass(PKG + "MiuiGxzwManager", cl);
-            Xp.hookAll(manager, "dismissGxzwView", chain -> {
+            Xp.hookAll("sysui.fpq.dismiss_view", manager, "dismissGxzwView", chain -> {
                 Object icon = null;
                 Object qv = null;
                 boolean before = false;
@@ -468,7 +470,7 @@ final class FingerprintQuick {
             });
             // The menu's own check, answered yes once while dismissGxzwView runs for a finger
             // held on the sensor through a face unlock; see sForceGxzwOnce.
-            Xp.hookAll(manager, "isUnlockByGxzw", chain -> {
+            Xp.hookAll("sysui.fpq.unlock_by_gxzw", manager, "isUnlockByGxzw", chain -> {
                 if (sForceGxzwOnce) {
                     sForceGxzwOnce = false;
                     return true;
@@ -535,9 +537,10 @@ final class FingerprintQuick {
     private static synchronized void hookPointer(Object icon) {
         if (sPointerHooked) return;
         sPointerHooked = true;
+        sPointerIcon = icon;
         try {
             Object listener = Xp.getObjectField(icon, "listener");
-            Xp.hookAll(listener.getClass(), "onPointerEvent", chain -> {
+            Xp.hookAll("sysui.fpq.pointer", listener.getClass(), "onPointerEvent", chain -> {
                 try {
                     Object a0 = chain.getArgs().get(0);
                     int action = a0 instanceof MotionEvent ? ((MotionEvent) a0).getActionMasked() : -1;
@@ -588,7 +591,7 @@ final class FingerprintQuick {
 
     private static void hookItems(Class<?> view) {
         try {
-            Xp.hookAll(view, "startShowQuickOpenItemAnimation", chain -> {
+            Xp.hookAll("sysui.fpq.show_anim", view, "startShowQuickOpenItemAnimation", chain -> {
                 Object r = chain.proceed();
                 try {
                     replaceItems(chain.getThisObject());
@@ -599,7 +602,7 @@ final class FingerprintQuick {
             });
             // Into the OEM's dismiss, its 150ms flight back to the sensor, from where the
             // fisheye left each icon: the icons stop ignoring it from here.
-            Xp.hookAll(view, "dismiss", chain -> {
+            Xp.hookAll("sysui.fpq.dismiss", view, "dismiss", chain -> {
                 for (Bubble b : sBubbles) b.release();
                 sBubbles.clear();
                 if (sDisc != null && sDisc.getParent() instanceof ViewGroup) {
@@ -618,19 +621,19 @@ final class FingerprintQuick {
     private static void hookShell(ClassLoader cl) {
         try {
             Class<?> shell = Xp.findClass(PKG + "item.WechatScanItem", cl);
-            Xp.hookAll(shell, "getTitle", chain -> {
+            Xp.hookAll("sysui.fpq.title", shell, "getTitle", chain -> {
                 Resolved r = sCustom.get(chain.getThisObject());
                 return r != null ? r.title : chain.proceed();
             });
-            Xp.hookAll(shell, "getSubTitle", chain -> {
+            Xp.hookAll("sysui.fpq.subtitle", shell, "getSubTitle", chain -> {
                 Resolved r = sCustom.get(chain.getThisObject());
                 return r != null ? r.subtitle : chain.proceed();
             });
-            Xp.hookAll(shell, "getTag", chain -> {
+            Xp.hookAll("sysui.fpq.tag", shell, "getTag", chain -> {
                 Resolved r = sCustom.get(chain.getThisObject());
                 return r != null ? "HMC/" + r.entry.optString("t") : chain.proceed();
             });
-            Xp.hookAll(shell, "getIntent", chain -> {
+            Xp.hookAll("sysui.fpq.intent", shell, "getIntent", chain -> {
                 Resolved r = sCustom.get(chain.getThisObject());
                 if (r == null) return chain.proceed();
                 return r.intent != null ? r.intent : new Intent();
@@ -643,7 +646,7 @@ final class FingerprintQuick {
 
     private static void hookLaunch(Class<?> view) {
         try {
-            Xp.hookAll(view, "handleQucikOpenItemTouchUp", chain -> {
+            Xp.hookAll("sysui.fpq.item_touch_up", view, "handleQucikOpenItemTouchUp", chain -> {
                 Object item = chain.getArgs().get(0);
                 Resolved r = sCustom.get(item);
                 Object qv = chain.getThisObject();
@@ -716,6 +719,38 @@ final class FingerprintQuick {
         }
     }
 
+    /**
+     * Retirement: the honeycomb's views and the selection disc out of the OEM's group. The quick
+     * menu is rebuilt on every open, so nothing else of it has to be put back; the OEM's own
+     * item list was emptied for the honeycomb and is rebuilt there too.
+     */
+    /** For the hot-reload handover: null until the first long press hooked the listener. */
+    static Object pointerIcon() {
+        return sPointerIcon;
+    }
+
+    /**
+     * The new generation's half: the old one had the pointer listener hooked, and the press
+     * that would hook it again is the one whose first moves it exists for. So it goes back on
+     * now, inside the adoption, where it replaces the old handle rather than reporting it missing.
+     */
+    static void adoptPointer(Object icon) {
+        if (icon != null) hookPointer(icon);
+    }
+
+    static void retire() {
+        if (sDisc != null && sDisc.getParent() instanceof ViewGroup) {
+            ((ViewGroup) sDisc.getParent()).removeView(sDisc);
+        }
+        sDisc = null;
+        for (Bubble b : sBubbles) {
+            if (b.getParent() instanceof ViewGroup) ((ViewGroup) b.getParent()).removeView(b);
+        }
+        sBubbles.clear();
+        sChosen = null;
+        sCustom.clear();
+    }
+
     private static void replaceItems(Object qv) throws Exception {
         if (sGenerate == null || !sOn) return;
         List<JSONObject> items = sItems;
@@ -749,6 +784,7 @@ final class FingerprintQuick {
         FrameLayout.LayoutParams discLp = new FrameLayout.LayoutParams(discPx, discPx);
         discLp.gravity = 51;
         g.addView(sDisc, 0, discLp);
+        Gen.ownView(g, sDisc);
 
         // One entry per cell, in CELLS order: {"t":"empty"} keeps a place open, and an item
         // this phone cannot show (an app since uninstalled) leaves its place open too, so
@@ -793,6 +829,7 @@ final class FingerprintQuick {
             lp.leftMargin = (int) rect.left;
             lp.topMargin = (int) rect.top;
             g.addView(v, lp);
+            Gen.ownView(g, v);
             v.setVisibility(View.VISIBLE);
             if (v instanceof Bubble) {
                 ((Bubble) v).place(x, y, cx - x, cy - y, (int) CELLS[i][2]);

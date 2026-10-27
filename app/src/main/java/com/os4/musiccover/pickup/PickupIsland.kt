@@ -1,6 +1,7 @@
 package com.os4.musiccover.pickup
 import com.os4.musiccover.Main
 import com.os4.musiccover.R
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.app.ActivityManager
 import android.app.Notification
@@ -165,7 +166,7 @@ internal object PickupIsland {
         // (Switching the card to `setImageViewResource` or `setImageViewBitmap` would move this to
         // `setImageDrawable`, and a bitmap carries the one frame whatever is done to it.)
         runCatching {
-            Xp.hookAll(android.widget.ImageView::class.java, "setImageIcon") { chain ->
+            Xp.hookAll("sysui.pickup.icon", android.widget.ImageView::class.java, "setImageIcon") { chain ->
                 val out = chain.proceed()
                 val v = chain.thisObject
                 // Guarded: this runs inside the host's own `setImageIcon`, and an exception here
@@ -180,7 +181,7 @@ internal object PickupIsland {
             // The other half of RemoteViews: an asynchronous apply loads the icon off the main
             // thread through `setImageIconAsync` and hands back a Runnable that only *sets* the
             // drawable later (`setImageDrawable`), so the hook above never sees that card.
-            Xp.hookAll(android.widget.ImageView::class.java, "setImageIconAsync") { chain ->
+            Xp.hookAll("sysui.pickup.icon_async", android.widget.ImageView::class.java, "setImageIconAsync") { chain ->
                 val out = chain.proceed()
                 val v = chain.thisObject
                 if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon && out is Runnable) {
@@ -200,7 +201,7 @@ internal object PickupIsland {
             // it to show and hide its drawable; it is not called per frame). The picture is set
             // again from its icon rather than `start()`ed: a finished one-shot does not rewind, a
             // freshly loaded one plays from the empty cup.
-            Xp.hookAll(android.widget.ImageView::class.java, "onVisibilityAggregated") { chain ->
+            Xp.hookAll("sysui.pickup.icon_visibility", android.widget.ImageView::class.java, "onVisibilityAggregated") { chain ->
                 val out = chain.proceed()
                 val v = chain.thisObject
                 if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon
@@ -463,6 +464,18 @@ internal object PickupIsland {
         receivers(ctx)
     }
 
+    /**
+     * Retirement: the guard that keeps wake() from registering twice is the only thing that
+     * would keep the next generation from registering at all - the receiver itself is in Gen's
+     * ledger and the sweep takes it. The cards stay posted: they are the user's order.
+     */
+    @JvmStatic
+    fun retire() {
+        receivers = false
+        PickupObserver.retire()
+        PickupPark.retire()
+    }
+
     private fun receivers(ctx: Context) {
         if (receivers) return
         receivers = true
@@ -477,7 +490,7 @@ internal object PickupIsland {
                 }
             }
         }
-        ctx.registerReceiver(r, IntentFilter().apply {
+        Gen.receiver(ctx, r, IntentFilter().apply {
             addAction(ACTION_OPEN)
             addAction(ACTION_GONE)
             addAction(ACTION_PICKED)

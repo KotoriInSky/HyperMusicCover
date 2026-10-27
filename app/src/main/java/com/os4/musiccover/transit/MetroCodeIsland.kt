@@ -1,6 +1,7 @@
 package com.os4.musiccover.transit
 import com.os4.musiccover.BuildConfig
 import com.os4.musiccover.ProbeGuard
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.app.Application
 import android.app.Notification
@@ -20,8 +21,6 @@ import android.graphics.RectF
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
@@ -130,6 +129,8 @@ internal object MetroCodeIsland {
 
     /** LegacyFluidExitPolicy SINGLE_STATION_TIMEOUT: a first station's card, with no second one. */
     private const val ENTRY_MS = 5 * 60_000L
+    /** Separates a station from its lines in the handover; see [save]. */
+    private const val SEP = "\u0000"
     /**
      * TripManager's monitor ends a trip with no station for 5 min; a wait on the platform runs
      * past that off-peak, and the next station would then start a trip of its own and get a card.
@@ -160,6 +161,11 @@ internal object MetroCodeIsland {
 
     @Volatile private var ctx: Context? = null
     @Volatile private var shown: Station? = null
+    /**
+     * The previous generation's island is still up: [shown] is ours and cannot be handed over
+     * (Station is our class), so this is what lets [cancel] take that one down.
+     */
+    @Volatile private var inherited = false
     @Volatile private var lastKey: String? = null
     @Volatile private var updates = 0
     @Volatile private var lastSeen = "none"
@@ -174,8 +180,8 @@ internal object MetroCodeIsland {
         val stations = ArrayList<String>()
         /** The lines each station's card named, for where the trip changed ([MetroCommute.changes]). */
         val lines = HashMap<String, Set<String>>()
-        /** Wall clock at the first station: the commute's half hour. */
-        val startedAt = System.currentTimeMillis()
+        /** Wall clock at the first station: the commute's half hour. Replaced by [adopt]. */
+        var startedAt = System.currentTimeMillis()
         /** Where the commute this trip was matched to changes and ends ([MetroCommute.match]). */
         var learned: Set<String> = emptySet()
         /** When the newest station came, and when any card last said where the phone is. */
@@ -185,13 +191,90 @@ internal object MetroCodeIsland {
         val popped = HashSet<String>()
     }
 
+    /**
+     * The ride in progress, for the next generation (HotReload's saveFeatures). Strings and
+     * numbers only: the saved state refuses anything of ours, and [Station] is ours.
+     * [Trip.newAt]/[Trip.seenAt] and [planAt] are elapsed realtime - the same boot, so they stay
+     * valid across a reload; [Trip.startedAt] is wall clock, as [MetroCommute] wants it.
+     */
+    @Synchronized
+    fun save(): Array<Any?>? {
+        val t = trip
+        if (t == null && planStops.isEmpty() && planAt == 0L) return null
+        return arrayOf(
+            t?.city,
+            t?.stations?.toTypedArray(),
+            t?.lines?.map { (station, lines) -> station + SEP + lines.joinToString(",") }?.toTypedArray(),
+            t?.startedAt ?: 0L,
+            t?.learned?.toTypedArray(),
+            t?.newAt ?: 0L,
+            t?.seenAt ?: 0L,
+            t?.popped?.toTypedArray(),
+            planStops.toTypedArray(),
+            planAt,
+        )
+    }
+
+    /**
+     * [save]'s other half, in the new generation, before [install]: install registers the
+     * receiver, and a card that arrived before the trip was back would be read as "it starts
+     * here". Plain data only; what needs the context waits for [adopted].
+     */
+    @Synchronized
+    fun adopt(a: Array<Any?>?) {
+        if (a == null) return
+        val city = a.getOrNull(0) as? String
+        val stations = strings(a.getOrNull(1))
+        if (city != null && stations.isNotEmpty()) {
+            val now = SystemClock.elapsedRealtime()
+            val t = Trip(now, city)
+            t.stations.addAll(stations)
+            for (row in strings(a.getOrNull(2))) {
+                val at = row.indexOf(SEP)
+                if (at <= 0) continue
+                val lines = row.substring(at + SEP.length).split(",").filter { it.isNotEmpty() }.toSet()
+                if (lines.isNotEmpty()) t.lines[row.substring(0, at)] = lines
+            }
+            t.startedAt = (a.getOrNull(3) as? Number)?.toLong() ?: t.startedAt
+            t.learned = strings(a.getOrNull(4)).toSet()
+            t.newAt = (a.getOrNull(5) as? Number)?.toLong() ?: t.newAt
+            t.seenAt = (a.getOrNull(6) as? Number)?.toLong() ?: t.seenAt
+            t.popped.addAll(strings(a.getOrNull(7)))
+            trip = t
+            Xp.log(TAG + "trip carried over at ${stations.last()} (station ${stations.size})")
+        }
+        planStops = strings(a.getOrNull(8)).toSet()
+        planAt = (a.getOrNull(9) as? Number)?.toLong() ?: 0L
+    }
+
+    /** The rest of the adoption, after [install]: the context is there now. */
+    @Synchronized
+    fun adopted() {
+        val t = trip
+        // The first station's card has a timeout on it, and the reload took it off the main
+        // queue with everything else.
+        if (t != null && t.stations.size == 1) {
+            val left = ENTRY_MS - (SystemClock.elapsedRealtime() - t.newAt)
+            // Due while the reload was under way: run now rather than never.
+            Gen.postDelayed(entryOver, left.coerceAtLeast(0L))
+        }
+        // The island the old generation posted, if it is still up.
+        inherited = shown == null && runCatching {
+            ctx?.getSystemService(NotificationManager::class.java)
+                ?.activeNotifications?.any { it.id == ID }
+        }.getOrNull() == true
+        if (inherited) Xp.log(TAG + "the previous generation's island is still up")
+    }
+
+    private fun strings(v: Any?): List<String> =
+        (v as? Array<*>)?.mapNotNull { it as? String }.orEmpty()
+
     private var trip: Trip? = null
     /** The commutes learned so far, in 小爱建议's no-backup storage ([register]). */
     private var commute: MetroCommute? = null
     /** Where 高德's plan boards and leaves the subway, and when it last said so. */
     private var planStops: Set<String> = emptySet()
     private var planAt = 0L
-    private val main = Handler(Looper.getMainLooper())
     private val entryOver = Runnable { entryTimeout() }
     private val BRACKETS = Regex("[（(][^）)]*[）)]")
 
@@ -199,7 +282,7 @@ internal object MetroCodeIsland {
     fun install(cl: ClassLoader) {
         try {
             val instr = Xp.findClass("android.app.Instrumentation", cl)
-            Xp.hookAll(instr, "callApplicationOnCreate") { chain ->
+            Xp.hookAll("assist.metro.app_create", instr, "callApplicationOnCreate") { chain ->
                 val out = chain.proceed()
                 try {
                     val app = chain.args[0] as Application
@@ -214,7 +297,7 @@ internal object MetroCodeIsland {
         }
         try {
             // Both overloads, (Uri, ...) and (String authority, ...): the method is the second.
-            Xp.hookAll(android.content.ContentResolver::class.java, "call") { chain ->
+            Xp.hookAll("assist.metro.resolver_call", android.content.ContentResolver::class.java, "call") { chain ->
                 val out = chain.proceed()
                 if (chain.args.getOrNull(1) == GET_INTENTION) {
                     try {
@@ -232,7 +315,7 @@ internal object MetroCodeIsland {
             Xp.w(TAG + "provider hook failed: $t")
         }
         try {
-            Xp.hookAll(Xp.findClass(ROUTER, cl), "onCreate") { chain ->
+            Xp.hookAll("assist.metro.router_create", Xp.findClass(ROUTER, cl), "onCreate") { chain ->
                 val out = chain.proceed()
                 val a = chain.thisObject as android.app.Activity
                 if (a.intent?.getStringExtra("type") == TYPE) tap(a, a.intent)
@@ -241,6 +324,23 @@ internal object MetroCodeIsland {
         } catch (t: Throwable) {
             Xp.w(TAG + "router hook failed: $t")
         }
+        registerCurrent()
+    }
+
+    /**
+     * A hot reload runs install() again in a process that already has its Application, and
+     * callApplicationOnCreate will never fire a second time - so the new generation registers
+     * against the running one (the ride-code island's receivers were unregistered by the old
+     * generation's retirement). On a cold start this is null and the hook above does it.
+     */
+    private fun registerCurrent() {
+        val app = runCatching {
+            Class.forName("android.app.ActivityThread")
+                .getMethod("currentApplication").invoke(null) as? Application
+        }.getOrNull() ?: return
+        runCatching {
+            if (Application.getProcessName() == PKG) register(app)
+        }.onFailure { Xp.w(TAG + "registration from the running process failed: $it") }
     }
 
     @Synchronized
@@ -264,14 +364,15 @@ internal object MetroCodeIsland {
                 }
             }
         }
-        app.registerReceiver(heard, IntentFilter().apply {
+        Gen.receiver(app, heard, IntentFilter().apply {
             addAction(ACTION_UPDATE)
             addAction(ACTION_COMPLETE)
         }, Context.RECEIVER_EXPORTED)
-        app.registerReceiver(object : BroadcastReceiver() {
+        Gen.receiver(app, object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
                 // Swiped away, or timed out (a timeout sends the delete intent too): down for now,
                 // put up again at the trip's next station ([Trip.popped] keeps this one down).
+                inherited = false
                 val s = shown ?: return
                 shown = null
                 lastKey = null
@@ -292,7 +393,7 @@ internal object MetroCodeIsland {
         ProbeGuard.register(app, IntentFilter(ACTION_TRIP), TAG, { Trips() },
             AMAP, SYSUI, BuildConfig.APPLICATION_ID)
         // adb's shell holds DUMP; nothing else that may send it here does.
-        app.registerReceiver(object : BroadcastReceiver() {
+        Gen.receiver(app, object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
                 resultData = command(i.getStringExtra("json"), i.getStringExtra("do"))
             }
@@ -342,8 +443,8 @@ internal object MetroCodeIsland {
             // No trip: it starts here (tripStations.size == 1, metro_commute_start).
             t.stations += n
             trip = t
-            main.removeCallbacks(entryOver)
-            main.postDelayed(entryOver, ENTRY_MS)
+            Gen.removeCallbacks(entryOver)
+            Gen.postDelayed(entryOver, ENTRY_MS)
             val route = runCatching { commute?.match(s.city, n, t.startedAt) }.getOrNull()
             t.learned = route?.stops.orEmpty()
             Xp.log(TAG + "trip starts at ${s.name}" +
@@ -353,7 +454,7 @@ internal object MetroCodeIsland {
         } else if (n.isNotEmpty() && t.stations.last() != n) {
             t.stations += n
             t.newAt = now
-            main.removeCallbacks(entryOver)
+            Gen.removeCallbacks(entryOver)
             val plan = if (now - planAt < PLAN_STALE_MS) planStops else emptySet()
             remind = n in plan || n in t.learned
             Xp.log(TAG + "in the trip at ${s.name} (station ${t.stations.size}): " + when {
@@ -390,7 +491,7 @@ internal object MetroCodeIsland {
     private fun end(why: String, fareFrom: String = "", fareTo: String = "") {
         val t = trip ?: return
         trip = null
-        main.removeCallbacks(entryOver)
+        Gen.removeCallbacks(entryOver)
         Xp.log(TAG + "trip over (" + t.stations.joinToString(" -> ") + "): $why")
         learn(t, fareFrom, fareTo)
     }
@@ -546,8 +647,9 @@ internal object MetroCodeIsland {
     }
 
     private fun cancel(c: Context, why: String) {
-        if (shown == null) return
+        if (shown == null && !inherited) return
         shown = null
+        inherited = false
         lastKey = null
         c.getSystemService(NotificationManager::class.java)?.cancel(ID)
         Xp.log(TAG + "taken down: $why")
@@ -593,6 +695,7 @@ internal object MetroCodeIsland {
         if (official != null) {
             nm.notify(ID, official)
             shown = s
+            inherited = false
             lastKey = key
             lastError = null
             Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} (official card)")
@@ -660,6 +763,7 @@ internal object MetroCodeIsland {
             .addExtras(extras)
         nm.notify(ID, b.build())
         shown = s
+        inherited = false
         lastKey = key
         lastError = null
         Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} [$lineText] -> " +

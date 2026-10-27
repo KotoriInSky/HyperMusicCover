@@ -1,8 +1,7 @@
 package com.os4.musiccover.island
 import com.os4.musiccover.Main
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
@@ -21,7 +20,6 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 internal object NumState {
 
-    private val main = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
 
     /** The islands fold the ordinary notifications this way (LockIslands.setActive turns it on). */
@@ -64,7 +62,7 @@ internal object NumState {
         }
         runCatching {
             for ((name, value) in listOf("enterNumState" to true, "exitNumState" to false)) {
-                Xp.hookAll(vmClass, name) { chain ->
+                Xp.hookAll("sysui.numstate." + Xp.slug(name), vmClass, name) { chain ->
                     val result = chain.proceed()
                     modelRef = WeakReference(chain.thisObject)
                     if (inNumber != value) {
@@ -81,7 +79,7 @@ internal object NumState {
         // screen and no island: folding, a hands-up that lands there lands folded instead, so
         // the stack is either the island or the list, as ColorOS's is either capsule or list.
         runCatching {
-            Xp.hookAll(vmClass, "switchStackStatus") { chain ->
+            Xp.hookAll("sysui.numstate.switch_stack", vmClass, "switchStackStatus") { chain ->
                 val target = chain.proceed()
                 runCatching { handsUp(chain.thisObject, chain.args.firstOrNull(), target as Float) }
                     .getOrNull() ?: target
@@ -98,7 +96,7 @@ internal object NumState {
         trace("folding=$on")
         forceDefault(on)
         if (!on) {
-            main.removeCallbacks(foldCheck)
+            Gen.removeCallbacks(foldCheck)
             hideCount(false)
         }
     }
@@ -342,6 +340,16 @@ internal object NumState {
         Xp.getObjectField(Xp.getObjectField(repo, "defaultState"), "\$\$delegate_0")
     }.getOrNull()
 
+    /**
+     * Retirement: the OEM's default state flow gets the value the setting names, if an island
+     * ever moved it. The listeners stay - they are installed once, with the hooks, and a dry run
+     * does not reinstall - and folding is LockIslands' to give back.
+     */
+    @JvmStatic
+    fun release() {
+        forceDefault(false)
+    }
+
     private fun forceDefault(on: Boolean) {
         runCatching {
             val flow = defaultFlow() ?: return
@@ -384,9 +392,9 @@ internal object NumState {
      */
     fun foldIfPiled(why: String) {
         if (!folding) return
-        main.removeCallbacks(foldCheck)
+        Gen.removeCallbacks(foldCheck)
         foldWhy = why
-        main.postDelayed(foldCheck, FOLD_SETTLE_MS)
+        Gen.postDelayed(foldCheck, FOLD_SETTLE_MS)
     }
 
     private var foldWhy = ""

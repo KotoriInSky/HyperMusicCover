@@ -48,7 +48,7 @@ public final class NotifPresence {
                     sUpdate = m;
                 }
             }
-            Xp.hookAll(panel, NAME, chain -> {
+            Xp.hookAll("sysui.notif.presence", panel, NAME, chain -> {
                 Object[] args = chain.getArgs().toArray();
                 if (args.length != 2 || !(args[1] instanceof Boolean)) return chain.proceed();
                 sPanel = args[0];
@@ -108,7 +108,7 @@ public final class NotifPresence {
         if (wanted(sSystemSays) == shown(panel)) return;
         android.view.View v = Main.sContainer;
         if (v == null) return;
-        v.post(() -> {
+        Gen.postOn(v, () -> {
             if (wanted(sSystemSays) == shown(panel)) return;
             sOurs = true;
             try {

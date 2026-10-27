@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.lyrics.LyricSource;
 import com.os4.musiccover.lyrics.NcmLyrics;
@@ -137,9 +138,8 @@ final class Prefetch {
 
     private static synchronized Handler work() {
         if (sWork == null) {
-            HandlerThread t = new HandlerThread("mc-prefetch",
+            HandlerThread t = Gen.handlerThread("mc-prefetch",
                     android.os.Process.THREAD_PRIORITY_BACKGROUND);
-            t.start();
             sWork = new Handler(t.getLooper());
         }
         return sWork;
@@ -433,9 +433,8 @@ final class Prefetch {
 
     private static synchronized Handler lyricWork() {
         if (sLyricWork == null) {
-            HandlerThread t = new HandlerThread("mc-lyricahead",
+            HandlerThread t = Gen.handlerThread("mc-lyricahead",
                     android.os.Process.THREAD_PRIORITY_BACKGROUND);
-            t.start();
             sLyricWork = new Handler(t.getLooper());
         }
         return sLyricWork;

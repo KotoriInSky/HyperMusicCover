@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.lyrics.LockLyrics;
 import android.content.Context;
@@ -17,7 +18,8 @@ import android.view.ViewTreeObserver;
 
 /** The module's own square artwork. The OEM clock and media card remain above this layer. */
 public final class CoverCardLayer extends View implements Choreographer.FrameCallback {
-    private static CoverCardLayer sView;
+    /** Volatile: the hot-reload check reads animating() from the framework's thread. */
+    private static volatile CoverCardLayer sView;
     private static volatile Prepared sPending;
     private static volatile int sGeneration;
     private static volatile CoverCardStyle sStyle = CoverCardStyle.defaults();
@@ -41,7 +43,8 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
     private Prepared current, previous;
     private long changedAt;
     private long lastFrame;
-    private boolean ticking;
+    /** Volatile: written on the main thread, read by the hot-reload check off it. */
+    private volatile boolean ticking;
     private float opacity;
     private final CardSpring scale = new CardSpring();
     private boolean playing = sPlayingState;
@@ -123,6 +126,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
             if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
             layer.addView(v, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView(layer, v);
         }
         // Called on every entry; bringToFront lays the layer out again, so only when needed.
         if (layer.getChildAt(layer.getChildCount() - 1) != v) v.bringToFront();
@@ -143,6 +147,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
             }
             host.addView(v.wash, host.indexOfChild(below), new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView(host, v.wash);
         }
         v.style = sStyle;
         v.playing = sPlayingState;
@@ -213,13 +218,13 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
                 return true;
             } finally { android.os.Trace.endSection(); } }
         };
-        geometryObserver.addOnPreDrawListener(geometryListener);
+        Gen.preDraw(geometryObserver, geometryListener);
     }
 
     private void unwatchGeometry() {
         if (geometryObserver != null && geometryListener != null
                 && geometryObserver.isAlive()) {
-            geometryObserver.removeOnPreDrawListener(geometryListener);
+            Gen.unpreDraw(geometryObserver, geometryListener);
         }
         geometryObserver = null;
         geometryListener = null;
@@ -343,6 +348,40 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
                 if (v != null) v.start();
             }
         });
+    }
+
+    /**
+     * Retirement: the layer and its wash out of the tree, the frames stopped, the bitmaps
+     * released. clear() is the track-change path - it animates the square away and expects the
+     * view to come back; here the view's class is the one going away.
+     *
+     * <p>sPending is kept: it is the artwork already prepared for the square, and a dry run
+     * puts the square straight back up. A real retirement (Step 7) clears it with the cache.
+     */
+    /** Whether the square is being drawn frame by frame (an entrance, a track change, a swipe). */
+    static boolean animating() {
+        CoverCardLayer v = sView;
+        return v != null && v.ticking;
+    }
+
+    static void retire() {
+        // NOT ++sGeneration: the kept sPending is stamped with the current one, and adoptPending
+        // is what puts the square straight back up on the rebuild. The queued adopts the bump
+        // used to invalidate are gone with Main's messages, which the sweep clears.
+        CoverCardLayer v = sView;
+        sView = null;
+        if (v == null) return;
+        v.stop();
+        v.unwatchGeometry();
+        if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+        if (v.wash.getParent() instanceof ViewGroup) {
+            ((ViewGroup) v.wash.getParent()).removeView(v.wash);
+        }
+        Prepared hold = sPending;
+        if (v.previous != null && v.previous != hold) v.previous.recycle();
+        if (v.current != null && v.current != hold) v.current.recycle();
+        v.previous = null;
+        v.current = null;
     }
 
     public static void refresh() {
@@ -553,11 +592,11 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
         // A temporary vote for panels that honour it. The spring is sampled on every VSYNC,
         // and the vote is removed as soon as it settles; some SystemUI windows still cap at 60Hz.
         setRequestedFrameRate(120f);
-        Choreographer.getInstance().postFrameCallback(this);
+        Gen.frame(this);
     }
 
     private void stop() {
-        if (ticking) Choreographer.getInstance().removeFrameCallback(this);
+        if (ticking) Gen.unframe(this);
         if (ticking) setRequestedFrameRate(0f);
         ticking = false;
         lastFrame = 0L;
@@ -861,7 +900,7 @@ public final class CoverCardLayer extends View implements Choreographer.FrameCal
                 // Still waking from the big clock: keep looking until the clock has landed.
                 || (afterBigClock && phase != ClockCollapse.Phase.AOD);
         if (settling) {
-            Choreographer.getInstance().postFrameCallback(this);
+            Gen.frame(this);
         } else {
             stop();
         }

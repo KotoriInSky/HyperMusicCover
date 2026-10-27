@@ -70,7 +70,7 @@ final class PaletteCache {
                 if (!deep && !(paletteToo && "getMiuiWallpaperPalette".equals(name))) continue;
                 if (!asked(m)) continue;
                 try {
-                    Xp.api().hook(m).intercept(chain -> proceed(chain, name));
+                    Xp.hook("wall.palette.cache." + Xp.slug(name), m, chain -> proceed(chain, name));
                     hooked++;
                 } catch (Throwable t) {
                     Xp.log(TAG + name + " not cached: " + t);
@@ -127,7 +127,7 @@ final class PaletteCache {
             }
             file.setAccessible(true);
             sFileOf = file;
-            Xp.api().hook(decode).intercept(PaletteCache::decoded);
+            Xp.hook("wall.palette.decode", decode, PaletteCache::decoded);
             Xp.log(TAG + "decode kept through " + decode.getName());
         } catch (Throwable t) {
             Xp.log(TAG + "decode not kept: " + t);
@@ -195,7 +195,9 @@ final class PaletteCache {
     }
 
     private static synchronized void dropLater() {
-        if (sDropper == null) sDropper = new android.os.Handler(android.os.Looper.getMainLooper());
+        // Gen's handler: retirement clears what is still queued on it, so the decoded copy of
+        // the wallpaper is not held by a message that would run old code later.
+        if (sDropper == null) sDropper = Gen.handler();
         sDropper.removeCallbacks(DROP_DECODED);
         sDropper.postDelayed(DROP_DECODED, DECODE_KEEP_MS);
     }

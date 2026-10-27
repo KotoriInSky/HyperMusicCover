@@ -57,7 +57,7 @@ final class MotionTrace {
             sb.append(' ').append(i).append('=').append(IDS[i]).append(views[i] == null ? "(none)" : "");
         }
         sb.append('\n');
-        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+        Gen.frame(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
                 long ms = (System.nanoTime() - t0) / 1000000L;
@@ -76,7 +76,7 @@ final class MotionTrace {
                 }
                 sb.append('\n');
                 if (ms < 1200) {
-                    Choreographer.getInstance().postFrameCallback(this);
+                    Gen.frame(this);
                     return;
                 }
                 sRunning = false;
@@ -121,7 +121,7 @@ final class MotionTrace {
         final java.util.LinkedHashMap<View, float[]> mins = new java.util.LinkedHashMap<>();
         final long t0 = System.nanoTime();
         sSweep = "running";
-        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+        Gen.frame(new Choreographer.FrameCallback() {
             int frames;
 
             @Override
@@ -144,7 +144,7 @@ final class MotionTrace {
                     }
                 }
                 if ((System.nanoTime() - t0) / 1000000L < ms) {
-                    Choreographer.getInstance().postFrameCallback(this);
+                    Gen.frame(this);
                     return;
                 }
                 StringBuilder sb = new StringBuilder("frames=").append(frames);

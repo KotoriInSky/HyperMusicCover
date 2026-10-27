@@ -1,5 +1,6 @@
 package com.os4.musiccover.pickup
 import com.os4.musiccover.Main
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.content.Context
 import android.content.Intent
@@ -45,6 +46,20 @@ import android.os.SystemClock
  * All on [PickupCodeIsland.bg].
  */
 internal object PickupObserver {
+
+    /** Retirement: the camera availability callback, and the latch that keeps it one-shot. */
+    @JvmStatic
+    fun retire() {
+        PickupCamera.retire()
+    }
+
+    /**
+     * Whether an order is being waited on, for the hot reload's busy check (main thread). The
+     * map is [bg]'s; its size read from another thread can only be a moment stale, which the
+     * check tolerates - a task that ends in that moment just refuses one reload.
+     */
+    fun observing(): Boolean = tasks.isNotEmpty()
+
 
     private const val TAG = "MCPickupObs: "
 
@@ -312,7 +327,7 @@ internal object PickupObserver {
      * one every Android phone reports. NaN when it cannot be read, which, as there, never trips the gate.
      */
     private fun temperature(ctx: Context): Float = runCatching {
-        val i = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val i = Gen.stickyReceiver(ctx, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val t = i?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
         if (t == Int.MIN_VALUE) Float.NaN else t / 10f
     }.getOrDefault(Float.NaN)
@@ -326,18 +341,39 @@ internal object PickupObserver {
 private object PickupCamera {
     private val taken = java.util.Collections.synchronizedSet(HashSet<String>())
     @Volatile private var watching = false
+    private var manager: android.hardware.camera2.CameraManager? = null
+    private var callback: android.hardware.camera2.CameraManager.AvailabilityCallback? = null
 
     fun inUse(ctx: Context): Boolean {
         if (!watching) {
             watching = true
             runCatching {
-                ctx.getSystemService(android.hardware.camera2.CameraManager::class.java)
-                    ?.registerAvailabilityCallback(object : android.hardware.camera2.CameraManager.AvailabilityCallback() {
+                val cm = ctx.getSystemService(android.hardware.camera2.CameraManager::class.java)
+                if (cm != null) {
+                    val cb = object : android.hardware.camera2.CameraManager.AvailabilityCallback() {
                         override fun onCameraAvailable(id: String) { taken.remove(id) }
                         override fun onCameraUnavailable(id: String) { taken.add(id) }
-                    }, PickupCodeIsland.bg)
-            }.onFailure { Xp.log("MCPickupObs: camera not watched: $it") }
+                    }
+                    manager = cm
+                    callback = cb
+                    Gen.cameraCallback(cm, cb, PickupCodeIsland.bg)
+                }
+            }.onFailure {
+                watching = false
+                Xp.log("MCPickupObs: camera not watched: $it")
+            }
         }
         return taken.isNotEmpty()
+    }
+
+    /** Retirement: the callback is a host registration; Gen takes it back. */
+    fun retire() {
+        val cm = manager
+        val cb = callback
+        manager = null
+        callback = null
+        if (cm != null && cb != null) runCatching { Gen.uncameraCallback(cm, cb) }
+        watching = false
+        taken.clear()
     }
 }

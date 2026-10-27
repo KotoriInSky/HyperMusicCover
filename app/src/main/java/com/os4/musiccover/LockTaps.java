@@ -348,7 +348,7 @@ public final class LockTaps {
         try {
             Class<?> shade = Xp.findClass(
                     "com.android.systemui.shade.NotificationShadeWindowView", cl);
-            Xp.hookAll(shade, "dispatchTouchEvent", chain -> {
+            Xp.hookAll("sysui.taps.shade_dispatch", shade, "dispatchTouchEvent", chain -> {
                 MotionEvent ev = null;
                 try {
                     java.util.List<Object> a = chain.getArgs();

@@ -1,6 +1,7 @@
 package com.os4.musiccover.lyrics;
 import com.os4.musiccover.LockTaps;
 import com.os4.musiccover.Main;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.graphics.PixelFormat;
@@ -148,14 +149,27 @@ final class LyricWindow {
     private static void setHost(View layer) {
         ViewTreeObserver old = sHostVto;
         LyricView v = sView;
-        if (old != null && v != null && old.isAlive()) old.removeOnPreDrawListener(v.preDrawListener());
+        if (old != null && v != null && old.isAlive()) Gen.unpreDraw(old, HOST_PRE_DRAW);
         sHost = layer;
         sHostVto = null;
         if (layer == null || v == null) return;
         ViewTreeObserver vto = layer.getViewTreeObserver();
-        vto.addOnPreDrawListener(v.preDrawListener());
+        // The keyguard's observer, not the view's: the view is a window of its own, and its own
+        // tree only draws when the window does. This is what makes it step on the keyguard's
+        // frames (the swipe's fade and zoom, the bouncer) the way it did as a child.
+        Gen.preDraw(vto, HOST_PRE_DRAW);
         sHostVto = vto;
     }
+
+    /**
+     * The pre-draw on the keyguard's tree, a different object from {@link LyricView}'s own: the
+     * ledger tells registrations apart by listener identity and drops every entry with the same
+     * listener, so one object on both trees would make removing either remove both.
+     */
+    private static final ViewTreeObserver.OnPreDrawListener HOST_PRE_DRAW = () -> {
+        LyricView v = sView;
+        return v == null || v.preDrawListener().onPreDraw();
+    };
 
     /** The keyguard's own root view, for the lookups the view used to do from its own root. */
     static View hostRoot() {
@@ -230,6 +244,7 @@ final class LyricWindow {
             sHdr = LockLyrics.hdrWanted();
             colourMode(lp, sHdr);
             wm.addView(v, lp);
+            Gen.ownWindow(wm, v);
             sView = v;
             sWm = wm;
             sLp = lp;
@@ -311,7 +326,7 @@ final class LyricWindow {
     private static void lookUpTraversal(final Class<?> rootClass) {
         if (sLookupStarted || rootClass == null) return;
         sLookupStarted = true;
-        new Thread(new Runnable() {
+        Gen.thread("mc-lyric-lookup", new Runnable() {
             @Override
             public void run() {
                 java.lang.reflect.Method m = findTraversal(rootClass, true);
@@ -333,7 +348,7 @@ final class LyricWindow {
                 sDoTraversal = m;
                 Xp.log(TAG + "drawing first through " + m);
             }
-        }, "mc-lyric-lookup").start();
+        });
     }
 
     /** The frame's own time, as the traversal callback hands it on; hidden from the SDK. */

@@ -1,4 +1,5 @@
 package com.os4.musiccover.pickup
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Main
 import com.os4.musiccover.Xp
 import android.app.ActivityManager
@@ -105,7 +106,7 @@ internal object PickupCodeIsland {
      */
     @Volatile @JvmField var sCard = true
 
-    val bg: Handler by lazy { Handler(HandlerThread("mc-pickup").apply { start() }.looper) }
+    val bg: Handler by lazy { Handler(Gen.handlerThread("mc-pickup").looper) }
 
     // All below on [bg].
     private var lastTop: ComponentName? = null
@@ -145,7 +146,7 @@ internal object PickupCodeIsland {
 
     fun install(cl: ClassLoader) {
         runCatching {
-            Xp.hookAll(Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
+            Xp.hookAll("sysui.pickup.top_activity", Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
                 val out = chain.proceed()
                 runCatching {
                     val state = Xp.getObjectField(chain.thisObject, "mState")

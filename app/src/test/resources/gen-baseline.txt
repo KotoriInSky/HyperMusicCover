@@ -1,0 +1,3 @@
+# Module files still making raw lifecycle/thread/listener calls.
+# Empty: every module file now goes through Gen. A new file that makes a raw call
+# fails immediately, and a file that has moved must not creep back.

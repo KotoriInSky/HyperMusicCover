@@ -54,12 +54,25 @@ final class MotionArt {
     private static final String[] STOREFRONTS = {"cn", "us"};
     /** Candidates whose album page is read, per storefront. Each one is a ~500KB page. */
     private static final int MAX_CANDIDATES = 3;
-    private static final java.util.concurrent.ExecutorService POOL =
-            java.util.concurrent.Executors.newFixedThreadPool(MAX_CANDIDATES, r -> {
-                Thread t = new Thread(r, "MCMotionNet");
-                t.setDaemon(true);
-                return t;
-            });
+    private static volatile java.util.concurrent.ExecutorService sPool;
+
+    /**
+     * The lookups' pool, built on first use rather than at class load: retirement shuts it
+     * down through Gen, and the next generation builds its own.
+     */
+    private static java.util.concurrent.ExecutorService pool() {
+        java.util.concurrent.ExecutorService p = sPool;
+        if (p == null) {
+            synchronized (MotionArt.class) {
+                p = sPool;
+                if (p == null) {
+                    p = Gen.executor("MCMotionNet", MAX_CANDIDATES, Thread.NORM_PRIORITY, true);
+                    sPool = p;
+                }
+            }
+        }
+        return p;
+    }
     private static final int MAX_SIDE = 1080;
     private static final long MAX_BYTES = 40L * 1024 * 1024;
     /** A track whose length is known has to land within this of the store's. */
@@ -110,7 +123,7 @@ final class MotionArt {
             for (int k = 0; k < songs.size() && k < MAX_CANDIDATES; k++) {
                 final String url = "https://music.apple.com/" + cc + "/album/" + songs.get(k)[1];
                 final String what = "album " + songs.get(k)[1];
-                pages.add(POOL.submit(() -> fetch(url, what)));
+                pages.add(pool().submit(() -> fetch(url, what)));
             }
             for (int k = 0; k < pages.size(); k++) {
                 String[] s = songs.get(k);

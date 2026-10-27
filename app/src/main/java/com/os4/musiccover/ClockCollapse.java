@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import android.graphics.RectF;
 import android.view.Choreographer;
@@ -674,7 +675,7 @@ public final class ClockCollapse {
         Xp.log(TAG + "clock: into the AOD");
         final Choreographer.FrameCallback flight = sFrame;
         View c = Main.sContainer;
-        c.postDelayed(new Runnable() {
+        Gen.postDelayedOn(c, new Runnable() {
             @Override
             public void run() {
                 if (sPhase == Phase.EXIT && sExitToAod && sFrame == flight) {
@@ -1552,21 +1553,21 @@ public final class ClockCollapse {
                 }
                 invalidate();
                 if (!done) {
-                    Choreographer.getInstance().postFrameCallback(this);
+                    Gen.frame(this);
                     return;
                 }
                 sFrame = null;
                 land();
             } finally { android.os.Trace.endSection(); } }
         };
-        Choreographer.getInstance().postFrameCallback(sFrame);
+        Gen.frame(sFrame);
         invalidate();
     }
 
     private static void stopFrame() {
         Choreographer.FrameCallback f = sFrame;
         sFrame = null;
-        if (f != null) Choreographer.getInstance().removeFrameCallback(f);
+        if (f != null) Gen.unframe(f);
     }
 
     private static void land() {
@@ -1678,7 +1679,7 @@ public final class ClockCollapse {
         if (v == null || sGuarded == v) return;
         uninstall();
         try {
-            v.getViewTreeObserver().addOnPreDrawListener(PRE_DRAW);
+            Gen.preDraw(v, PRE_DRAW);
             sGuarded = v;
         } catch (Throwable t) {
             Xp.log(TAG + "clock: pre-draw not installed: " + t);
@@ -1690,7 +1691,7 @@ public final class ClockCollapse {
         sGuarded = null;
         if (v == null) return;
         try {
-            v.getViewTreeObserver().removeOnPreDrawListener(PRE_DRAW);
+            Gen.unpreDraw(v, PRE_DRAW);
         } catch (Throwable ignored) {
         }
     }

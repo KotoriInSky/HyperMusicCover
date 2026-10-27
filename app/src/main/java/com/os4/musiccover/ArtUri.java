@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -78,8 +79,7 @@ final class ArtUri {
 
     private static synchronized Handler work() {
         if (sWork == null) {
-            HandlerThread t = new HandlerThread("mc-art", Process.THREAD_PRIORITY_BACKGROUND);
-            t.start();
+            HandlerThread t = Gen.handlerThread("mc-art", Process.THREAD_PRIORITY_BACKGROUND);
             sWork = new Handler(t.getLooper());
         }
         return sWork;
