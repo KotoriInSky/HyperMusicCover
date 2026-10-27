@@ -320,13 +320,20 @@ internal object PickupIsland {
         // brought back - a parked task that would not move back to the phone's display, a mini
         // program closed and opened again - and with one card per task the same code stood on the
         // lock screen twice (#115, 肯德基's A0038).
-        val moved = if (cards[page.task]?.key == null) adopt(brand, r.code, page.task) else null
+        // A task whose own card is only waiting for its code (瑞幸's 148 and 153, both 940) moves
+        // the other over too, its waiting card going down for it.
+        val moved = if (r.code.isNotEmpty() && cards[page.task]?.key?.split('|')?.getOrNull(1).isNullOrEmpty())
+            adopt(ctx, brand, r.code, page.task) else null
         val card = cards.getOrPut(page.task) { Card(page) }
         card.page = page
         // The notification goes by itself once its timeout is up, and the island with it; nothing on
         // that path tells us (a timeout is not a dismissal, so no delete intent). So ask the system:
         // with the card gone, its key is not evidence of anything, and what comes next is fresh.
         if (card.key != null && up(ctx, card) == false) clear(card)
+        // A code once read stays: a read that found none - 瑞幸's page between two renders - put the
+        // card back to 「等待出码」 and floated it open, and the next read brought 940 back and floated
+        // it again, over and over (#115). The watch on the order skips such a read the same way.
+        if (r.code.isEmpty() && card.key?.split('|')?.getOrNull(1)?.isNotEmpty() == true) return
         // Moved, it is posted again all the same: its taps still carry the old task.
         if (key == card.key && moved == null) return
         // A new code floats the island open; so does the order turning ready to collect. A state
@@ -344,16 +351,17 @@ internal object PickupIsland {
     private fun ready(status: String?): Boolean = PickupParse.isReady(status)
 
     /**
-     * Another task's card for [brand]'s [code], moved to [task]; the task it moves from, or null
-     * when there is none. That task's wait ends - the order is read from the new one now, and the
-     * old one, if it is still about, would only put the card back where it was on its next round.
+     * Another task's card for [brand]'s [code], moved to [task] - over the card [task] had waiting
+     * for its code, if any; the task it moves from, or null when there is none. That task's wait
+     * ends - the order is read from the new one now, and the old one, if it is still about, would
+     * only put the card back where it was on its next round.
      */
-    private fun adopt(brand: String, code: String, task: Int): Int? {
-        val from = cards.entries.firstOrNull { (t, c) ->
-            t != task && c.key?.startsWith("$brand|$code|") == true
+    private fun adopt(c: Context, brand: String, code: String, task: Int): Int? {
+        val from = cards.entries.firstOrNull { (t, card) ->
+            t != task && card.key?.startsWith("$brand|$code|") == true
         }?.key ?: return null
         val card = cards.remove(from) ?: return null
-        cards[task] = card
+        cards.put(task, card)?.takeIf { it.key != null }?.let { cancel(c, it) }
         Xp.log(TAG + "$brand $code: card moved from task $from to $task")
         PickupObserver.end(from, "the order is read in task $task")
         return from
