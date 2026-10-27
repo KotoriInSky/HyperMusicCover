@@ -656,7 +656,8 @@ object ModuleBridge {
     suspend fun queryAlive(context: Context): State {
         var state = query(context)
         var tries = 0
-        while (!state.alive) {
+        // An inert SystemUI has answered: asking again only delays the card that says restart.
+        while (!state.alive && !state.inert) {
             val gap = if (restarting()) RESTART_POLL_MS
                       else RETRY_GAPS_MS.getOrNull(tries++) ?: return state
             kotlinx.coroutines.delay(gap)

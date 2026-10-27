@@ -126,8 +126,13 @@ fun HomePageView(
 
     // Not cleared while a query is in flight: there is an answer on screen either way, and
     // blanking the second line to say so would be the flicker this page already refuses to show.
+    //
+    // Asked until answered, like every other page: an update kills this app and the system
+    // starts it again at once, and its first question lands while SystemUI's module is between
+    // two generations - no receiver for most of a second - so a single shot read "not active"
+    // until the card was tapped.
     suspend fun refresh() {
-        state = ModuleBridge.query(context)
+        state = ModuleBridge.queryAlive(context)
         checked = true
     }
 
