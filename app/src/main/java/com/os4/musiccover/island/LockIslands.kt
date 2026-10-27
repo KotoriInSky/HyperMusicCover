@@ -540,8 +540,11 @@ internal object LockIslands {
         if (nativeStack) {
             // On for good once the islands have shown (off only with the feature: stopFolding).
             if (value) {
+                // Only the first time: the row going and coming back (a navigation's post can do
+                // that) is not a lock screen of its own, and the list the user opened stays (#105).
+                val first = !NumState.folding
                 NumState.setFolding(true)
-                NumState.foldIfPiled("row showing")
+                if (first) NumState.foldIfPiled("row first showing")
             }
             followStack("row ${if (value) "showing" else "gone"}")
         }
@@ -1001,6 +1004,9 @@ internal object LockIslands {
         val shown = all.filter { !(it.summary && it.group in grouped) }
         // Every notification but the focus ones in one island, the newest in front.
         val members = shown.filter { !it.focus }.sortedWith(bigFirst)
+        // The same notifications as before, only written again (a navigation's posts every few
+        // seconds, a download's progress): nothing came or went that would leave the stack piled.
+        val membersChanged = members.map { it.key }.toSet() != stackMembers.toSet()
         stackMembers = members.map { it.key }
         stackNote = aggregate(members)
         if (groupByApp) buildAppGroups(members)
@@ -1009,8 +1015,12 @@ internal object LockIslands {
             // The stack said nothing yet this lock screen: read where it is.
             stackOut = !stackFolded()
             // Not the spread's own run (its focus rows coming in): the stack is on its way to
-            // the list, and read as a pile on the way it was folded back (2026-09-30).
-            if (active && !spreading && members.isNotEmpty()) NumState.foldIfPiled("notifications changed")
+            // the list, and read as a pile on the way it was folded back (2026-09-30). Nor a run
+            // that only wrote the same ones again: a focus card's height changing under the list
+            // the user opened has the stack read itself as a pile, and the check folded the list
+            // away every time a navigation posted (#105).
+            if (active && !spreading && membersChanged && members.isNotEmpty())
+                NumState.foldIfPiled("notifications changed")
         }
         publish()
     }

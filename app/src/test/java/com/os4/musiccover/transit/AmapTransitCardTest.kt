@@ -396,6 +396,20 @@ class AmapTransitCardTest {
         assertEquals("共步行60米，1分钟", c.lockSubtitle)
     }
 
+    @Test fun aCountThatGoesUpWasWrong() {
+        // The last ride's card first said 1 stop of its 8 (the walk's count, user 10-27), then 8:
+        // waiting at the station, not 下一站即终点.
+        val ms = AmapTransitMilestones()
+        ms.moveTo(3, 4, 0L, { false }, { true })
+        ms.observe(1, 8, "", 0L)
+        assertEquals(AmapTransitCard.NEXT_DESTINATION, ms.rideStatus(1, true, false, true, 60_000L).status)
+        ms.observe(8, 8, "", 61_000L)
+        assertEquals(AmapTransitCard.WAITING, ms.rideStatus(8, true, false, true, 61_000L).status)
+        // And the first stop going by is a stop again.
+        ms.observe(7, 8, "", 200_000L)
+        assertEquals(AmapTransitCard.ARRIVE_COMMON_STATION, ms.rideStatus(7, true, false, true, 200_000L).status)
+    }
+
     @Test fun wordsTheCardsAreBuiltFrom() {
         assertEquals("往美的大道", AmapTransitCard.x("美的大道方向"))
         assertEquals("往美的大道", AmapTransitCard.x("往美的大道"))

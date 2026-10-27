@@ -111,8 +111,11 @@ internal object PickupPark {
         Xp.log(TAG + "task $task -> display $display")
         "task $task -> display $display"
     }.getOrElse {
-        Xp.log(TAG + "task $task not moved to $display: $it")
-        "move failed: $it"
+        // Through reflection the system's own reason is the cause: on its own the log said only
+        // InvocationTargetException (#115, a phone where the move back did not take).
+        val why = (it as? java.lang.reflect.InvocationTargetException)?.targetException ?: it
+        Xp.log(TAG + "task $task not moved to $display: $why")
+        "move failed: $why"
     }
 
     /**
