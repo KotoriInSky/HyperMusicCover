@@ -131,8 +131,11 @@ fun HomePageView(
     // starts it again at once, and its first question lands while SystemUI's module is between
     // two generations - no receiver for most of a second - so a single shot read "not active"
     // until the card was tapped.
+    //
+    // Checked from the first answer, though: a module that is not installed answers nothing
+    // every time, and waiting out the retries kept the hint off the card for fifteen seconds.
     suspend fun refresh() {
-        state = ModuleBridge.queryAlive(context)
+        state = ModuleBridge.queryAlive(context) { checked = true }
         checked = true
     }
 
@@ -163,7 +166,8 @@ fun HomePageView(
     // the old one goes on running until its process restarts. Asked with the status, and again
     // once LSPosed's service binds, which can be after the page is up.
     val service by LsposedService.service.collectAsState()
-    var stale by remember { mutableStateOf(0) }
+    // Held whole rather than as a count: the restart acts on the set the card counted.
+    var stale by remember { mutableStateOf(LsposedService.StaleSet.NONE) }
     // A restart blanks the screen and stops whatever the scoped apps were doing, so it asks.
     // Asked from the status card, which is the whole width of the page and where a scroll starts.
     var confirmRestart by remember { mutableStateOf(false) }
@@ -171,7 +175,7 @@ fun HomePageView(
         if (current) stale = withContext(Dispatchers.IO) {
             // The other processes' inert answer first: LSPosed lists them as up to date.
             LsposedService.refreshInert(context)
-            LsposedService.staleCount()
+            LsposedService.staleSet(state.inert)
         }
     }
 
@@ -198,8 +202,8 @@ fun HomePageView(
                 // An inert SystemUI is one of those whatever the count says: the count needs
                 // LSPosed's service and arrives after the answer, and green in the meantime - or
                 // for good, without the service - would call a module that does nothing active.
-                val staleHere = ok && (stale > 0 || state.inert)
-                val staleShown = if (state.inert) maxOf(stale, 1) else stale
+                val staleHere = ok && (stale.count > 0 || state.inert)
+                val staleShown = if (state.inert) maxOf(stale.count, 1) else stale.count
                 // The card is one card with three things to say, and two of them are the same
                 // news: the module is not answering, or it is answering in some processes as the
                 // version before. Both are red, both wear the cross, and only the words and what
@@ -418,14 +422,17 @@ fun HomePageView(
                 onClick = {
                     confirmRestart = false
                     scope.launch {
-                        val restarted = withContext(Dispatchers.IO) { ModuleBridge.restartStale() }
+                        val taken = stale
+                        val restarted = withContext(Dispatchers.IO) {
+                            ModuleBridge.restartStale(taken)
+                        }
                         // Cleared rather than asked again on a success: re-reading the moment
                         // the kills return races the processes' own death and would put the card
                         // back up for a restart that has just worked. A refusal is the opposite
                         // case - something is still on the old build, and the page should go on
                         // saying so.
-                        stale = if (restarted) 0
-                        else withContext(Dispatchers.IO) { LsposedService.staleCount() }
+                        stale = if (restarted) LsposedService.StaleSet.NONE
+                        else withContext(Dispatchers.IO) { LsposedService.staleSet(state.inert) }
                         // The inert answer belonged to the SystemUI that was just killed; held
                         // on to, it kept the card red over a module that had come back. Asked
                         // again - queryAlive keeps polling through the restart - for the new one's.

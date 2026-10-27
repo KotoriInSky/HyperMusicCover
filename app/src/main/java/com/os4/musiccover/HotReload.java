@@ -409,6 +409,8 @@ public final class HotReload {
                 for (XposedInterface.HookHandle h : store.installed()) unhook(h);
                 store.clearInstalled();
             }
+            // Read before unhookRemaining, which empties the list it reads.
+            List<String> left = store.remainingLabels();
             int removed = store.unhookRemaining();
             oldIds.removeAll(store.newIds());
             sAdopted = "replaced=" + store.replacedCount()
@@ -417,7 +419,7 @@ public final class HotReload {
                     + " failed=" + failed
                     + " features=" + (state == null ? 0 : state.features.length)
                     + " missing=" + oldIds
-                    + " left=" + store.remainingLabels();
+                    + " left=" + left;
             Xp.log(TAG + "HotReload adopted gen=" + sGen + " process=" + proc + " " + sAdopted
                     + " new=" + store.newIds());
             if (failed) {
@@ -761,11 +763,17 @@ public final class HotReload {
      * path or is installed by {@link Main#installSystemUi}.
      */
     private static void backfill(ClassLoader host, List<XposedInterface.HookHandle> old) {
+        // A framework class answers BootClassLoader, not null, on Android (Object's included);
+        // neither it nor our own loader is a plugin's.
+        ClassLoader boot = Object.class.getClassLoader();
+        ClassLoader self = HotReload.class.getClassLoader();
         java.util.Set<ClassLoader> others = new java.util.LinkedHashSet<>();
         for (XposedInterface.HookHandle h : old) {
             Executable e = h.getExecutable();
             ClassLoader l = e == null ? null : e.getDeclaringClass().getClassLoader();
-            if (l != null && l != host) others.add(l);
+            if (l == null || l == host || l == boot || l == self) continue;
+            if ("java.lang.BootClassLoader".equals(l.getClass().getName())) continue;
+            others.add(l);
         }
         for (ClassLoader l : others) {
             try {

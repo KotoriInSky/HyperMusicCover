@@ -654,8 +654,9 @@ object ModuleBridge {
      * starts the wait over. So for [RESTART_WAIT_MS] after one it keeps asking, and only then
      * counts down the gaps.
      */
-    suspend fun queryAlive(context: Context): State {
+    suspend fun queryAlive(context: Context, onFirst: (State) -> Unit = {}): State {
         var state = query(context)
+        onFirst(state)
         var tries = 0
         // An inert SystemUI has answered: asking again only delays the card that says restart.
         while (!state.alive && !state.inert) {
@@ -1049,8 +1050,10 @@ object ModuleBridge {
     }
 
     /**
-     * Only the targets still on the old build, or whose hot reload failed - the set the home
-     * page's card counted when it offered this.
+     * Only the targets still on the old build, or whose hot reload failed - [set], the reading
+     * the home page's card counted when it offered this. A listed process is killed only if the
+     * framework still lists that pid under that name: one that has gone since needs nothing, and
+     * its pid may by now be someone else's.
      *
      * [restartScope] takes everything the module is loaded into and stays for the top bar's own
      * entry, but an update leaves most of those processes already up to date, and killing a
@@ -1063,21 +1066,24 @@ object ModuleBridge {
      * empty stale list is the opposite case: there is nothing left to restart, so it is a
      * success.
      */
-    fun restartStale(): Boolean {
+    fun restartStale(set: LsposedService.StaleSet): Boolean {
         // An inert SystemUI answered the query itself, so it is known without the service and
-        // is counted then (LsposedService.staleCount); it is killed by name when no pid lists it.
-        val sysuiInert = lastQuery?.inert == true
-        val stale = LsposedService.staleTargets()
+        // is counted then; it is killed by name when no pid lists it.
+        val stale = set.targets
         if (stale == null) {
-            if (!sysuiInert) return false
+            if (!set.sysuiInert) return false
             restartingSince = SystemClock.elapsedRealtime()
             return kill(TARGET)
         }
-        val sysuiUnlisted = sysuiInert && stale.none { it.processName == TARGET }
-        if (stale.isEmpty() && !sysuiUnlisted) return true
+        if (stale.isEmpty() && !set.sysuiUnlisted) return true
+        // The service went between the count and the tap: nothing to check the pids against.
+        val running = LsposedService.runningTargets() ?: return false
+        val live = stale.filter { s ->
+            running.any { it.pid == s.pid && it.processName == s.processName }
+        }
         restartingSince = SystemClock.elapsedRealtime()
-        val killed = stale.map { killPid(it.pid) }.all { it }
-        return if (sysuiUnlisted) kill(TARGET) && killed else killed
+        val killed = live.map { killPid(it.pid) }.all { it }
+        return if (set.sysuiUnlisted) kill(TARGET) && killed else killed
     }
 
 

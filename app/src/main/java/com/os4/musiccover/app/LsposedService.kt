@@ -94,22 +94,40 @@ object LsposedService {
     @Volatile private var lastTargets: String? = null
 
     /**
-     * Those of [runningTargets] still on a build older than the one installed, or whose hot
-     * reload failed; null without the service. The home page counts these and its restart kills
-     * these, so one definition serves both: the number the card shows cannot end up describing
-     * a different set from the one the tap acts on. Null and empty are not the same answer -
-     * null is no service, empty is nothing stale - which is what lets the restart tell them
-     * apart. See [ModuleBridge.restartStale].
+     * One reading of what the home page's restart would take: the card counts it and the tap
+     * restarts it, so the number shown cannot describe a different set from the one acted on.
+     * Taken once and handed from one to the other - read twice, an answer arriving in between
+     * (any page's query replaces the last one) could change the second reading.
      *
-     * FAILED is included for the same reason: a process whose reload failed is no more current
-     * than one that was never asked, and leaving it out would make the card disappear without
-     * anything having changed.
+     * [targets] null and empty are not the same answer - null is no service, empty is nothing
+     * stale - which is what lets the restart tell them apart. [sysuiInert] is the page's own
+     * answer from SystemUI, which knows it without the service; [sysuiUnlisted] is that SystemUI
+     * when no listed pid is it, and the restart kills it by name then.
      */
-    fun staleTargets(): List<HookedTarget>? {
+    class StaleSet(val targets: List<HookedTarget>?, val sysuiInert: Boolean) {
+        val sysuiUnlisted = sysuiInert && targets?.none { it.processName == SYSTEMUI } != false
+        val count = (targets?.size ?: 0) + if (sysuiUnlisted) 1 else 0
+
+        companion object {
+            val NONE = StaleSet(emptyList(), false)
+        }
+    }
+
+    /** What the restart would take now, given whether SystemUI's answer said inert. */
+    fun staleSet(sysuiInert: Boolean): StaleSet = StaleSet(staleTargets(sysuiInert), sysuiInert)
+
+    /**
+     * Those of [runningTargets] still on a build older than the one installed, or whose hot
+     * reload failed; null without the service.
+     *
+     * FAILED is included: a process whose reload failed is no more current than one that was
+     * never asked, and leaving it out would make the card disappear without anything having
+     * changed.
+     */
+    private fun staleTargets(sysuiInert: Boolean): List<HookedTarget>? {
         // An inert generation is reported up to date on the new build - its adoption failed after
         // LSPosed's part was done. SystemUI says so in its query answer, the others when asked
         // ([refreshInert]).
-        val sysuiInert = ModuleBridge.lastAnswer()?.inert == true
         val inert = inertProcesses
         // Every process on an older build counts, a supported package's sub-processes included:
         // 高德's :locationservice, the AOD's :keyguardeditor and SystemUI's own extra processes
@@ -142,18 +160,5 @@ object LsposedService {
             pkgs.map { async { ModuleBridge.inertIn(context, it) } }.awaitAll().flatten().toSet()
         }
         if (inertProcesses.isNotEmpty()) Log.w("MCHotReloadApp", "inert: $inertProcesses")
-    }
-
-    /**
-     * How many processes the home page's restart would take, an inert SystemUI included even
-     * when the service is not there to list it (restartStale kills it by name then); 0 without
-     * the service and nothing inert.
-     */
-    fun staleCount(): Int {
-        val stale = staleTargets()
-        val n = stale?.size ?: 0
-        val sysuiUnlisted = ModuleBridge.lastAnswer()?.inert == true &&
-            stale?.none { it.processName == SYSTEMUI } != false
-        return n + if (sysuiUnlisted) 1 else 0
     }
 }

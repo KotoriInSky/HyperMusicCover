@@ -848,7 +848,9 @@ public final class ImmersiveHost {
         }
         sOpen = null;
         sLeaving = null;
-        sSwapOut = null;
+        // Cancels the crossfade too: left running, it would fade the old page and apply() at
+        // its end, both this generation's code.
+        endSwap();
         sYield = false;
         sFadeInNext = false;
         sShown = false;
