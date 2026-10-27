@@ -1,4 +1,5 @@
 package com.os4.musiccover.app
+import com.os4.musiccover.BuildConfig
 import com.os4.musiccover.HotReloadPolicy
 import com.os4.musiccover.LogLevel
 import android.content.Context
@@ -133,8 +134,16 @@ object LsposedService {
         // 高德's :locationservice, the AOD's :keyguardeditor and SystemUI's own extra processes
         // carry the module's hooks too, are refused a reload by process name, and nothing else
         // ever restarts them - the main process reloads in place and is not on this list.
+        //
+        // RELOADING on the older build is one too. The framework shows a process mid-reload on
+        // the new build as soon as the old generation has let go (SystemUI and the wallpaper,
+        // 2026-10-28 01:35:50); one still on the old build is either being asked or was refused
+        // and is waiting for the retry - 高德's :locationservice sat in that state for forty
+        // minutes, 947074 on a phone with 947078 installed, under a green card.
         return runningTargets()?.filter {
             it.state == HookedTarget.State.STALE || it.state == HookedTarget.State.FAILED ||
+                (it.state == HookedTarget.State.RELOADING &&
+                    it.loadedVersionCode < BuildConfig.VERSION_CODE) ||
                 (sysuiInert && it.processName == SYSTEMUI) || it.processName in inert
         }
     }
