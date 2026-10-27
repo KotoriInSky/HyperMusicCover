@@ -1,5 +1,6 @@
 package com.os4.musiccover.lyrics
 import com.os4.musiccover.Xp
+import com.mocharealm.accompanist.lyrics.core.model.ISyncedLine
 import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeAlignment
 import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeLine
 import com.mocharealm.accompanist.lyrics.core.model.synced.SyncedLine
@@ -348,7 +349,7 @@ object LyricParse {
             runCatching { Xp.log("[MCLyric] the parser gave up on a lyric (" + body.length + " chars): " + t) }
             return emptyList()
         }
-        val src = lyrics.lines
+        val src = unswallow(lyrics.lines, prepared.body)
         val out = ArrayList<LyricLine>(src.size)
         // Where the tail of a line may run to when the file left it without an end of its own:
         // the arrival of the line after it. Looked up by time and not read off the list: the list
@@ -403,6 +404,104 @@ object LyricParse {
         out.sortBy { it.start }
         return speakers(withLanes(out, prepared.lanes))
     }
+
+    /**
+     * Lines the parser took for the translation of the line before them (#113). lyrics-core makes
+     * any line starting within 150ms of another, in other words, that line's translation - and a
+     * file that crowds its credits into the first fraction of a second ("Lyrics by" at 60ms,
+     * "Composed by" at 130, "Produced by" at 200, the first sung line at 271) lost every other
+     * one, the first sung line with them: it went under "Produced by" as its translation, and its
+     * own translation, at its start with nothing left there to belong to, was drawn as the line.
+     *
+     * A translation sits at its line's start (LANE_MS). A row of the body further off than that
+     * is a line, and goes back to being one - parsed on its own, so its word timings come with
+     * it - taking the row left on its own at its start as its translation.
+     */
+    private fun unswallow(lines: List<ISyncedLine>, body: String): List<ISyncedLine> {
+        val rows = body.split('\n').mapNotNull { r ->
+            val m = LRC_TIME.find(r.trimStart()) ?: return@mapNotNull null
+            Triple(ms(m) ?: return@mapNotNull null,
+                r.replace(LRC_TAG, "").replace(ANGLE_TAG, "").trim(), r.trim())
+        }
+        if (rows.isEmpty()) return lines
+        val out = lines.toMutableList()
+        var fixed = 0
+        var i = 0
+        while (i < out.size) {
+            val line = out[i]
+            val tr = translationOf(line)?.trim()
+            val row = if (tr.isNullOrEmpty()) null else rows.firstOrNull {
+                val d = kotlin.math.abs(it.first - line.start)
+                it.second == tr && d > LANE_MS && d <= SWALLOW_MS
+            }
+            if (row == null) {
+                i++
+                continue
+            }
+            var back = try {
+                AutoParser().parse(row.third).lines.firstOrNull()
+            } catch (t: Throwable) {
+                null
+            }
+            if (back == null || back.start != row.first) {
+                i++
+                continue
+            }
+            out[i] = untranslated(line, row.first)
+            // A plain row parsed alone has no next line to end at.
+            if (back is SyncedLine) {
+                val next = out.map { it.start }.filter { it > row.first }.minOrNull()
+                back = back.copy(end = next ?: maxOf(back.end, line.end))
+            }
+            val text = textOf(back)
+            val own = out.indices.firstOrNull { j ->
+                val o = out[j]
+                j != i && o is SyncedLine && o.translation == null &&
+                    kotlin.math.abs(o.start - row.first) <= LANE_MS && o.content.trim() != text
+            }
+            if (own != null) {
+                back = withTranslationOf(back, (out[own] as SyncedLine).content.trim())
+                out.removeAt(own)
+                if (own < i) i--
+            }
+            out.add(i + 1, back)
+            fixed++
+            i++
+        }
+        if (fixed == 0) return lines
+        runCatching { Xp.log("[MCLyric] $fixed lines taken for a translation put back") }
+        return out.sortedBy { it.start }
+    }
+
+    /**
+     * How far apart lyrics-core lets a line and its translation start; past it nothing is
+     * paired, so nothing further off can have been swallowed.
+     */
+    private const val SWALLOW_MS = 150
+
+    private fun translationOf(line: ISyncedLine): String? = when (line) {
+        is KaraokeLine -> line.translation
+        is SyncedLine -> line.translation
+        else -> null
+    }
+
+    private fun textOf(line: ISyncedLine): String = when (line) {
+        is KaraokeLine -> line.syllables.joinToString("") { it.content }.trim()
+        is SyncedLine -> line.content.trim()
+        else -> ""
+    }
+
+    private fun withTranslationOf(line: ISyncedLine, text: String?): ISyncedLine = when (line) {
+        is KaraokeLine.MainKaraokeLine -> line.copy(translation = text)
+        is KaraokeLine.AccompanimentKaraokeLine -> line.copy(translation = text)
+        is SyncedLine -> line.copy(translation = text)
+        else -> line
+    }
+
+    /** A line without the translation it swallowed, ending no later than that line starts. */
+    private fun untranslated(line: ISyncedLine, until: Int): ISyncedLine =
+        if (line is SyncedLine && line.end > until) line.copy(translation = null, end = until)
+        else withTranslationOf(line, null)
 
     /**
      * The translation some tag writers leave on the line itself, separated by a thin space
