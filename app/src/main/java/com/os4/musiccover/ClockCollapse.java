@@ -1653,6 +1653,10 @@ public final class ClockCollapse {
             if (g == null) continue;
             if (g.getScaleX() != 1f) g.setScaleX(1f);
             if (g.getScaleY() != 1f) g.setScaleY(1f);
+            // The scale is a RenderNode property: without a redraw the full-size clock kept the
+            // narrow glass edge it last drew while collapsed, and sGlassScale still holding that
+            // scale let the next collapse skip the redraw it needed.
+            glassFollowsScale(g, 1f);
             if (g.getTranslationY() != 0f) g.setTranslationY(0f);
             if (g.getTranslationX() != 0f) g.setTranslationX(0f);
         }
