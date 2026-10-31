@@ -3,6 +3,7 @@ import com.os4.musiccover.CoverCompose;
 import com.os4.musiccover.island.LockIslands;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.PageSpring;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.content.res.Resources;
@@ -73,7 +74,7 @@ public final class CountdownScene implements ImmersiveScene {
 
     private static final String TAG = "MCImmersive: " + ID + ": ";
 
-    private final Handler mMain = new Handler(Looper.getMainLooper());
+    private final Handler mMain = Gen.handler();
 
     /** The countdown's notification, and its latest timer; null with none on the lock screen. */
     private String mKey;
@@ -196,6 +197,11 @@ public final class CountdownScene implements ImmersiveScene {
 
     @Override
     public void release() {
+        // Every release, the dry run's included: a teardown can drop the ground's completion
+        // post (refused while quiescing, or cleared by the sweep), and the gate would then stay
+        // shut for the rest of the process. The reset bumps sSeq, so a blur still in flight
+        // when the user closes the page lands on nothing instead of opening the gate twice.
+        Ground.reset();
         CountdownView v = mView;
         if (v == null) return;
         mView = null;
@@ -286,7 +292,7 @@ public final class CountdownScene implements ImmersiveScene {
                 : Main.sAppCtx.getSystemService(SensorManager.class);
         if (sm == null) return;
         if (!on) {
-            sm.unregisterListener(mProximity);
+            Gen.unsensorListener(sm, mProximity);
             mProximity = null;
             mCovered = false;
             return;
@@ -307,7 +313,7 @@ public final class CountdownScene implements ImmersiveScene {
             public void onAccuracyChanged(Sensor sensor, int accuracy) {
             }
         };
-        sm.registerListener(mProximity, s, SensorManager.SENSOR_DELAY_NORMAL, mMain);
+        Gen.sensorListener(sm, mProximity, s, SensorManager.SENSOR_DELAY_NORMAL, mMain);
     }
 
     // ---------------------------------------------------------------- the page
@@ -919,8 +925,23 @@ public final class CountdownScene implements ImmersiveScene {
         private static int sId = Integer.MIN_VALUE;
         private static boolean sBusy;
         private static java.lang.ref.WeakReference<GroundSurface> sWaiting;
+        /** Which wallpaper the waiting view asked for; the reply carries its own id. */
+        private static int sWaitingId = Integer.MIN_VALUE;
+        /** Bumped by [reset] so a completion that is already on its way is dropped. */
+        private static int sSeq;
 
         private Ground() {
+        }
+
+        /**
+         * Retirement: the build's own Gen.post is what clears sBusy, and during a teardown that
+         * post is refused (quiescing) or swept - leaving the flag set for the rest of the
+         * process. Nothing is held any more, so the gate opens with the page gone.
+         */
+        static void reset() {
+            sSeq++;
+            sBusy = false;
+            sWaiting = null;
         }
 
         /** Main thread. Hands the view the picture now, or when it is made. */
@@ -940,11 +961,12 @@ public final class CountdownScene implements ImmersiveScene {
                 return;
             }
             sWaiting = new java.lang.ref.WeakReference<>(view);
+            sWaitingId = id;
             if (sBusy) return;
             sBusy = true;
             final int wantId = id;
-            final Handler main = new Handler(Looper.getMainLooper());
-            new Thread(() -> {
+            final int seq = ++sSeq;
+            Gen.thread("mc-countdown-ground", () -> {
                 long t0 = SystemClock.uptimeMillis();
                 android.graphics.Bitmap made = null;
                 try {
@@ -959,7 +981,10 @@ public final class CountdownScene implements ImmersiveScene {
                 }
                 final android.graphics.Bitmap done = made;
                 final long ms = SystemClock.uptimeMillis() - t0;
-                main.post(() -> {
+                Gen.post(() -> {
+                    // A reset (a retirement took the page down) superseded this one; the gate
+                    // belongs to whoever is waiting now.
+                    if (seq != sSeq) return;
                     sBusy = false;
                     sBitmap = done;
                     sId = wantId;
@@ -968,9 +993,16 @@ public final class CountdownScene implements ImmersiveScene {
                             + " in " + ms + "ms");
                     GroundSurface v = sWaiting == null ? null : sWaiting.get();
                     sWaiting = null;
-                    if (v != null && done != null) v.setBitmap(done);
+                    if (v == null || done == null) return;
+                    if (sWaitingId == wantId) {
+                        v.setBitmap(done);
+                        return;
+                    }
+                    // The page is waiting for another wallpaper than the one just made: this
+                    // picture would be the wrong one on it, so ask again for what it wants.
+                    request(v.getContext(), v);
                 });
-            }, "mc-countdown-ground").start();
+            });
         }
 
         /** The lock slot's picture, else the home slot's, decoded at a quarter: it is to be blurred. */

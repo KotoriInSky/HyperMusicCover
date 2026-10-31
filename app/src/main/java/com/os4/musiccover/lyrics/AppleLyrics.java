@@ -1,4 +1,5 @@
 package com.os4.musiccover.lyrics;
+import com.os4.musiccover.HotReload;
 import com.os4.musiccover.Xp;
 import android.media.MediaMetadata;
 import android.os.Bundle;
@@ -55,7 +56,7 @@ public final class AppleLyrics {
      * previous build - and a change that only shows up as a line NOT being logged looks
      * identical to not having loaded at all. It cost a round trip once.
      */
-    private static final String BUILD = "ref-1";
+    private static final String BUILD = "hr-1";
 
     /** The player's package, and the only process this class ever runs in. */
     public static final String PKG = "com.apple.android.music";
@@ -102,6 +103,43 @@ public final class AppleLyrics {
     private static volatile boolean sPublishing;
     private static volatile Requester sRequester;
 
+    // ---------------------------------------------------------------- hot reload (Step 0)
+
+    /*
+     * The new generation starts with every static empty, so the lyric this process is already
+     * holding has to be handed over explicitly: the metadata already on the session refers to
+     * it, and the lock screen will ask for exactly that reference. Without it the lyric page
+     * stays empty until the next track, which is indistinguishable from a broken adoption.
+     */
+
+    public static String heldId() {
+        return sHeldId;
+    }
+
+    public static String heldPayload() {
+        return sHeldPayload;
+    }
+
+    public static String playingId() {
+        return sPlayingId;
+    }
+
+    public static String playingTitle() {
+        return sPlayingTitle;
+    }
+
+    public static void adoptState(String heldId, String heldPayload,
+                                  String playingId, String playingTitle) {
+        sHeldId = heldId;
+        sHeldPayload = heldPayload;
+        sPlayingId = playingId;
+        sPlayingTitle = playingTitle;
+        if (heldId != null) {
+            note("adopted held lyric for " + heldId
+                    + (heldPayload == null ? " (no payload)" : " (" + heldPayload.length() + " chars)"));
+        }
+    }
+
     // ---------------------------------------------------------------- hook 1: the session
 
     /**
@@ -117,7 +155,7 @@ public final class AppleLyrics {
     private static void hookSetMetadata() throws Throwable {
         Method m = android.media.session.MediaSession.class
                 .getDeclaredMethod("setMetadata", MediaMetadata.class);
-        Xp.hook(m, (XposedInterface.Hooker) chain -> {
+        Xp.hook("apple.lyrics.set_metadata", m, (XposedInterface.Hooker) chain -> {
             try {
                 if (!sPublishing) {
                     onMetadata(chain.getThisObject(), chain.getArgs());
@@ -170,7 +208,8 @@ public final class AppleLyrics {
      */
     private static void hookLyricBuild(ClassLoader cl) throws Throwable {
         Class<?> vm = cl.loadClass("com.apple.android.music.player.viewmodel.PlayerLyricsViewModel");
-        List<XposedInterface.HookHandle> handles = Xp.hookAll(vm, "buildTimeRangeToLyricsMap",
+        List<XposedInterface.HookHandle> handles = Xp.hookAll("apple.lyrics.build",
+                vm, "buildTimeRangeToLyricsMap",
                 (XposedInterface.Hooker) chain -> {
                     Object result = chain.proceed();
                     try {
@@ -812,7 +851,7 @@ public final class AppleLyrics {
         Method m = android.media.session.MediaSession.class.getDeclaredMethod("dispatchCommand",
                 android.media.session.MediaSessionManager.RemoteUserInfo.class, String.class,
                 Bundle.class, android.os.ResultReceiver.class);
-        Xp.hook(m, (XposedInterface.Hooker) chain -> {
+        Xp.hook("apple.lyrics.dispatch_command", m, (XposedInterface.Hooker) chain -> {
             List<Object> args = chain.getArgs();
             if (!LyricSource.CMD_LYRIC.equals(args.get(1))) {
                 return chain.proceed();

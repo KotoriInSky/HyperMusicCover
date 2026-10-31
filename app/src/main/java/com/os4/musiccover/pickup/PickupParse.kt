@@ -321,6 +321,11 @@ internal object PickupParse {
     private val PUNCT = Regex("^[\\[\\]【】()（）,，、/·.\\s-]*$")
     /** A price or a bare number: 「8.9」 「¥」 「￥22」. */
     private val PRICE = Regex("^[¥￥$]?\\s*[\\d.]*$")
+    /**
+     * A price's own label, by the figure in the item's row: 瑞幸 writes 「券后价」 before what it
+     * charged, and walked back over the figure it was taken for the drink (#115).
+     */
+    private val PRICE_LABEL = Regex("^(券后|折后|到手|优惠|会员|活动|实付|原|现|特|单|售)?价$|^(券后|折后|到手)$")
     /** One option of a drink: 少冰, 三分糖, 默认糖, 常温, 中杯 ... but not 草莓牛乳冰, which is a drink. */
     private val OPTION = Regex("^(少|去|多|正常|标准|默认|微|半|无|全|三分|五分|七分|不另外加|不加|加)?(冰|糖|热|温|常温)$|^(大|中|小|超大)杯$")
     /** Words that are never the item: the order's own headings and totals. */
@@ -348,7 +353,7 @@ internal object PickupParse {
                 when {
                     // A meal's part, 「1 / x / <item>」: the part, its 「x」 and its count are passed over.
                     k >= 1 && t[k - 1].trim().let { it == "x" || it == "X" || it == "×" } -> k -= 2
-                    PUNCT.matches(c) || PRICE.matches(c) || QTY.matches(c) || QTY_NUM.matches(c) ||
+                    PUNCT.matches(c) || PRICE.matches(c) || PRICE_LABEL.matches(c) || QTY.matches(c) || QTY_NUM.matches(c) ||
                         c in QTY_UNIT || c == "x" || c == "X" || c == "×" -> {}
                     spec(c) -> {}
                     item(c) -> return c

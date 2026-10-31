@@ -164,6 +164,47 @@ object LyriconSource {
     }
 
     /**
+     * Retirement: everything the bridge holds of ours is released.
+     *
+     * <p>The listener below and the connection listener in attach() are objects of the class
+     * loader that is going away, and the central keys a subscriber by (package, process): a live
+     * one left behind would be handed to the next generation instead of the one it creates (see
+     * the identity collision this module already hit). destroy() releases the connection; the
+     * active-player listener is taken off first, so no callback can arrive mid-teardown.
+     *
+     * <p>Safe to call when nothing was ever attached, and safe to call twice.
+     */
+    @JvmStatic
+    fun detach() {
+        val sub = synchronized(this) {
+            if (!sAttached) return
+            sAttached = false
+            val s = sSubscriber
+            sSubscriber = null
+            s
+        }
+        try {
+            sub?.unsubscribeActivePlayer(Listener)
+        } catch (t: Throwable) {
+            Xp.log("[MCLyricon] unsubscribe failed: " + t)
+        }
+        try {
+            sub?.destroy()
+        } catch (t: Throwable) {
+            Xp.log("[MCLyricon] destroy failed: " + t)
+        }
+        synchronized(sSongLock) {
+            sSong = null
+            sSongLock.notifyAll()
+        }
+        sState = "not started"
+        sPlayer = null
+        sProvider = null
+        sPlayerSongs = 0
+        Xp.log("[MCLyricon] detached")
+    }
+
+    /**
      * What the bridge is handed. Only the song is kept: the position comes from the MediaSession
      * this module already follows, the plain-text callback has no timing in it, and the two
      * display toggles are the player's own UI settings rather than anything about the lyric.

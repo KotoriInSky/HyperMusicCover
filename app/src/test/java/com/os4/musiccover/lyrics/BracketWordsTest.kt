@@ -129,4 +129,40 @@ class BracketWordsTest {
         assertEquals(plain, LyricParse.bracketWords(plain).body)
         assertFalse(LyricParse.bracketWords("[00:01.000]x[00:01.500]").body.contains("01.500"))
     }
+
+    @Test
+    fun creditsCrowdedTogetherAreLinesNotTranslations() {
+        // Lorde - Royals, embedded (#113).
+        val lines = parse(
+            "[00:00.060]Lyrics[00:00.065] [00:00.070]by[00:00.075]: [00:00.080]Ella[00:00.085] [00:00.090]Yelich[00:00.095] [00:00.100]O'Connor[00:00.105]/[00:00.110]Joel[00:00.115] [00:00.120]Little[00:00.130]",
+            "[00:00.130]Composed[00:00.135] [00:00.140]by[00:00.145]: [00:00.150]Ella[00:00.155] [00:00.160]Yelich[00:00.165] [00:00.170]O'Connor[00:00.175]/[00:00.180]Joel[00:00.185] [00:00.190]Little[00:00.200]",
+            "[00:00.200]Produced[00:00.208] [00:00.216]by[00:00.224]: [00:00.232]Joel[00:00.240] [00:00.248]Little[00:00.260]",
+            "[00:00.271]I've [00:00.423]never [00:00.527]seen [00:00.713]a [00:00.976]diamond [00:01.740]in [00:02.019]the [00:02.218]flesh[00:05.710]",
+            "[00:00.271]从未见过谁佩戴着珠宝",
+            "[00:05.710]I [00:05.952]cut [00:06.285]my [00:06.629]teeth [00:06.920]on [00:07.256]wedding [00:07.752]rings [00:09.087]in [00:09.266]the [00:09.470]movies[00:11.605]",
+            "[00:05.710]在电影里才见到过婚戒")
+        assertEquals(listOf("Lyrics by: Ella Yelich O'Connor/Joel Little",
+            "Composed by: Ella Yelich O'Connor/Joel Little", "Produced by: Joel Little",
+            "I've never seen a diamond in the flesh", "I cut my teeth on wedding rings in the movies"),
+            lines.map { it.text })
+        assertNull(lines[0].translation)
+        assertNull(lines[1].translation)
+        assertNull(lines[2].translation)
+        assertEquals("从未见过谁佩戴着珠宝", lines[3].translation)
+        assertEquals("在电影里才见到过婚戒", lines[4].translation)
+        assertEquals(130, lines[1].start)
+        assertEquals(271, lines[3].start)
+        assertTrue(lines[3].hasWords())
+    }
+
+    @Test
+    fun plainLinesCrowdedTogetherAreLinesToo() {
+        val lines = parse("[00:00.00]作词：甲", "[00:00.10]作曲：乙", "[00:00.10]Composer: B",
+            "[00:03.00]第一句")
+        assertEquals(listOf("作词：甲", "作曲：乙", "第一句"), lines.map { it.text })
+        assertNull(lines[0].translation)
+        assertEquals("Composer: B", lines[1].translation)
+        assertEquals(100, lines[1].start)
+        assertTrue(lines[0].end <= 100)
+    }
 }

@@ -1,6 +1,7 @@
 package com.os4.musiccover.transit
 import com.os4.musiccover.BuildConfig
 import com.os4.musiccover.ProbeGuard
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.app.Application
 import android.app.Notification
@@ -20,8 +21,6 @@ import android.graphics.RectF
 import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
@@ -130,6 +129,8 @@ internal object MetroCodeIsland {
 
     /** LegacyFluidExitPolicy SINGLE_STATION_TIMEOUT: a first station's card, with no second one. */
     private const val ENTRY_MS = 5 * 60_000L
+    /** Separates a station from its lines in the handover; see [save]. */
+    private const val SEP = "\u0000"
     /**
      * TripManager's monitor ends a trip with no station for 5 min; a wait on the platform runs
      * past that off-peak, and the next station would then start a trip of its own and get a card.
@@ -160,6 +161,11 @@ internal object MetroCodeIsland {
 
     @Volatile private var ctx: Context? = null
     @Volatile private var shown: Station? = null
+    /**
+     * The previous generation's island is still up: [shown] is ours and cannot be handed over
+     * (Station is our class), so this is what lets [cancel] take that one down.
+     */
+    @Volatile private var inherited = false
     @Volatile private var lastKey: String? = null
     @Volatile private var updates = 0
     @Volatile private var lastSeen = "none"
@@ -174,8 +180,8 @@ internal object MetroCodeIsland {
         val stations = ArrayList<String>()
         /** The lines each station's card named, for where the trip changed ([MetroCommute.changes]). */
         val lines = HashMap<String, Set<String>>()
-        /** Wall clock at the first station: the commute's half hour. */
-        val startedAt = System.currentTimeMillis()
+        /** Wall clock at the first station: the commute's half hour. Replaced by [adopt]. */
+        var startedAt = System.currentTimeMillis()
         /** Where the commute this trip was matched to changes and ends ([MetroCommute.match]). */
         var learned: Set<String> = emptySet()
         /** When the newest station came, and when any card last said where the phone is. */
@@ -185,13 +191,90 @@ internal object MetroCodeIsland {
         val popped = HashSet<String>()
     }
 
+    /**
+     * The ride in progress, for the next generation (HotReload's saveFeatures). Strings and
+     * numbers only: the saved state refuses anything of ours, and [Station] is ours.
+     * [Trip.newAt]/[Trip.seenAt] and [planAt] are elapsed realtime - the same boot, so they stay
+     * valid across a reload; [Trip.startedAt] is wall clock, as [MetroCommute] wants it.
+     */
+    @Synchronized
+    fun save(): Array<Any?>? {
+        val t = trip
+        if (t == null && planStops.isEmpty() && planAt == 0L) return null
+        return arrayOf(
+            t?.city,
+            t?.stations?.toTypedArray(),
+            t?.lines?.map { (station, lines) -> station + SEP + lines.joinToString(",") }?.toTypedArray(),
+            t?.startedAt ?: 0L,
+            t?.learned?.toTypedArray(),
+            t?.newAt ?: 0L,
+            t?.seenAt ?: 0L,
+            t?.popped?.toTypedArray(),
+            planStops.toTypedArray(),
+            planAt,
+        )
+    }
+
+    /**
+     * [save]'s other half, in the new generation, before [install]: install registers the
+     * receiver, and a card that arrived before the trip was back would be read as "it starts
+     * here". Plain data only; what needs the context waits for [adopted].
+     */
+    @Synchronized
+    fun adopt(a: Array<Any?>?) {
+        if (a == null) return
+        val city = a.getOrNull(0) as? String
+        val stations = strings(a.getOrNull(1))
+        if (city != null && stations.isNotEmpty()) {
+            val now = SystemClock.elapsedRealtime()
+            val t = Trip(now, city)
+            t.stations.addAll(stations)
+            for (row in strings(a.getOrNull(2))) {
+                val at = row.indexOf(SEP)
+                if (at <= 0) continue
+                val lines = row.substring(at + SEP.length).split(",").filter { it.isNotEmpty() }.toSet()
+                if (lines.isNotEmpty()) t.lines[row.substring(0, at)] = lines
+            }
+            t.startedAt = (a.getOrNull(3) as? Number)?.toLong() ?: t.startedAt
+            t.learned = strings(a.getOrNull(4)).toSet()
+            t.newAt = (a.getOrNull(5) as? Number)?.toLong() ?: t.newAt
+            t.seenAt = (a.getOrNull(6) as? Number)?.toLong() ?: t.seenAt
+            t.popped.addAll(strings(a.getOrNull(7)))
+            trip = t
+            Xp.log(TAG + "trip carried over at ${stations.last()} (station ${stations.size})")
+        }
+        planStops = strings(a.getOrNull(8)).toSet()
+        planAt = (a.getOrNull(9) as? Number)?.toLong() ?: 0L
+    }
+
+    /** The rest of the adoption, after [install]: the context is there now. */
+    @Synchronized
+    fun adopted() {
+        val t = trip
+        // The first station's card has a timeout on it, and the reload took it off the main
+        // queue with everything else.
+        if (t != null && t.stations.size == 1) {
+            val left = ENTRY_MS - (SystemClock.elapsedRealtime() - t.newAt)
+            // Due while the reload was under way: run now rather than never.
+            Gen.postDelayed(entryOver, left.coerceAtLeast(0L))
+        }
+        // The island the old generation posted, if it is still up.
+        inherited = shown == null && runCatching {
+            ctx?.getSystemService(NotificationManager::class.java)
+                ?.activeNotifications?.any { it.id == ID }
+        }.getOrNull() == true
+        if (inherited) Xp.log(TAG + "the previous generation's island is still up")
+    }
+
+    private fun strings(v: Any?): List<String> =
+        (v as? Array<*>)?.mapNotNull { it as? String }.orEmpty()
+
     private var trip: Trip? = null
     /** The commutes learned so far, in 小爱建议's no-backup storage ([register]). */
     private var commute: MetroCommute? = null
     /** Where 高德's plan boards and leaves the subway, and when it last said so. */
     private var planStops: Set<String> = emptySet()
     private var planAt = 0L
-    private val main = Handler(Looper.getMainLooper())
     private val entryOver = Runnable { entryTimeout() }
     private val BRACKETS = Regex("[（(][^）)]*[）)]")
 
@@ -199,7 +282,7 @@ internal object MetroCodeIsland {
     fun install(cl: ClassLoader) {
         try {
             val instr = Xp.findClass("android.app.Instrumentation", cl)
-            Xp.hookAll(instr, "callApplicationOnCreate") { chain ->
+            Xp.hookAll("assist.metro.app_create", instr, "callApplicationOnCreate") { chain ->
                 val out = chain.proceed()
                 try {
                     val app = chain.args[0] as Application
@@ -214,7 +297,7 @@ internal object MetroCodeIsland {
         }
         try {
             // Both overloads, (Uri, ...) and (String authority, ...): the method is the second.
-            Xp.hookAll(android.content.ContentResolver::class.java, "call") { chain ->
+            Xp.hookAll("assist.metro.resolver_call", android.content.ContentResolver::class.java, "call") { chain ->
                 val out = chain.proceed()
                 if (chain.args.getOrNull(1) == GET_INTENTION) {
                     try {
@@ -232,7 +315,7 @@ internal object MetroCodeIsland {
             Xp.w(TAG + "provider hook failed: $t")
         }
         try {
-            Xp.hookAll(Xp.findClass(ROUTER, cl), "onCreate") { chain ->
+            Xp.hookAll("assist.metro.router_create", Xp.findClass(ROUTER, cl), "onCreate") { chain ->
                 val out = chain.proceed()
                 val a = chain.thisObject as android.app.Activity
                 if (a.intent?.getStringExtra("type") == TYPE) tap(a, a.intent)
@@ -241,6 +324,23 @@ internal object MetroCodeIsland {
         } catch (t: Throwable) {
             Xp.w(TAG + "router hook failed: $t")
         }
+        registerCurrent()
+    }
+
+    /**
+     * A hot reload runs install() again in a process that already has its Application, and
+     * callApplicationOnCreate will never fire a second time - so the new generation registers
+     * against the running one (the ride-code island's receivers were unregistered by the old
+     * generation's retirement). On a cold start this is null and the hook above does it.
+     */
+    private fun registerCurrent() {
+        val app = runCatching {
+            Class.forName("android.app.ActivityThread")
+                .getMethod("currentApplication").invoke(null) as? Application
+        }.getOrNull() ?: return
+        runCatching {
+            if (Application.getProcessName() == PKG) register(app)
+        }.onFailure { Xp.w(TAG + "registration from the running process failed: $it") }
     }
 
     @Synchronized
@@ -264,14 +364,15 @@ internal object MetroCodeIsland {
                 }
             }
         }
-        app.registerReceiver(heard, IntentFilter().apply {
+        Gen.receiver(app, heard, IntentFilter().apply {
             addAction(ACTION_UPDATE)
             addAction(ACTION_COMPLETE)
         }, Context.RECEIVER_EXPORTED)
-        app.registerReceiver(object : BroadcastReceiver() {
+        Gen.receiver(app, object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
                 // Swiped away, or timed out (a timeout sends the delete intent too): down for now,
                 // put up again at the trip's next station ([Trip.popped] keeps this one down).
+                inherited = false
                 val s = shown ?: return
                 shown = null
                 lastKey = null
@@ -292,7 +393,7 @@ internal object MetroCodeIsland {
         ProbeGuard.register(app, IntentFilter(ACTION_TRIP), TAG, { Trips() },
             AMAP, SYSUI, BuildConfig.APPLICATION_ID)
         // adb's shell holds DUMP; nothing else that may send it here does.
-        app.registerReceiver(object : BroadcastReceiver() {
+        Gen.receiver(app, object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) {
                 resultData = command(i.getStringExtra("json"), i.getStringExtra("do"))
             }
@@ -342,8 +443,8 @@ internal object MetroCodeIsland {
             // No trip: it starts here (tripStations.size == 1, metro_commute_start).
             t.stations += n
             trip = t
-            main.removeCallbacks(entryOver)
-            main.postDelayed(entryOver, ENTRY_MS)
+            Gen.removeCallbacks(entryOver)
+            Gen.postDelayed(entryOver, ENTRY_MS)
             val route = runCatching { commute?.match(s.city, n, t.startedAt) }.getOrNull()
             t.learned = route?.stops.orEmpty()
             Xp.log(TAG + "trip starts at ${s.name}" +
@@ -353,7 +454,7 @@ internal object MetroCodeIsland {
         } else if (n.isNotEmpty() && t.stations.last() != n) {
             t.stations += n
             t.newAt = now
-            main.removeCallbacks(entryOver)
+            Gen.removeCallbacks(entryOver)
             val plan = if (now - planAt < PLAN_STALE_MS) planStops else emptySet()
             remind = n in plan || n in t.learned
             Xp.log(TAG + "in the trip at ${s.name} (station ${t.stations.size}): " + when {
@@ -390,7 +491,7 @@ internal object MetroCodeIsland {
     private fun end(why: String, fareFrom: String = "", fareTo: String = "") {
         val t = trip ?: return
         trip = null
-        main.removeCallbacks(entryOver)
+        Gen.removeCallbacks(entryOver)
         Xp.log(TAG + "trip over (" + t.stations.joinToString(" -> ") + "): $why")
         learn(t, fareFrom, fareTo)
     }
@@ -546,8 +647,9 @@ internal object MetroCodeIsland {
     }
 
     private fun cancel(c: Context, why: String) {
-        if (shown == null) return
+        if (shown == null && !inherited) return
         shown = null
+        inherited = false
         lastKey = null
         c.getSystemService(NotificationManager::class.java)?.cancel(ID)
         Xp.log(TAG + "taken down: $why")
@@ -593,6 +695,7 @@ internal object MetroCodeIsland {
         if (official != null) {
             nm.notify(ID, official)
             shown = s
+            inherited = false
             lastKey = key
             lastError = null
             Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} (official card)")
@@ -660,6 +763,7 @@ internal object MetroCodeIsland {
             .addExtras(extras)
         nm.notify(ID, b.build())
         shown = s
+        inherited = false
         lastKey = key
         lastError = null
         Xp.log(TAG + (if (fresh) "up: " else "updated: ") + "${s.name} [$lineText] -> " +
@@ -706,12 +810,29 @@ internal object MetroCodeIsland {
         val layout = id("island_custom_notification_view", "layout")
         val title = s.name
         // Its 「支付 x元 | 余额 y元」, in the same hand: the lines, else what the code does.
-        val sub = s.lines.joinToString(" | ") { it.first }.ifEmpty { "一键进出站" }
+        // One line, its name whole. More, short: the numbered ones first, together, with one
+        // 「号线」 after them - a line run through into another its number and the other's name,
+        // 「4号线大兴线」 「4/大兴」 - then the named ones with their 「线」: 「2·4/大兴·13号线」,
+        // 「8号线·浦江线」, 「5号线·环线」.
+        val sub = (if (s.lines.size > 1) {
+            val (numbered, named) = s.lines.map { it.first }.partition { lineNumber(it) != null }
+            (listOfNotNull(numbered.takeIf { it.isNotEmpty() }
+                ?.joinToString("·") { numberedShort(it) }?.plus("号线")) +
+                named.map { shortName(it).let { n -> if (n.endsWith("线")) n else n + "线" } })
+                .joinToString("·")
+        } else s.lines.joinToString { it.first }).ifEmpty { "一键进出站" }
         val card = Icon.createWithBitmap(cardPicture(c, s.lines))
-        fun view(): android.widget.RemoteViews {
+        // The layout's text is white, for the island's dark plate; on the shade's light card
+        // ([light]) it is set dark, or it cannot be read.
+        fun view(light: Boolean = false): android.widget.RemoteViews {
             val rv = android.widget.RemoteViews(TSM, layout)
             rv.setTextViewText(id("tv_title", "id"), title)
             rv.setTextViewText(id("tv_subtitle", "id"), sub)
+            if (light) {
+                rv.setTextColor(id("tv_title", "id"), 0xe6000000.toInt())
+                rv.setTextColor(id("tv_subtitle", "id"), 0x99000000.toInt())
+                rv.setTextColor(id("btn_right", "id"), 0xe6000000.toInt())
+            }
             rv.setImageViewIcon(id("iv_left_icon", "id"), card)
             rv.setViewVisibility(id("iv_right_icon", "id"), android.view.View.GONE)
             // Its 「切卡」 button, for the code instead.
@@ -768,7 +889,7 @@ internal object MetroCodeIsland {
             .setDeleteIntent(gone)
             .addExtras(extras)
             .build()
-        n.extras.putParcelable("miui.focus.rv", view())
+        n.extras.putParcelable("miui.focus.rv", view(light = true))
         n.extras.putParcelable("miui.focus.rvNight", view())
         n.extras.putParcelable("miui.focus.rv.island.expand", view())
         n.extras.putString("miui.focus.param.custom", param.toString())
@@ -780,11 +901,12 @@ internal object MetroCodeIsland {
      * island: a 70x44dp card with 8dp corners, 6dp clear round it, edged with a 0.6dp hairline
      * going from 40% white at the top to 14% at the foot.
      *
-     * One line fills the card with its colour and its number large on it, white or, on a light
-     * colour, near-black - 「13」 over a small 「号线」, a line with no number by its name,
-     * 「昌平」. Two or three share it in upright bands
-     * of their colours, each with its own number, as an interchange's sign has them. No line, the
-     * blue with the train's front.
+     * One line fills the card with its colour and its number large on it in white, shadowed on a
+     * light colour - 「13」 over a small 「号线」, a line with no number by its name, 「昌平」, one
+     * of four characters or more in two lines. Two or three share it in upright bands
+     * of their colours, each with its own number, as an interchange's sign has them; four in two
+     * rows of two; five or six in two rows of three (a short row's cells widen to fill it); more,
+     * five and a grey 「+n」 for the rest. No line, the blue with the train's front.
      */
     private fun cardPicture(c: Context, lines: List<Pair<String, Int>>): Bitmap {
         val d = c.resources.displayMetrics.density
@@ -796,7 +918,26 @@ internal object MetroCodeIsland {
         val cv = Canvas(b)
         val box = RectF(pad, pad, pad + cw, pad + ch)
         val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
-        val shown = lines.take(3)
+        // Up to three in one row; four as two by two; five and more three to a row, two rows at
+        // most, the sixth cell 「+n」 for the ones left over.
+        val more = (lines.size - 6).coerceAtLeast(0).let { if (it > 0) it + 1 else 0 }
+        val shown = if (more > 0) lines.take(5) else lines
+        val cells = shown.size + (if (more > 0) 1 else 0)
+        val rows = if (cells <= 3) 1 else 2
+        val perRow = when {
+            cells <= 3 -> maxOf(1, cells)
+            cells == 4 -> 2
+            else -> 3
+        }
+        fun cell(k: Int): RectF {
+            val row = k / perRow
+            val inRow = if (row == rows - 1) cells - row * perRow else perRow
+            val w = cw / inRow
+            val h = ch / rows
+            val left = box.left + (k % perRow) * w
+            val top = box.top + row * h
+            return RectF(left, top, left + w, top + h)
+        }
         cv.save()
         cv.clipPath(android.graphics.Path().apply { addRoundRect(box, r, r, android.graphics.Path.Direction.CW) })
         if (shown.isEmpty()) {
@@ -807,46 +948,69 @@ internal object MetroCodeIsland {
             cv.drawBitmap(g, null, RectF(box.centerX() - side / 2, box.centerY() - side / 2,
                 box.centerX() + side / 2, box.centerY() + side / 2), Paint(Paint.FILTER_BITMAP_FLAG))
         }
-        val band = cw / maxOf(1, shown.size)
         val num = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
         val unit = Paint(num).apply { typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL) }
-        for ((k, line) in shown.withIndex()) {
-            val left = box.left + k * band
-            val col = line.second
-            p.shader = android.graphics.LinearGradient(left, box.top, left + band, box.bottom,
+        for (k in 0 until cells) {
+            val line = shown.getOrNull(k)
+            val at = cell(k)
+            val col = line?.second ?: 0xff5a5a5e.toInt()
+            // Opaque again: the hairlines leave the paint at 35% white, and a shader takes the
+            // paint's alpha - every cell after the first came out half its colour.
+            p.color = Color.BLACK
+            p.shader = android.graphics.LinearGradient(at.left, at.top, at.right, at.bottom,
                 col, AmapTransitScene.blend(col, Color.BLACK, 0.16f), android.graphics.Shader.TileMode.CLAMP)
-            cv.drawRect(left, box.top, left + band, box.bottom, p)
+            cv.drawRect(at, p)
             p.shader = null
-            // White on the line's colour, near-black on a light one (13号线's yellow).
+            // White on every colour, with a soft shadow that keeps it apart from a light one
+            // (13号线's yellow).
             val light = (0.299f * Color.red(col) + 0.587f * Color.green(col) + 0.114f * Color.blue(col)) / 255f > 0.62f
-            num.color = if (light) 0xff1a1a1c.toInt() else Color.WHITE
+            num.color = Color.WHITE
+            num.setShadowLayer(if (light) 1.5f * d else 0f, 0f, 0.5f * d, 0x66000000)
             unit.color = num.color
-            val digits = Regex("[0-9]+").find(line.first)?.value
-            val label = digits ?: line.first.removePrefix("地铁").removeSuffix("号线").removeSuffix("线").take(2)
-            val cx = left + band / 2
-            // As large as the band allows, the unit under a number only where there is room.
-            val withUnit = digits != null && shown.size == 1
-            num.textSize = (if (withUnit) ch * 0.56f else ch * 0.5f)
-            val room = band - 8f * d
-            if (num.measureText(label) > room) num.textSize *= room / num.measureText(label)
+            unit.setShadowLayer(if (light) 1.5f * d else 0f, 0f, 0.5f * d, 0x66000000)
+            // A letter before the number stays with it: S1号线 is 「S1」, not line 1's 「1」.
+            val digits = line?.let { (Regex("^[A-Za-z]+[0-9]+").find(it.first) ?: Regex("[0-9]+").find(it.first))?.value }
+            val label = when {
+                line == null -> "+$more"
+                digits != null -> digits
+                else -> shortName(line.first)
+            }
+            val cx = at.centerX()
+            // As large as the cell allows, the unit under a number only where there is room.
+            val withUnit = digits != null && cells == 1
+            // A long name in two lines rather than one in small type: four characters and more
+            // broken in the middle, 「市域/机场」 「大兴/机场」; a Latin one at its first space.
+            val split = if (digits != null || line == null) null else wrap(label)
+            num.textSize = (if (withUnit) ch * 0.56f else at.height() * 0.5f)
+            val room = at.width() - (if (rows > 1) 4f else 8f) * d
+            if (split != null) {
+                num.textSize = at.height() * 0.32f
+                val wide = maxOf(num.measureText(split.first), num.measureText(split.second))
+                if (wide > room) num.textSize *= room / wide
+            } else if (num.measureText(label) > room) num.textSize *= room / num.measureText(label)
             val fm = num.fontMetrics
-            if (withUnit) {
+            if (split != null) {
+                val lineH = (fm.descent - fm.ascent) * 0.92f
+                val base = at.centerY() - lineH / 2 - (fm.ascent + fm.descent) / 2
+                cv.drawText(split.first, cx, base, num)
+                cv.drawText(split.second, cx, base + lineH, num)
+            } else if (withUnit) {
                 unit.textSize = ch * 0.2f
                 val total = (fm.descent - fm.ascent) * 0.78f + unit.textSize
                 val top = box.centerY() - total / 2
                 cv.drawText(label, cx, top - fm.ascent * 0.86f, num)
                 cv.drawText("号线", cx, top + total, unit)
             } else {
-                cv.drawText(label, cx, box.centerY() - (fm.ascent + fm.descent) / 2, num)
+                cv.drawText(label, cx, at.centerY() - (fm.ascent + fm.descent) / 2, num)
             }
-            if (k > 0) {
-                p.color = 0x59ffffff
-                cv.drawRect(left - 0.5f * d, box.top, left + 0.5f * d, box.bottom, p)
-            }
+            // Hairlines between the cells: left of each but a row's first, above the second row.
+            p.color = 0x59ffffff
+            if (at.left > box.left + 0.5f) cv.drawRect(at.left - 0.5f * d, at.top, at.left + 0.5f * d, at.bottom, p)
+            if (at.top > box.top + 0.5f) cv.drawRect(at.left, at.top - 0.5f * d, at.right, at.top + 0.5f * d, p)
         }
         cv.restore()
         val edge = 0.6f * d
@@ -858,6 +1022,57 @@ internal object MetroCodeIsland {
         cv.drawRoundRect(RectF(box.left + h, box.top + h, box.right - h, box.bottom - h), r, r, p)
         return b
     }
+
+    /** Operators written before a line's own name: JR山手线 is 山手, 都营大江户线 大江. */
+    private val OPERATORS = listOf("东京Metro", "Metro", "JR", "都营", "东急", "京王", "阪急", "阪神", "京急", "京成", "西武", "东武")
+
+    /**
+     * A line's own name, whole, for a cell and the line under the title: 「线」 and 「号线」 off
+     * and the operator in front dropped where the line's own name is left (「JR山手线」 「山手」,
+     * 「都营大江户线」 「大江户」, but 「小田急线」 stays 「小田急」); a Latin name, its first word
+     * (「Piccadilly」). The cell shrinks the type to fit it.
+     */
+    private fun shortName(name: String): String {
+        var n = plainName(name).removePrefix("地铁").removeSuffix("号线").removeSuffix("线").trim()
+        for (op in OPERATORS) {
+            if (n.startsWith(op) && n.length - op.length >= 2) {
+                n = n.removePrefix(op).trim()
+                break
+            }
+        }
+        if (n.firstOrNull()?.let { it in 'A'..'Z' || it in 'a'..'z' } == true) {
+            return n.split(' ').first()
+        }
+        return n
+    }
+
+    /** A numbered line's number, 「S1」 of 「S1号线(机场线)」, 「4」 of 「4号线大兴线」; null for a named one. */
+    private fun lineNumber(name: String): String? =
+        Regex("^([A-Za-z]*[0-9]+)号线").find(plainName(name))?.groupValues?.get(1)
+
+    /** A numbered line under the title: its number, and what it runs through into, 「4/大兴」. */
+    private fun numberedShort(name: String): String {
+        val n = plainName(name)
+        val number = lineNumber(n) ?: return shortName(n)
+        val rest = n.substringAfter("号线").removeSuffix("线").trim()
+        return if (rest.isEmpty()) number else "$number/$rest"
+    }
+
+    /**
+     * A cell's name as two lines, or null for one: a Latin name with a space at its first space,
+     * any other of four characters or more in the middle, the longer half first.
+     */
+    private fun wrap(label: String): Pair<String, String>? {
+        val space = label.indexOf(' ')
+        if (space > 0) return label.substring(0, space) to label.substring(space + 1).trim()
+        if (label.firstOrNull()?.let { it in 'A'..'Z' || it in 'a'..'z' } == true) return null
+        if (label.length < 4) return null
+        val half = (label.length + 1) / 2
+        return label.substring(0, half) to label.substring(half)
+    }
+
+    /** The name without the alias the engine writes after it: 「S1号线(机场线)」 is 「S1号线」. */
+    private fun plainName(name: String): String = name.replace(Regex("[(（][^)）]*[)）]"), "").trim()
 
     private fun life(s: Station): Long {
         if (s.end <= 0L) return DEFAULT_LIFE

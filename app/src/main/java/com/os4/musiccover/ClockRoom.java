@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.island.MiniPlayerRuntime;
 import android.graphics.Rect;
@@ -89,7 +90,7 @@ public final class ClockRoom {
     }
 
     static float resetClockRoom(float y) {
-        if (sRoomEasing) android.view.Choreographer.getInstance().removeFrameCallback(ROOM_FRAME);
+        if (sRoomEasing) Gen.unframe(ROOM_FRAME);
         sRoomShown = sRoomRaw = y;
         sRoomEasing = false;
         sRoomSoft = 0f;
@@ -139,8 +140,8 @@ public final class ClockRoom {
             sRoomAt = now;
             // Only a jump that gives room back starts slowly; see the note above.
             sRoomSoft = raw > sRoomShown ? SOFT_START_PX : 0f;
-            android.view.Choreographer.getInstance().removeFrameCallback(ROOM_FRAME);
-            android.view.Choreographer.getInstance().postFrameCallback(ROOM_FRAME);
+            Gen.unframe(ROOM_FRAME);
+            Gen.frame(ROOM_FRAME);
             return sRoomShown;
         }
         float dt = Math.min(50f, now - sRoomAt);
@@ -214,9 +215,23 @@ public final class ClockRoom {
                 return;
             }
             reassertClockRoom();
-            if (sRoomEasing) android.view.Choreographer.getInstance().postFrameCallback(this);
+            if (sRoomEasing) Gen.frame(this);
         }
     };
+
+    /**
+     * Retirement: a walk that was in flight ends here. Its frame callback is Gen's and the sweep
+     * removes it, and sRoomEasing is what would keep the next ease from ever arming another.
+     * The shown/raw pair is cleared so the next generation seeds from where the clock now is.
+     */
+    static void retire() {
+        Gen.unframe(ROOM_FRAME);
+        sRoomEasing = false;
+        sRoomSoft = 0f;
+        sRoomShown = Float.NaN;
+        sRoomRaw = Float.NaN;
+        sRoomUnobstructed = false;
+    }
 
     /**
      * Re-evaluate room through the clock's animation channel, with the source Y left intact.

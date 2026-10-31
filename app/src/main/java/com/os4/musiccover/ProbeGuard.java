@@ -66,6 +66,44 @@ public final class ProbeGuard {
     /** This process minted sToken: the one that checks it, not the one that hands it back. */
     private static volatile boolean sMinted;
 
+    /**
+     * The token as it stands, for a hot-reloaded generation to inherit. Null when this process
+     * has not minted (or been given) one yet.
+     */
+    static synchronized String token() {
+        return sMinted ? sToken : null;
+    }
+
+    /**
+     * The token this process learned from SystemUI, for a hot-reloaded generation to inherit.
+     * Null for the process that mints (it is handed over through {@link #token}).
+     */
+    static synchronized String learnedToken() {
+        return sMinted ? null : sToken;
+    }
+
+    /**
+     * Takes on the token the retiring generation learned from SystemUI. The wallpaper process
+     * does not mint one; a fresh generation that started with nothing would have every message
+     * it sends refused until SystemUI next said hello.
+     */
+    static synchronized void adoptLearnedToken(String token) {
+        if (token == null || token.isEmpty() || sMinted) return;
+        sToken = token;
+        Xp.log("[MCProbe] learned token inherited from the previous generation");
+    }
+
+    /**
+     * Takes on the retiring generation's token instead of minting a new one: the wallpaper
+     * process holds the old token and would refuse every hello until it heard a new one.
+     */
+    static synchronized void adoptToken(String token) {
+        if (token == null || token.isEmpty() || sMinted) return;
+        sToken = token;
+        sMinted = true;
+        Xp.log("[MCProbe] token inherited from the previous generation");
+    }
+
     /** SystemUI's half, once: the token it hands the wallpaper process and takes back from it. */
     static synchronized void mint() {
         if (sMinted) return;
@@ -104,15 +142,38 @@ public final class ProbeGuard {
      */
     public static void register(Context ctx, IntentFilter filter, String tag,
                          java.util.function.Supplier<? extends Receiver> make, String... trusted) {
+        register(ctx, filter, tag, make, true, trusted);
+    }
+
+    /**
+     * The same pair, outside the ledger: for an inert generation, whose ledger refuses every
+     * registration and whose receivers have all been swept. Never unregistered - the process
+     * has to restart to leave that state, and the pair goes with it.
+     */
+    static void registerOutsideLedger(Context ctx, IntentFilter filter, String tag,
+                         java.util.function.Supplier<? extends Receiver> make, String... trusted) {
+        register(ctx, filter, tag, make, false, trusted);
+    }
+
+    private static void register(Context ctx, IntentFilter filter, String tag,
+                         java.util.function.Supplier<? extends Receiver> make, boolean ledger,
+                         String... trusted) {
         Receiver open = make.get();
         open.trusted = trusted;
         open.tag = tag;
-        ctx.registerReceiver(open, filter, Context.RECEIVER_EXPORTED);
         Receiver adb = make.get();
         adb.viaDump = true;
         adb.trusted = trusted;
         adb.tag = tag;
-        ctx.registerReceiver(adb, new IntentFilter(filter), DUMP, null, Context.RECEIVER_EXPORTED);
+        if (ledger) {
+            Gen.receiver(ctx, open, filter, Context.RECEIVER_EXPORTED);
+            Gen.receiver(ctx, adb, new IntentFilter(filter), DUMP, null,
+                    Context.RECEIVER_EXPORTED);
+        } else {
+            ctx.registerReceiver(open, filter, Context.RECEIVER_EXPORTED); // gen-ok
+            ctx.registerReceiver(adb, new IntentFilter(filter), DUMP, null, // gen-ok
+                    Context.RECEIVER_EXPORTED);
+        }
     }
 
     /** How often a refused sender is logged: a hostile app could otherwise flood the log. */

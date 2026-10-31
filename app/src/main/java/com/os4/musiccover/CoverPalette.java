@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +33,7 @@ public final class CoverPalette {
 
     static void install(ClassLoader cl) {
         try {
-            Xp.hookAllConstructors(Xp.findClass(CLS_MGR, cl), chain -> {
+            Xp.hookAllConstructors("sysui.palette.manager_ctor", Xp.findClass(CLS_MGR, cl), chain -> {
                 Object r = chain.proceed();
                 sMgr = chain.getThisObject();
                 return r;
@@ -55,20 +56,20 @@ public final class CoverPalette {
     static void refreshSoon(long lateMs) {
         final android.view.View v = Main.sContainer;
         if (v == null || sMgr == null) return;
-        if (sEarly != null) v.removeCallbacks(sEarly);
-        if (sPending != null) v.removeCallbacks(sPending);
+        if (sEarly != null) Gen.removeCallbacksOn(v, sEarly);
+        if (sPending != null) Gen.removeCallbacksOn(v, sPending);
         sEarly = () -> {
             sEarly = null;
-            new Thread(CoverPalette::refreshNow, "mc-cover-palette").start();
+            Gen.thread("mc-cover-palette", CoverPalette::refreshNow);
         };
         sPending = () -> {
             sPending = null;
             // A binder call into the wallpaper process, which reads the picture: off the main
             // thread, and the result applied back on it.
-            new Thread(CoverPalette::refreshNow, "mc-cover-palette").start();
+            Gen.thread("mc-cover-palette", CoverPalette::refreshNow);
         };
-        v.postDelayed(sEarly, Math.min(EARLY_MS, lateMs));
-        if (lateMs > EARLY_MS) v.postDelayed(sPending, lateMs);
+        Gen.postDelayedOn(v, sEarly, Math.min(EARLY_MS, lateMs));
+        if (lateMs > EARLY_MS) Gen.postDelayedOn(v, sPending, lateMs);
     }
 
     private static Runnable sEarly;
@@ -97,7 +98,7 @@ public final class CoverPalette {
             }
             android.view.View v = Main.sContainer;
             if (v == null) return;
-            v.post(() -> {
+            Gen.postOn(v, () -> {
                 try {
                     if (Xp.getObjectField(mgr, "mPartDeepMap") == null) {
                         sLast = "no depth map yet";

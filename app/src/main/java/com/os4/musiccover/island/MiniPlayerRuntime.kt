@@ -10,6 +10,7 @@ import com.os4.musiccover.ClockRoomPolicy
 import com.os4.musiccover.CoverMorphMotion
 import com.os4.musiccover.Main
 import com.os4.musiccover.lyrics.TrackName
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import com.os4.musiccover.immersive.ImmersiveHost
 import android.content.Context
@@ -44,13 +45,12 @@ import org.json.JSONObject
 
 /** Owns one mini player for each live keyguard shortcut host. */
 object MiniPlayerRuntime {
-    private data class Held(val left: View, val right: View, val controller: MiniPlayerController)
+    private data class Held(val left: View, val right: View, val controller: MiniPlayerController,
+                            val listener: View.OnAttachStateChangeListener? = null)
 
     /** One thread for scaling artwork, so a track change never decodes on the main thread. */
     internal val artWorker: java.util.concurrent.ExecutorService =
-        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
-            Thread(r, "MCMiniArt").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
-        }
+        Gen.executor("MCMiniArt", Thread.MIN_PRIORITY, true)
     private val controllers = WeakHashMap<ViewGroup, Held>()
     private var materialFailed = false
     private val selectionLock = Any()
@@ -130,6 +130,102 @@ object MiniPlayerRuntime {
      * Each hook on its own: a build that renamed one class costs the feature that needed it,
      * not the rest of the mini player.
      */
+    /**
+     * Retirement: every controller's own teardown - its frames, rows, discs, host views, session
+     * listeners and LockIslands registration - and the attach listeners that would otherwise
+     * outlive them. The hooks are the ledger's, and stay.
+     */
+    @JvmStatic
+    fun retire() {
+        installTask?.let { Gen.removeCallbacks(it) }
+        installTask = null
+        val all = synchronized(controllers) {
+            val held = controllers.entries.map { it.key to it.value }
+            controllers.clear()
+            held
+        }
+        for ((host, h) in all) {
+            runCatching { Gen.unattachState(host, h.listener) }
+            runCatching { h.controller.destroy() }
+        }
+        // The OEM's full-AOD controller is a singleton and holds the proxy directly. Left
+        // there, it is a host reference into this class loader - and `added` was a local, so
+        // the next generation could never add its own listener to that controller.
+        // The proxy and the reflected methods stay: they are install-time, a dry run does not
+        // install again, and only this generation's own statics hold them.
+        val c = aodController?.get()
+        val l = aodListener
+        val remove = aodRemove
+        // For a dry run's reattach, which has no handover to read the controller from.
+        lastAodController = c?.let(::WeakReference)
+        aodController = null
+        aodListenerAdded = false
+        if (c != null && l != null) {
+            runCatching {
+                if (remove != null) {
+                    remove.invoke(c, l)
+                } else {
+                    @Suppress("UNCHECKED_CAST")
+                    val list = Xp.getObjectField(c, "mListeners") as MutableList<Any?>
+                    list.remove(l)
+                }
+            }.onFailure { Xp.log("MCMini: full-AOD listener not removed: $it") }
+        }
+        aodDimFrames = 0
+        aodDimLook = null
+        aodDimDepth = -1f
+        aodDimFlat = false
+        // The AOD dressing belongs to the views that just went; left here it would hand the
+        // next run a listener per orphaned view.
+        aodDimHandler.removeCallbacks(aodDimSettle)
+        aodDimArgs = null
+        dressedViews.clear()
+        notificationDressedViews.clear()
+        // Rows the transient-removal hook is holding for a morph: with the controllers gone the
+        // morph will not land, and the map must not keep telling the stack to keep them. One the
+        // stack already tried to take away is waiting on us for it, so it is let go now.
+        for (row in heldTransients.filterValues { it }.keys.toList()) {
+            runCatching { releaseTransient(row) }
+        }
+        heldTransients.clear()
+        passTransient = false
+    }
+
+    /**
+     * Retirement's other half: a dry run does not rebuild the keyguard, so the shortcut hook
+     * that normally builds a controller never fires again. The row it hung off is still there;
+     * build on it the same way a config change does.
+     */
+    @JvmStatic
+    fun reattach() {
+        adoptAod(lastAodController?.get())
+        lastRoot?.get()?.let { root ->
+            if (root.isAttachedToWindow) scheduleInstall(root, lastShortcutController?.get())
+        }
+    }
+
+    /**
+     * What a hot reload hands over: the shortcut row the last controller hung off and the OEM
+     * controller it was built from. Both are host objects. Without them the new generation has
+     * nothing to reattach to - a hot reload does not rebuild the keyguard, so the shortcut hook
+     * that normally supplies this pair will not fire again. The full-AOD controller goes along
+     * for the same reason (see [adoptAod]).
+     */
+    @JvmStatic
+    fun save(): Array<Any?> =
+        arrayOf(lastRoot?.get(), lastShortcutController?.get(), aodController?.get())
+
+    /** The new generation's half; see [save]. Main thread, like the attach path. */
+    @JvmStatic
+    fun adopt(root: View?, shortcutController: Any?, aod: Any?) {
+        adoptAod(aod)
+        if (root == null || !root.isAttachedToWindow) {
+            Xp.log("MCMini: no shortcut row to adopt ($root)")
+            return
+        }
+        scheduleInstall(root, shortcutController)
+    }
+
     @JvmStatic fun install(classLoader: ClassLoader) {
         loader = classLoader
         if (hooksInstalled) return
@@ -139,7 +235,7 @@ object MiniPlayerRuntime {
                 "com.android.systemui.statusbar.notification.mediacontrol.MiuiMediaHeaderView",
                 classLoader,
             )
-            Xp.hookAll(cls, "setVisibility") { chain ->
+            Xp.hookAll("sysui.mini.header_visibility", cls, "setVisibility") { chain ->
                 val args = chain.args.toTypedArray()
                 if (args.size == 1 && args[0] == View.VISIBLE && keepNativeHeaderInvisible()) {
                     args[0] = View.INVISIBLE
@@ -149,7 +245,7 @@ object MiniPlayerRuntime {
         }.onFailure { Xp.w("MCMini: native header visibility hook unavailable: $it") }
         runCatching {
             val cls = Xp.findClass("com.android.keyguard.shortcut.MiuiShortcutController", classLoader)
-            Xp.hookAll(cls, "addShortcutViews") { chain ->
+            Xp.hookAll("sysui.mini.shortcut_views", cls, "addShortcutViews") { chain ->
                 val result = chain.proceed()
                 (chain.args.firstOrNull() as? View)?.let { scheduleInstall(it, chain.thisObject) }
                 result
@@ -159,7 +255,7 @@ object MiniPlayerRuntime {
         // between rows too, where the card swipe never sees it: the rows are the list's again.
         runCatching {
             val cls = Xp.findClass("com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout", classLoader)
-            Xp.hookAll(cls, "onScrollTouch") { chain ->
+            Xp.hookAll("sysui.mini.scroll_touch", cls, "onScrollTouch") { chain ->
                 val result = chain.proceed()
                 val event = chain.args.firstOrNull() as? MotionEvent
                 val stack = chain.thisObject as? View
@@ -176,7 +272,7 @@ object MiniPlayerRuntime {
         for (name in listOf("com.android.systemui.statusbar.notification.row.ExpandableView",
                 "com.android.systemui.statusbar.notification.row.ExpandableNotificationRow")) {
             runCatching {
-                Xp.hookAll(Xp.findClass(name, classLoader), "removeFromTransientContainer") { chain ->
+                Xp.hookAll("sysui.mini.remove_transient", Xp.findClass(name, classLoader), "removeFromTransientContainer") { chain ->
                     val v = chain.thisObject as? View
                     if (v != null && !passTransient && heldTransients.containsKey(v) && !reAdding()) {
                         heldTransients[v] = true
@@ -195,7 +291,7 @@ object MiniPlayerRuntime {
             val cls = Xp.findClass(
                 "com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutControllerInjectorImpl",
                 classLoader)
-            Xp.hookAll(cls, "updateStackingBottomForMiui") { chain ->
+            Xp.hookAll("sysui.mini.stack_bottom", cls, "updateStackingBottomForMiui") { chain ->
                 val args = chain.args.toTypedArray()
                 val bottom = args.getOrNull(0) as? Float
                 if (bottom == null) chain.proceed() else {
@@ -449,7 +545,7 @@ object MiniPlayerRuntime {
         }
         effects.forEach { cls ->
             runCatching {
-                Xp.hookAll(cls, "apply") { chain ->
+                Xp.hookAll("sysui.mini.apply", cls, "apply") { chain ->
                     val target = chain.args.firstOrNull() as? View
                     val card = Main.miniPlayerMediaHeader()
                     // The pill and the islands live on the lock screen, so they wear the lock
@@ -525,7 +621,7 @@ object MiniPlayerRuntime {
                         && it.parameterTypes.any { p -> View::class.java.isAssignableFrom(p) }
                 }.forEach { m ->
                     m.isAccessible = true
-                    Xp.api().hook(m).intercept { chain ->
+                    Xp.hook("sysui.mini.glass." + Xp.slug(className.substringAfterLast('.')) + "." + Xp.slug(m.name), m) { chain ->
                         val list = recording
                         val bg = recordTarget
                         if (list == null || bg == null || recordDepth > 0) {
@@ -533,11 +629,11 @@ object MiniPlayerRuntime {
                             if (list == null && recordDepth == 0) runCatching {
                                 recordNotificationMaterial(m, chain.args.toTypedArray())
                             }
-                            return@intercept result
+                            return@hook result
                         }
                         val args = chain.args.toTypedArray()
                         val at = args.indexOfFirst { it === bg }
-                        if (at < 0) return@intercept chain.proceed()
+                        if (at < 0) return@hook chain.proceed()
                         recordDepth++
                         try {
                             chain.proceed()
@@ -795,11 +891,18 @@ object MiniPlayerRuntime {
      */
     private var aodDimFlat = false
     private var aodController: WeakReference<Any>? = null
+    /** The proxy the OEM's full-AOD controller holds, and the way back out of it. */
+    private var aodListener: Any? = null
+    private var aodListenerAdded = false
+    private var aodAdd: Method? = null
+    private var aodRemove: Method? = null
+    /** The controller retire() took our listener off, for a dry run's reattach. */
+    private var lastAodController: WeakReference<Any>? = null
     private var aodDimFrames = 0
     private var blendMethod: Method? = null
     private var glassMethod: Method? = null
     private var blurOpenedMethod: Method? = null
-    private val aodDimHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+    private val aodDimHandler by lazy { Gen.handler() }
     private val aodDimSettle = Runnable { settleAodDim() }
 
     private fun installAodDim(classLoader: ClassLoader) {
@@ -818,20 +921,32 @@ object MiniPlayerRuntime {
                 .getDeclaredMethod("isBackgroundBlurOpened", Context::class.java).apply { isAccessible = true }
         }.getOrNull()
         val add = controller.getDeclaredMethod("addCallback", listener).apply { isAccessible = true }
+        aodAdd = add
+        // Optional: HyperOS 3's controller (17 Pro Max, 2026-10-27) has addCallback and no way
+        // back, and requiring one threw here and took the whole AOD dim down with it. Without
+        // it, retire() takes the proxy out of the controller's mListeners itself.
+        aodRemove = (runCatching { controller.getDeclaredMethod("removeCallback", listener) }.getOrNull()
+            ?: controller.declaredMethods.firstOrNull {
+                it.name == "removeCallback" && it.parameterTypes.size == 1
+            })?.apply { isAccessible = true }
         val ours = java.lang.reflect.Proxy.newProxyInstance(classLoader, arrayOf(listener)) { self, m, args ->
             when (m.name) {
-                "updateFullAodAnimState" -> { runCatching { onAodDim(args!!) }; null }
-                "completeFullAodAnim" -> { dimNote("complete"); runCatching { settleAodDim() }; null }
-                "onFullAodChange" -> { dimNote("change dark=${args?.getOrNull(0)} glass=${args?.getOrNull(1)}"); null }
                 "hashCode" -> System.identityHashCode(self)
                 "equals" -> self === args?.firstOrNull()
                 "toString" -> "MusicCover full-AOD dim"
-                else -> null
+                // Without removeCallback, retire() takes this out of mListeners by field name, and
+                // a build that named it differently keeps it; a retired generation answers nothing.
+                else -> if (!Gen.live()) null else when (m.name) {
+                    "updateFullAodAnimState" -> { runCatching { onAodDim(args!!) }; null }
+                    "completeFullAodAnim" -> { dimNote("complete"); runCatching { settleAodDim() }; null }
+                    "onFullAodChange" -> { dimNote("change dark=${args?.getOrNull(0)} glass=${args?.getOrNull(1)}"); null }
+                    else -> null
+                }
             }
         }
+        aodListener = ours
         // The controller is SystemUI's own singleton; the first listener it takes brings us in.
-        var added = false
-        Xp.hookAll(controller, "addCallback") { chain ->
+        Xp.hookAll("sysui.mini.session_callback", controller, "addCallback") { chain ->
             val result = chain.proceed()
             val firstController = aodController?.get() == null
             aodController = WeakReference(chain.thisObject)
@@ -839,13 +954,37 @@ object MiniPlayerRuntime {
                 materialGeneration++
                 refresh()
             }
-            if (!added) {
-                added = true
+            if (!aodListenerAdded) {
+                aodListenerAdded = true
+                aodListener = ours
                 runCatching { add.invoke(chain.thisObject, ours) }
                     .onFailure { Xp.log("MCMini: full-AOD listener not added: $it") }
             }
             result
         }
+    }
+
+    /**
+     * The full-AOD controller a previous generation (or a dry run's retire) had our listener on.
+     * It is SystemUI's singleton and its callbacks are added once, early: the addCallback hook
+     * that normally brings us in will not fire again, so the listener is added here.
+     */
+    private fun adoptAod(controller: Any?) {
+        if (controller == null || aodListenerAdded) return
+        val add = aodAdd ?: return
+        val ours = aodListener ?: return
+        aodController = WeakReference(controller)
+        aodListenerAdded = true
+        runCatching { add.invoke(controller, ours) }
+            .onSuccess {
+                materialGeneration++
+                refresh()
+                Xp.log("MCMini: full-AOD listener adopted")
+            }
+            .onFailure {
+                aodListenerAdded = false
+                Xp.log("MCMini: full-AOD listener not adopted: $it")
+            }
     }
 
     private fun onAodDim(args: Array<Any?>) {
@@ -966,9 +1105,9 @@ object MiniPlayerRuntime {
                 // Out of its window now, dimmed while it was in: dressed again when it comes
                 // back, or it came back dark on a lit screen with nothing left to undo it.
                 later++
-                view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                Gen.attachState(view, object : View.OnAttachStateChangeListener {
                     override fun onViewAttachedToWindow(v: View) {
-                        v.removeOnAttachStateChangeListener(this)
+                        Gen.unattachState(v, this)
                         if (aodDimArgs == null) {
                             material(view, cl, view in notificationDressedViews)
                             dimNote("redressed on attach")
@@ -994,7 +1133,23 @@ object MiniPlayerRuntime {
 
     /** For `op mini`. */
     private fun describeAodDim(): String = "aodDim=${if (aodDimArgs != null) "on" else "off"}/$aodDimFrames" +
+        " ${describeAodListeners()}" +
         " dimlog=[${synchronized(dimLog) { dimLog.joinToString(" ; ") }}]"
+
+    /**
+     * The controller's listener list: how long, how many of them are a MusicCover proxy (any
+     * generation's - they all print the same), and whether this generation's is one. After a hot
+     * reload the proxies should still be exactly one, and it ours.
+     */
+    private fun describeAodListeners(): String {
+        val c = aodController?.get() ?: return "aodListeners=(no controller)"
+        return runCatching {
+            val list = (Xp.getObjectField(c, "mListeners") as List<*>).toList()
+            val proxies = list.count { it != null && it.toString() == "MusicCover full-AOD dim" }
+            val oursIn = list.any { it === aodListener }
+            "aodListeners=${list.size} proxies=$proxies ours=$oursIn"
+        }.getOrElse { "aodListeners=? $it" }
+    }
 
     /**
      * The dim's events for `op mini`, uptime ms: the listener's frames (the blend's first colour,
@@ -1027,15 +1182,25 @@ object MiniPlayerRuntime {
     /** The last effect whose empty recording was thrown away, for `op mini`. */
     @Volatile private var emptyEffect = "none"
 
+    /** The pending retries of scheduleInstall, so a retirement can take them back. */
+    private var installTask: Runnable? = null
+
     /** The shortcut row has just been built: the pill goes between its two buttons. */
     private fun scheduleInstall(root: View, shortcutController: Any?) {
         lastRoot = WeakReference(root)
         lastShortcutController = shortcutController?.let(::WeakReference)
-        fun doInstall() = runCatching { attach(root, shortcutController) }
-            .onFailure { Xp.w("MCMini: attach failed: $it") }
-        doInstall()
-        root.post { doInstall() }
-        root.postDelayed({ doInstall() }, 250L)
+        // Through Gen, not root.post: a retry left on the OEM view's handler runs after the
+        // sweep and builds a controller into a generation that has let go. Removing the old
+        // task first also keeps two dry runs from queueing four attaches between them.
+        installTask?.let { Gen.removeCallbacks(it) }
+        val task = Runnable {
+            runCatching { attach(root, shortcutController) }
+                .onFailure { Xp.w("MCMini: attach failed: $it") }
+        }
+        installTask = task
+        task.run()
+        Gen.post(task)
+        Gen.postDelayed(task, 250L)
     }
 
     private fun attach(root: View, shortcutController: Any?) {
@@ -1045,6 +1210,7 @@ object MiniPlayerRuntime {
         val old = synchronized(controllers) { controllers[host] }
         if (!config.getBoolean(MiniPlayerConfig.ENABLED)) {
             old?.controller?.destroy()
+            old?.listener?.let { Gen.unattachState(host, it) }
             synchronized(controllers) { controllers.remove(host) }
             return
         }
@@ -1055,19 +1221,26 @@ object MiniPlayerRuntime {
             return
         }
         old?.controller?.destroy()
+        // The row can be rebuilt under the same root (the keyguard keeps its window), and the
+        // old listener only leaves on detach - which then never comes. Take it back here, or
+        // every rebuild leaves one behind and pins the views it holds.
+        old?.listener?.let { Gen.unattachState(host, it) }
         val controller = MiniPlayerController(host, left, right, prefs(root.context),
             loader ?: root.context.classLoader)
-        synchronized(controllers) { controllers[host] = Held(left, right, controller) }
-        host.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        val listener = object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) = Unit
             override fun onViewDetachedFromWindow(v: View) {
                 synchronized(controllers) {
                     if (controllers[host]?.controller === controller) controllers.remove(host)
                 }
                 controller.destroy()
-                host.removeOnAttachStateChangeListener(this)
+                Gen.unattachState(host, this)
             }
-        })
+        }
+        synchronized(controllers) {
+            controllers[host] = Held(left, right, controller, listener)
+        }
+        Gen.attachState(host, listener)
     }
 
     private fun resolveShortcuts(controller: Any?): Pair<View, View>? = runCatching {

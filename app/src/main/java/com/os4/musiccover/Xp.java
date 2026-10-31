@@ -71,7 +71,7 @@ public final class Xp {
         try {
             SharedPreferences prefs = api.getRemotePreferences(LogLevel.GROUP);
             sLevel = prefs.getInt(LogLevel.KEY, LogLevel.NORMAL);
-            prefs.registerOnSharedPreferenceChangeListener(LEVEL_LISTENER);
+            Gen.prefListener(prefs, LEVEL_LISTENER);
             sLevelPrefs = prefs;
         } catch (Throwable t) {
             write(Log.WARN, "[MCLog] log level unavailable, logging at normal: " + t);
@@ -174,27 +174,6 @@ public final class Xp {
     // ---------------------------------------------------------------- hooking
 
     /**
-     * Every overload of a name, the way XposedBridge.hookAllMethods worked. The OEM classes this
-     * module hooks are obfuscated and their signatures move between OS versions, so hooking by
-     * name and taking whatever is there has proven far more durable than naming the parameters.
-     */
-    public static List<XposedInterface.HookHandle> hookAll(Class<?> cls, String name,
-                                                    XposedInterface.Hooker hooker) {
-        // Declared methods only, no walk up the hierarchy - the same rule the classic
-        // hookAllMethods followed, and here it is load-bearing: onAttachedToWindow and onDraw
-        // are declared on the OEM classes we mean, but if one ever were not, falling through to
-        // View's would hook every view in SystemUI.
-        List<XposedInterface.HookHandle> handles = new ArrayList<>();
-        for (Method m : cls.getDeclaredMethods()) {
-            if (m.getName().equals(name)) handles.add(api().hook(m).intercept(hooker));
-        }
-        if (handles.isEmpty()) {
-            throw new IllegalArgumentException("no method " + cls.getName() + "." + name);
-        }
-        return handles;
-    }
-
-    /**
      * A lambda body, under either name D8 may have given it.
      *
      * A lambda compiles to a synthetic method called lambda$enclosing$N, but when a subclass
@@ -205,14 +184,16 @@ public final class Xp {
      * threw there, and the caller logged it and carried on - with the one hook that replaces
      * the wallpaper texture not installed, so the cover did nothing at all on that phone.
      */
-    static List<XposedInterface.HookHandle> hookAllLambdas(Class<?> cls, String name,
+    static List<XposedInterface.HookHandle> hookAllLambdas(String id, Class<?> cls, String name,
                                                            XposedInterface.Hooker hooker) {
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         String mangled = name + "$";
         for (Method m : cls.getDeclaredMethods()) {
             String n = m.getName();
             if (n.equals(name) || n.startsWith(mangled)) {
-                handles.add(api().hook(m).intercept(hooker));
+                // The plain and the mangled body can share a signature; the name is part of the
+                // id so the pair stays two hooks rather than one replacing the other.
+                handles.add(hook(id + "#" + n + "(" + signature(m) + ")", m, hooker));
             }
         }
         if (handles.isEmpty()) {
@@ -222,20 +203,113 @@ public final class Xp {
         return handles;
     }
 
-    public static XposedInterface.HookHandle hook(Executable target, XposedInterface.Hooker hooker) {
-        return api().hook(target).intercept(hooker);
+    /**
+     * A hook carrying an identity, for hot reload. Every hook in the module goes through here.
+     *
+     * <p>The id is the handle's name across versions. When adoption already holds an old handle
+     * with this id and this exact executable, the hook replaces it in place; otherwise it is
+     * installed new with the id attached, so the next generation can find it. Replacement
+     * failing is not fatal: the old handle goes back to the pending list (it will be unhooked
+     * at the end of adoption) and the hook is installed alongside.
+     */
+    public static XposedInterface.HookHandle hook(String id, Executable target,
+                                                  XposedInterface.Hooker hooker) {
+        // The one behavioural edge of the ledger: once this generation is retired or inert,
+        // every hooker it installed is a pass-through. Neither flag is set yet, so this is a
+        // boolean today; it is what closes the window between retirement and adoption.
+        XposedInterface.Hooker guarded =
+                chain -> Gen.live() ? hooker.intercept(chain) : chain.proceed();
+        XposedInterface.HookHandle old = HotReload.takeOld(id, target);
+        if (old != null) {
+            try {
+                XposedInterface.HookHandle replaced = old.replaceHook(guarded);
+                HotReload.onReplaced(id, replaced);
+                Gen.onHook(replaced);
+                return replaced;
+            } catch (Throwable t) {
+                w("[MCHotReload] replaceHook failed for " + id + ": " + t);
+                HotReload.keepOld(old);
+            }
+        }
+        XposedInterface.HookHandle h = api().hook(target).setId(id).intercept(guarded);
+        HotReload.onAdded(id, h);
+        Gen.onHook(h);
+        return h;
     }
 
-    public static List<XposedInterface.HookHandle> hookAllConstructors(Class<?> cls,
+    /**
+     * Every overload of a name, the way XposedBridge.hookAllMethods worked, with an id per
+     * overload: {@code id + "#" + parameter simple names}. The suffix depends only on the OEM
+     * signature, which R8 does not touch, so it survives our own obfuscation.
+     *
+     * <p>Declared methods only, no walk up the hierarchy - the same rule the classic
+     * hookAllMethods followed, and here it is load-bearing: onAttachedToWindow and onDraw are
+     * declared on the OEM classes we mean, but if one ever were not, falling through to View's
+     * would hook every view in SystemUI.
+     */
+    public static List<XposedInterface.HookHandle> hookAll(String id, Class<?> cls, String name,
+                                                    XposedInterface.Hooker hooker) {
+        List<XposedInterface.HookHandle> handles = new ArrayList<>();
+        for (Method m : cls.getDeclaredMethods()) {
+            if (m.getName().equals(name)) handles.add(hook(id + "#" + signature(m), m, hooker));
+        }
+        if (handles.isEmpty()) {
+            throw new IllegalArgumentException("no method " + cls.getName() + "." + name);
+        }
+        return handles;
+    }
+
+    /**
+     * An OEM class or method name folded into an id segment: lower case, and an underscore
+     * where a capital was. Those names are literals in our source or come off the target class,
+     * neither of which R8 touches, so the segment is as stable as the hook itself.
+     */
+    public static String slug(String name) {
+        StringBuilder b = new StringBuilder(name.length() + 8);
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (b.length() > 0) b.append('_');
+                b.append(Character.toLowerCase(c));
+            } else {
+                b.append(c);
+            }
+        }
+        return b.toString();
+    }
+
+    public static String signature(Executable e) {
+        StringBuilder b = new StringBuilder();
+        for (Class<?> p : e.getParameterTypes()) {
+            if (b.length() > 0) b.append(',');
+            b.append(p.getSimpleName());
+        }
+        return b.length() == 0 ? "()" : b.toString();
+    }
+
+    /** Every constructor, id per signature: {@code id + "#<init>(" + parameters + ")"}. */
+    public static List<XposedInterface.HookHandle> hookAllConstructors(String id, Class<?> cls,
                                                                 XposedInterface.Hooker hooker) {
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         for (Constructor<?> c : cls.getDeclaredConstructors()) {
-            handles.add(api().hook(c).intercept(hooker));
+            handles.add(hook(id + "#<init>(" + signature(c) + ")", c, hooker));
         }
         return handles;
     }
 
     // ---------------------------------------------------------------- fields
+
+    /**
+     * The classes either ClassValue has computed an entry for. A ClassValue value is held on the
+     * Class, and its key is an instance of ours - so every calculated class pins this
+     * generation's class loader until the entry is removed. Weak, and only read at retirement.
+     */
+    private static final java.util.Set<Class<?>> FIELD_CLASSES =
+            java.util.Collections.synchronizedSet(
+                    java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
+    private static final java.util.Set<Class<?>> METHOD_CLASSES =
+            java.util.Collections.synchronizedSet(
+                    java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
 
     /** The declared fields of a class by name, for the same reason the methods are cached. */
     private static final ClassValue<java.util.concurrent.ConcurrentHashMap<String, Field>>
@@ -244,6 +318,7 @@ public final class Xp {
                 @Override
                 protected java.util.concurrent.ConcurrentHashMap<String, Field> computeValue(
                         Class<?> type) {
+                    FIELD_CLASSES.add(type);
                     java.util.concurrent.ConcurrentHashMap<String, Field> byName =
                             new java.util.concurrent.ConcurrentHashMap<>();
                     for (Field f : type.getDeclaredFields()) {
@@ -259,7 +334,7 @@ public final class Xp {
 
     private static Field field(Object obj, String name) {
         for (Class<?> c = obj.getClass(); c != null; c = c.getSuperclass()) {
-            Field f = DECLARED_FIELDS.get(c).get(name);
+            Field f = cached(DECLARED_FIELDS, FIELD_CLASSES, c).get(name);
             if (f != null) return f;
         }
         throw new IllegalArgumentException("no field " + obj.getClass().getName() + "." + name);
@@ -352,6 +427,7 @@ public final class Xp {
                 @Override
                 protected java.util.concurrent.ConcurrentHashMap<String, Overload[]> computeValue(
                         Class<?> type) {
+                    METHOD_CLASSES.add(type);
                     java.util.concurrent.ConcurrentHashMap<String, Overload[]> byName =
                             new java.util.concurrent.ConcurrentHashMap<>();
                     for (Method m : type.getDeclaredMethods()) {
@@ -372,12 +448,55 @@ public final class Xp {
             };
 
     /**
+     * [value]'s entry for [c], not left on the class once this generation is no longer live.
+     *
+     * The drop below runs on the binder thread as the retirement returns, while a thread of
+     * ours can still be finishing on the old code (GL, a lookup); an entry it computed after the
+     * drop would pin this loader again. The drop comes after retired is set, and both sides go
+     * through [classes]' lock, so an entry added after the drop sees retired here and goes.
+     */
+    private static <T> T cached(ClassValue<T> value, java.util.Set<Class<?>> classes, Class<?> c) {
+        T v = value.get(c);
+        if (!Gen.live()) {
+            synchronized (classes) {
+                try {
+                    value.remove(c);
+                } catch (Throwable ignored) {
+                }
+                classes.remove(c);
+            }
+        }
+        return v;
+    }
+
+    /**
+     * Drops both ClassValue entries, so the classes stop pointing at this generation. Called
+     * at retirement, after retired is set; what is asked after that is not cached ([cached]).
+     */
+    static void dropClassValues() {
+        dropClassValues(DECLARED_FIELDS, FIELD_CLASSES);
+        dropClassValues(DECLARED_METHODS, METHOD_CLASSES);
+    }
+
+    private static void dropClassValues(ClassValue<?> value, java.util.Set<Class<?>> classes) {
+        synchronized (classes) {
+            for (Class<?> c : classes) {
+                try {
+                    value.remove(c);
+                } catch (Throwable ignored) {
+                }
+            }
+            classes.clear();
+        }
+    }
+
+    /**
      * The order is the one the scan had: nearest class first, and within a class the order
      * getDeclaredMethods() reported, so a name with several overloads still picks the same one.
      */
     private static Method findMethod(Class<?> cls, String name, Object[] args) {
         for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
-            Overload[] cands = DECLARED_METHODS.get(c).get(name);
+            Overload[] cands = cached(DECLARED_METHODS, METHOD_CLASSES, c).get(name);
             if (cands == null) continue;
             for (Overload o : cands) {
                 Class<?>[] p = o.params;

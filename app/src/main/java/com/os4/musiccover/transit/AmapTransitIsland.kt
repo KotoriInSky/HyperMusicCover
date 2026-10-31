@@ -168,7 +168,7 @@ internal object AmapTransitIsland {
      */
     fun handle() {
         try {
-            Xp.hookAll(NotificationManager::class.java, "notify") { chain ->
+            Xp.hookAll("amap.transit.notify", NotificationManager::class.java, "notify") { chain ->
                 val a = chain.args
                 val id = a.firstOrNull { it is Int } as Int?
                 if (id == AMAP_WALK_ID) {
@@ -183,7 +183,7 @@ internal object AmapTransitIsland {
                 if (held++ == 0) Xp.log(TAG + "holding back 高德's own $AMAP_UA_ID")
                 null
             }
-            Xp.hookAll(NotificationManager::class.java, "cancel") { chain ->
+            Xp.hookAll("amap.transit.cancel", NotificationManager::class.java, "cancel") { chain ->
                 val id = chain.args.firstOrNull { it is Int } as Int?
                 if (id == AMAP_WALK_ID) AmapTransitShare.walkIsland(false)
                 chain.proceed()
@@ -195,11 +195,11 @@ internal object AmapTransitIsland {
         // the page an intent started. The walk is asked for once it is resumed.
         try {
             val instr = android.app.Instrumentation::class.java
-            Xp.hookAll(instr, "callActivityOnNewIntent") { chain ->
+            Xp.hookAll("amap.transit.new_intent", instr, "callActivityOnNewIntent") { chain ->
                 (chain.args.firstOrNull { it is Intent } as Intent?)?.let { takeWalk(it) }
                 chain.proceed()
             }
-            Xp.hookAll(instr, "callActivityOnResume") { chain ->
+            Xp.hookAll("amap.transit.resume", instr, "callActivityOnResume") { chain ->
                 val out = chain.proceed()
                 (chain.args.firstOrNull() as? android.app.Activity)?.intent?.let { takeWalk(it) }
                 if (walkAsked) {

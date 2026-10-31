@@ -2,6 +2,7 @@ package com.os4.musiccover.lyrics;
 import com.os4.musiccover.MediaCard;
 import com.os4.musiccover.ClockCollapse;
 import com.os4.musiccover.Main;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Context;
 import android.graphics.Canvas;
@@ -516,7 +517,7 @@ final class LyricView extends View {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        getViewTreeObserver().addOnPreDrawListener(preDraw);
+        Gen.preDraw(this, preDraw);
         lastStep = 0L;
         LockLyrics.startTick();
         kick();
@@ -532,7 +533,7 @@ final class LyricView extends View {
         if (paletteWork != null) blurHandler().removeCallbacks(paletteWork);
         paletteWork = null;
         appearance = null;
-        getViewTreeObserver().removeOnPreDrawListener(preDraw);
+        Gen.unpreDraw(this, preDraw);
         removeCallbacks(frame);
         looping = false;
         lastLoopFrame = 0L;

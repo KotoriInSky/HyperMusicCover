@@ -1,4 +1,7 @@
 package com.os4.musiccover.island;
+
+import com.os4.musiccover.Xp;
+
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
@@ -10,6 +13,12 @@ import java.util.List;
 /** Adds the module's policy to the OEM combine's inputs, so it emits through its own coroutine. */
 public final class NotificationSink {
     private final List<WeakReference<Object>> policies = new ArrayList<>();
+    /**
+     * The combines whose input array holds one of our policies. The combine is stateIn(Eagerly):
+     * it is collected once, with the array it held then, so what a later generation writes into
+     * the field is never read. Kept for the handover's older half (see {@link #adopt}).
+     */
+    private final List<WeakReference<Object>> owners = new ArrayList<>();
     private int requestedMode;
     private long emissions;
     private final List<String> history = new ArrayList<>();
@@ -30,6 +39,73 @@ public final class NotificationSink {
             history.add(state);
             if (history.size() > 8) history.remove(0);
         }
+    }
+
+    /**
+     * The combines this generation injected into, for the next generation. Host objects only.
+     * Nothing is put back on retirement: the running collection holds our 8-element array
+     * whatever the field says, so restoring the field only made the next generation inject a
+     * policy no one collects.
+     */
+    public synchronized Object[] owners() {
+        return live(owners);
+    }
+
+    /**
+     * The policy flows themselves - kotlinx's MutableStateFlow from SystemUI's own loader, so a
+     * host object that may cross a generation. The one the running combine collects is in here,
+     * and it is the only input the next generation can still move the combine with.
+     */
+    public synchronized Object[] policies() {
+        return live(policies);
+    }
+
+    private static Object[] live(List<WeakReference<Object>> refs) {
+        List<Object> out = new ArrayList<>();
+        for (WeakReference<Object> r : refs) {
+            Object o = r.get();
+            if (o != null) out.add(o);
+        }
+        return out.toArray();
+    }
+
+    /**
+     * Takes the live combines over after a hot reload. [handed] are the previous generation's
+     * policy flows, the ones actually collected: they become ours, and refresh() writes the mode
+     * into them. [owners] are its combines; a previous build put the OEM's 7-element array back
+     * into them on retirement, and those are injected into again - which only reaches a
+     * collection that starts later, but is all that can be done for a build that did not hand
+     * its flows over.
+     */
+    public synchronized void adopt(Object[] owners, Object[] handed, int mode) {
+        int taken = 0;
+        if (handed != null) {
+            for (Object policy : handed) {
+                if (policy == null || contains(policies, policy)) continue;
+                policies.add(new WeakReference<>(policy));
+                taken++;
+            }
+        }
+        int attached = 0;
+        int total = owners == null ? 0 : owners.length;
+        if (owners != null) {
+            for (Object owner : owners) {
+                if (owner == null) continue;
+                try {
+                    if (attach(owner, mode)) attached++;
+                    else if (!contains(this.owners, owner)) this.owners.add(new WeakReference<>(owner));
+                } catch (Throwable t) {
+                    Xp.log("[MCNotify] re-attach to a live combine failed: " + t);
+                }
+            }
+        }
+        Xp.log("[MCNotify] adopted " + taken + " policy flow(s), re-attached to " + attached + "/"
+                + total + " combine(s), mode=" + mode);
+    }
+
+    private static boolean contains(List<WeakReference<Object>> refs, Object o) {
+        for (WeakReference<Object> r : refs) if (r.get() == o) return true;
+        return false;
     }
 
     public synchronized String describe() {
@@ -59,6 +135,7 @@ public final class NotificationSink {
             inputs[7] = policy;
             field.set(combinedFlow, inputs);
             policies.add(new WeakReference<>(policy));
+            owners.add(new WeakReference<>(combinedFlow));
             return true;
         }
         return false;

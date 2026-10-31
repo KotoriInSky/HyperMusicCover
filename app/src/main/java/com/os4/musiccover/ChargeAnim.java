@@ -149,12 +149,12 @@ final class ChargeAnim {
                     CLS_CHARGE_PKG + "container.MiuiChargeAnimationView", cl);
             // After the call, not before: the point of the snapshot is what the tree looks like
             // with the animation in it, and addChargeView is what puts it there.
-            Xp.hookAll(chargeAnim, "addChargeView", chain -> {
+            Xp.hookAll("sysui.charge.add_view", chargeAnim, "addChargeView", chain -> {
                 Object result = chain.proceed();
                 noteChargeAnim(true, chain.getThisObject());
                 return result;
             });
-            Xp.hookAll(chargeAnim, "removeChargeView", chain -> {
+            Xp.hookAll("sysui.charge.remove_view", chargeAnim, "removeChargeView", chain -> {
                 Object result = chain.proceed();
                 noteChargeAnim(false, chain.getThisObject());
                 return result;

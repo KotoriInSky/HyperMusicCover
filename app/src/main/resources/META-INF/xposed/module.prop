@@ -5,3 +5,7 @@ targetApiVersion=102
 # The module hooks two specific system packages and does nothing anywhere else, so the scope
 # is not something a user should widen.
 staticScope=true
+# Installing an update asks every running process to take the new code without a restart. The
+# module's own check decides which processes accept (HotReloadPolicy.SUPPORTED); the rest stay
+# on the old build and the home page offers its restart.
+autoHotReload=true

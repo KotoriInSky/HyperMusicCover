@@ -1,6 +1,7 @@
 package com.os4.musiccover.pickup
 import com.os4.musiccover.Main
 import com.os4.musiccover.R
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.app.ActivityManager
 import android.app.Notification
@@ -165,7 +166,7 @@ internal object PickupIsland {
         // (Switching the card to `setImageViewResource` or `setImageViewBitmap` would move this to
         // `setImageDrawable`, and a bitmap carries the one frame whatever is done to it.)
         runCatching {
-            Xp.hookAll(android.widget.ImageView::class.java, "setImageIcon") { chain ->
+            Xp.hookAll("sysui.pickup.icon", android.widget.ImageView::class.java, "setImageIcon") { chain ->
                 val out = chain.proceed()
                 val v = chain.thisObject
                 // Guarded: this runs inside the host's own `setImageIcon`, and an exception here
@@ -180,7 +181,7 @@ internal object PickupIsland {
             // The other half of RemoteViews: an asynchronous apply loads the icon off the main
             // thread through `setImageIconAsync` and hands back a Runnable that only *sets* the
             // drawable later (`setImageDrawable`), so the hook above never sees that card.
-            Xp.hookAll(android.widget.ImageView::class.java, "setImageIconAsync") { chain ->
+            Xp.hookAll("sysui.pickup.icon_async", android.widget.ImageView::class.java, "setImageIconAsync") { chain ->
                 val out = chain.proceed()
                 val v = chain.thisObject
                 if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon && out is Runnable) {
@@ -200,7 +201,7 @@ internal object PickupIsland {
             // it to show and hide its drawable; it is not called per frame). The picture is set
             // again from its icon rather than `start()`ed: a finished one-shot does not rewind, a
             // freshly loaded one plays from the empty cup.
-            Xp.hookAll(android.widget.ImageView::class.java, "onVisibilityAggregated") { chain ->
+            Xp.hookAll("sysui.pickup.icon_visibility", android.widget.ImageView::class.java, "onVisibilityAggregated") { chain ->
                 val out = chain.proceed()
                 val v = chain.thisObject
                 if (v is android.widget.ImageView && v.id == R.id.mc_pickup_icon
@@ -315,13 +316,27 @@ internal object PickupIsland {
         val now = SystemClock.elapsedRealtime()
         if ((muted["$brand|${r.code}"] ?: 0L) > now) return
         val ctx = Main.appContext() ?: return
+        // The same order read in another task: the card up for it moves over rather than a second
+        // one going up. 微信 makes a new task for the same page whenever the old one could not be
+        // brought back - a parked task that would not move back to the phone's display, a mini
+        // program closed and opened again - and with one card per task the same code stood on the
+        // lock screen twice (#115, 肯德基's A0038).
+        // A task whose own card is only waiting for its code (瑞幸's 148 and 153, both 940) moves
+        // the other over too, its waiting card going down for it.
+        val moved = if (r.code.isNotEmpty() && cards[page.task]?.key?.split('|')?.getOrNull(1).isNullOrEmpty())
+            adopt(ctx, brand, r.code, page.task) else null
         val card = cards.getOrPut(page.task) { Card(page) }
         card.page = page
         // The notification goes by itself once its timeout is up, and the island with it; nothing on
         // that path tells us (a timeout is not a dismissal, so no delete intent). So ask the system:
         // with the card gone, its key is not evidence of anything, and what comes next is fresh.
         if (card.key != null && up(ctx, card) == false) clear(card)
-        if (key == card.key) return
+        // A code once read stays: a read that found none - 瑞幸's page between two renders - put the
+        // card back to 「等待出码」 and floated it open, and the next read brought 940 back and floated
+        // it again, over and over (#115). The watch on the order skips such a read the same way.
+        if (r.code.isEmpty() && card.key?.split('|')?.getOrNull(1)?.isNotEmpty() == true) return
+        // Moved, it is posted again all the same: its taps still carry the old task.
+        if (key == card.key && moved == null) return
         // A new code floats the island open; so does the order turning ready to collect. A state
         // changing again while it is already ready only updates, and so does the shop.
         val sameCode = card.key?.startsWith("$brand|${r.code}|") == true
@@ -335,6 +350,23 @@ internal object PickupIsland {
     }
 
     private fun ready(status: String?): Boolean = PickupParse.isReady(status)
+
+    /**
+     * Another task's card for [brand]'s [code], moved to [task] - over the card [task] had waiting
+     * for its code, if any; the task it moves from, or null when there is none. That task's wait
+     * ends - the order is read from the new one now, and the old one, if it is still about, would
+     * only put the card back where it was on its next round.
+     */
+    private fun adopt(c: Context, brand: String, code: String, task: Int): Int? {
+        val from = cards.entries.firstOrNull { (t, card) ->
+            t != task && card.key?.startsWith("$brand|$code|") == true
+        }?.key ?: return null
+        val card = cards.remove(from) ?: return null
+        cards.put(task, card)?.takeIf { it.key != null }?.let { cancel(c, it) }
+        Xp.log(TAG + "$brand $code: card moved from task $from to $task")
+        PickupObserver.end(from, "the order is read in task $task")
+        return from
+    }
 
     /** A colour out of the rules XML as `#RRGGBB`, or the fallback when it cannot be read. */
     private fun colour(value: String?, fallback: String): String = runCatching {
@@ -432,6 +464,18 @@ internal object PickupIsland {
         receivers(ctx)
     }
 
+    /**
+     * Retirement: the guard that keeps wake() from registering twice is the only thing that
+     * would keep the next generation from registering at all - the receiver itself is in Gen's
+     * ledger and the sweep takes it. The cards stay posted: they are the user's order.
+     */
+    @JvmStatic
+    fun retire() {
+        receivers = false
+        PickupObserver.retire()
+        PickupPark.retire()
+    }
+
     private fun receivers(ctx: Context) {
         if (receivers) return
         receivers = true
@@ -446,7 +490,7 @@ internal object PickupIsland {
                 }
             }
         }
-        ctx.registerReceiver(r, IntentFilter().apply {
+        Gen.receiver(ctx, r, IntentFilter().apply {
             addAction(ACTION_OPEN)
             addAction(ACTION_GONE)
             addAction(ACTION_PICKED)

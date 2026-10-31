@@ -1,4 +1,5 @@
 package com.os4.musiccover.transit
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.content.ContentProviderClient
 import android.content.ContentResolver
@@ -61,10 +62,20 @@ internal object AmapOppoBridge {
     private val acquires = AtomicInteger()
     private val shares = AtomicInteger()
 
+    /** The clients still out, for the next generation (HotReload.saveFeatures). */
+    fun save(): Array<Any?> = synchronized(ours) { ours.toTypedArray<Any?>() }
+
+    /** The previous generation's clients, taken as ours before the hooks go in. */
+    fun adopt(saved: Array<Any?>?) {
+        val clients = saved?.filterIsInstance<ContentProviderClient>() ?: return
+        ours.addAll(clients)
+        if (clients.isNotEmpty()) Xp.log(TAG + "adopted ${clients.size} stand-in client(s)")
+    }
+
     fun handle(cl: ClassLoader) {
         try {
             for (name in arrayOf("acquireUnstableContentProviderClient", "acquireContentProviderClient")) {
-                Xp.hookAll(ContentResolver::class.java, name) { chain ->
+                Xp.hookAll("amap.bridge.acquire." + Xp.slug(name), ContentResolver::class.java, name) { chain ->
                     val out = chain.proceed()
                     val asked = chain.args.getOrNull(0)
                     if (out != null || asked !is String || asked != AUTHORITY) return@hookAll out
@@ -81,7 +92,7 @@ internal object AmapOppoBridge {
                     client
                 }
             }
-            Xp.hookAll(ContentProviderClient::class.java, "call") { chain ->
+            Xp.hookAll("amap.bridge.provider_call", ContentProviderClient::class.java, "call") { chain ->
                 if (chain.thisObject !in ours) return@hookAll chain.proceed()
                 val a = chain.args
                 // call(method, arg, extras), or call(authority, method, arg, extras).
@@ -97,7 +108,7 @@ internal object AmapOppoBridge {
             val service = Xp.findClass(WEARABLE_SERVICE, cl)
             bridgeOppo(service, cl)
             // The card's channel goes when the script's does.
-            Xp.hookAll(service, "bizEnd") { chain ->
+            Xp.hookAll("amap.bridge.biz_end", service, "bizEnd") { chain ->
                 if (bridging.get()) return@hookAll chain.proceed()
                 val biz = chain.args.firstOrNull { it is Int } as Int?
                 val ours = synchronized(bridged) {
@@ -190,7 +201,7 @@ internal object AmapOppoBridge {
                     m.parameterTypes[0] != Integer.TYPE
                 ) continue
                 m.isAccessible = true
-                Xp.hook(m) { chain ->
+                Xp.hook("amap.bridge.biz_table", m) { chain ->
                     val out = chain.proceed()
                     // Only a channel the bridge opened, and never 10200's own list.
                     val biz = chain.args.firstOrNull { it is Int } as Int?
@@ -213,7 +224,7 @@ internal object AmapOppoBridge {
                 begin.isAccessible = true
                 val iface = ifaceOf(begin)
                 val data = begin.parameterTypes.getOrNull(1) == String::class.java
-                Xp.hook(begin) { chain ->
+                Xp.hook("amap.bridge." + Xp.slug(begin.name), begin) { chain ->
                     val a = chain.args
                     val biz = a.firstOrNull { it is Int } as Int?
                     val svc = a.firstOrNull { iface.isInstance(it) }
@@ -242,7 +253,7 @@ internal object AmapOppoBridge {
     private fun hookOppoCard() {
         val card = oppoCard ?: return
         try {
-            Xp.hookAll(card, "isSupport") { chain ->
+            Xp.hookAll("amap.bridge.card_support", card, "isSupport") { chain ->
                 arm(chain.thisObject)
                 chain.proceed()
             }
@@ -250,7 +261,7 @@ internal object AmapOppoBridge {
             Xp.log(TAG + "card isSupport not hooked: $t")
         }
         try {
-            Xp.hookAll(card, "connect") { chain ->
+            Xp.hookAll("amap.bridge.card_connect", card, "connect") { chain ->
                 setBridged("card", "connected")
                 Xp.log(TAG + "$OPPO_DEVICE connected, provider=$PROVIDER intent=$INTENT")
                 chain.proceed()
@@ -331,11 +342,22 @@ internal object AmapOppoBridge {
                 val cbType = (method ?: plain)?.parameterTypes?.get(1) ?: return
                 // The service drops a begin whose callback is null, so a stand-in of the script's
                 // own kind is made; only the card's connection state ever goes to it.
+                // The service keeps it for the ride, past a retirement; a retired generation's
+                // copy answers nothing. Its identity is answered either way - null there was an
+                // NPE for whoever put it in a map.
                 val cb = java.lang.reflect.Proxy.newProxyInstance(
                     cbType.classLoader, arrayOf(cbType)
-                ) { _, m, args ->
-                    if (m.name == "callback") setBridged(key, "callback " + args?.firstOrNull())
-                    null
+                ) { self, m, args ->
+                    when (m.name) {
+                        "hashCode" -> System.identityHashCode(self)
+                        "equals" -> self === args?.firstOrNull()
+                        "toString" -> "MusicCover OPPO card callback"
+                        "callback" -> {
+                            if (Gen.live()) setBridged(key, "callback " + args?.firstOrNull())
+                            null
+                        }
+                        else -> null
+                    }
                 }
                 if (method != null) {
                     // The card's provider and intent come from the begin data (il3.onReceiveBizBeginData),

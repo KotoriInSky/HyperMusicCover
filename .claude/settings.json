@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(*gradlew*)",
+      "PowerShell(*gradlew*)",
+      "Bash(*kill*com.android.systemui*)",
+      "Bash(*kill*com.miui.miwallpaper*)",
+      "PowerShell(*kill*com.android.systemui*)",
+      "PowerShell(*kill*com.miui.miwallpaper*)"
+    ]
+  }
+}

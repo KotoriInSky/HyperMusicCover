@@ -1,6 +1,7 @@
 package com.os4.musiccover.island
 import com.os4.musiccover.Main
 import com.os4.musiccover.PageSpring
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -63,7 +64,8 @@ internal object DateStatus {
     /** The segments in the order they stand after the date. */
     private val ORDER = listOf("zen", "charge", "trust", "owner")
 
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Gen.handler()
+
 
     /** Whether the islands are on: the placement is fixed (MiniPlayerRuntime.statusAtDate). */
     @Volatile private var switchOn = false
@@ -149,6 +151,12 @@ internal object DateStatus {
             frame()
         }
 
+        /** Retirement: whatever it was moving towards does not arrive. */
+        fun cancel() {
+            anim?.cancel()
+            anim = null
+        }
+
         fun to(target: Float, response: Float, end: (() -> Unit)? = null) {
             anim?.cancel()
             anim = null
@@ -197,13 +205,13 @@ internal object DateStatus {
             return
         }
         runCatching {
-            Xp.hookAll(cls, "onMeasure") { chain ->
+            Xp.hookAll("sysui.datestatus.classic_measure", cls, "onMeasure") { chain ->
                 val result = chain.proceed()
                 runCatching { measured(chain.thisObject as TextView, (chain.args[0] as Number).toInt()) }
                     .onFailure { Xp.log(TAG + "measure: $it") }
                 result
             }
-            Xp.hookAll(cls, "onDraw") { chain ->
+            Xp.hookAll("sysui.datestatus.classic_draw", cls, "onDraw") { chain ->
                 val v = chain.thisObject as TextView
                 val host = hosts[v]
                 val canvas = chain.args[0] as Canvas
@@ -226,7 +234,7 @@ internal object DateStatus {
             return
         }
         runCatching {
-            Xp.hookAll(cls, "updateIndication") { chain ->
+            Xp.hookAll("sysui.datestatus.indication_update", cls, "updateIndication") { chain ->
                 val type = (chain.args[0] as? Number)?.toInt()
                 if (passing || type == null || type !in MOVED || chain.args.size != 3) {
                     return@hookAll chain.proceed()
@@ -255,7 +263,7 @@ internal object DateStatus {
             }
             // Withheld, the controller has nothing under the type and returns early; this is how
             // we hear that it went.
-            Xp.hookAll(cls, "hideIndication") { chain ->
+            Xp.hookAll("sysui.datestatus.indication_hide", cls, "hideIndication") { chain ->
                 val type = (chain.args.getOrNull(0) as? Number)?.toInt()
                 if (!passing && type != null && type in MOVED) {
                     controllerRef = WeakReference(chain.thisObject)
@@ -276,7 +284,7 @@ internal object DateStatus {
             return
         }
         runCatching {
-            Xp.hookAll(cls, "onMeasure") { chain ->
+            Xp.hookAll("sysui.datestatus.numstate_measure", cls, "onMeasure") { chain ->
                 val result = chain.proceed()
                 val v = chain.thisObject as View
                 numStateRef = WeakReference(v)
@@ -337,11 +345,47 @@ internal object DateStatus {
                 host.offset.snap(0f)
             }
         }
-        if (Looper.myLooper() == Looper.getMainLooper()) reset() else main.post { reset() }
+        if (Looper.myLooper() == Looper.getMainLooper()) reset() else Gen.post { reset() }
+    }
+
+    /**
+     * Retirement: the indications the date was holding go back to the OEM's controller, the
+     * segments stop moving, and every host gets its own matrix and width back. The hosts map is
+     * cleared so the next generation's first layout builds fresh ones - the map is what keeps a
+     * host from registering its layout listener a second time, and the sweep takes the listener.
+     */
+    @JvmStatic
+    fun retire() {
+        // Not alive any more: sync() then hands every withheld indication back.
+        lastAlive = false
+        lastActive = false
+        runCatching { sync() }
+        for (seg in shown) {
+            seg.alpha.cancel()
+            seg.shift.cancel()
+        }
+        shown.clear()
+        for (h in hosts.values) {
+            h.layout = null
+            h.base = 0
+            h.extra = 0
+            h.laidExtra = 0
+            h.offset.cancel()
+            h.offset.snap(0f)
+        }
+        hosts.clear()
+        indications.clear()
+        withheld.clear()
+        controllerRef = null
+        updateMethod = null
+        numStateRef = null
+        passing = false
+        ctx = null
+        switchRead = false
     }
 
     private fun later() {
-        main.post(::update)
+        Gen.post(::update)
     }
 
     private fun start(c: Context) {
@@ -355,7 +399,7 @@ internal object DateStatus {
         }
         readZen()
         runCatching {
-            cr.registerContentObserver(zenUri, false, object : ContentObserver(main) {
+            Gen.observer(cr, zenUri, false, object : ContentObserver(main) {
                 override fun onChange(selfChange: Boolean) {
                     readZen()
                     update()
@@ -366,11 +410,11 @@ internal object DateStatus {
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(context: Context, i: Intent) { battery(i) }
             }
-            app.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), null, main)
+            Gen.receiver(app, receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), null, null)
                 ?.let(::battery)
         }.onFailure { Xp.log(TAG + "battery not watched: $it") }
         Xp.log(TAG + "watching zen=$zen plugged=$plugged level=$level")
-        main.post(::update)
+        Gen.post(::update)
     }
 
     private fun battery(i: Intent) {
@@ -560,7 +604,7 @@ internal object DateStatus {
         val host = hosts.getOrPut(v) {
             start(v.context)
             Host(v).also { h ->
-                v.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
+                val layoutListener = View.OnLayoutChangeListener { _, l, t, r, b, _, _, _, _ ->
                     val previous = h.layout
                     val current = DateStatusLayout(l, t, r - l, b - t,
                         (v.parent as? View)?.width ?: 0, h.extra, MiniPlayerScene.aodActive)
@@ -575,21 +619,30 @@ internal object DateStatus {
                         h.offset.to(0f, 0.42f)
                     }
                 }
-                v.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                Gen.layoutChange(v, layoutListener)
+                Gen.attachState(v, object : View.OnAttachStateChangeListener {
                     override fun onViewAttachedToWindow(view: View) {
                         h.layout = null
                         h.offset.snap(0f)
                         later()
                     }
+
                     override fun onViewDetachedFromWindow(view: View) {
                         h.layout = null
                         h.offset.snap(0f)
                         later()
+                        // The keyguard is rebuilt and this view goes with it. Left registered,
+                        // these listeners and the host would keep the whole old tree reachable
+                        // and the ledger one entry longer per rebuild; a view that comes back
+                        // is measured again and gets a new host in the same cleared state.
+                        Gen.unlayoutChange(view, layoutListener)
+                        Gen.unattachState(view, this)
+                        hosts.remove(view)
                     }
                 })
             }
         }
-        if (hostAlive() != lastAlive) main.post(::update)
+        if (hostAlive() != lastAlive) Gen.post(::update)
         host.base = v.measuredWidth
         val mode = View.MeasureSpec.getMode(wSpec)
         if (shown.isEmpty()) {

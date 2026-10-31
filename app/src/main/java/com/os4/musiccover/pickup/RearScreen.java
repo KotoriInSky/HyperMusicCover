@@ -92,7 +92,7 @@ public final class RearScreen {
      */
     private static void startTheDrink() {
         try {
-            Xp.hookAll(android.widget.ImageView.class, "setImageIcon", chain -> {
+            Xp.hookAll("sub.rear.image", android.widget.ImageView.class, "setImageIcon", chain -> {
                 Object out = chain.proceed();
                 Object view = chain.getThisObject();
                 if (view instanceof android.widget.ImageView
@@ -118,7 +118,7 @@ public final class RearScreen {
 
     private static void allow(Class<?> resolver, String name) {
         try {
-            Xp.hookAll(resolver, name, chain -> {
+            Xp.hookAll("sub.rear.allow." + Xp.slug(name), resolver, name, chain -> {
                 Object[] args = chain.getArgs().toArray();
                 boolean ours = args.length > 0 && OURS.equals(args[0]);
                 Object result = chain.proceed(args);

@@ -210,6 +210,11 @@ internal fun CoverPageView(
                 ModuleBridge.markLost()
                 return@LaunchedEffect
             }
+            // Nothing to read: the defaults would turn the glass row off and forget the artwork.
+            if (!reply.answered) {
+                delay(SHOT_POLL_MS)
+                continue
+            }
             if (!reply.artUnchanged) artTrack = reply.track
             if (reply.clockHasGlass != module.clockHasGlass) {
                 module = module.copy(clockHasGlass = reply.clockHasGlass)

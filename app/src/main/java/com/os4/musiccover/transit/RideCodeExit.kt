@@ -1,4 +1,5 @@
 package com.os4.musiccover.transit
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Main
 import com.os4.musiccover.ProbeGuard
 import com.os4.musiccover.Xp
@@ -54,13 +55,13 @@ internal object RideCodeExit {
     /** A station's fare: 「<in> -> <out>：<amount>元」. Only the two stations are passed on. */
     private val FARE = Regex("(.+) -> (.+)[：:].*元")
 
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Gen.handler()
     private var lastTop: ComponentName? = null
 
     /** SystemUI's loader. Each hook stands on its own. */
     fun install(cl: ClassLoader) {
         runCatching {
-            Xp.hookAll(Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
+            Xp.hookAll("sysui.ride_exit.top_activity", Xp.findClass(TOP_OBSERVER, cl), "updateTopActivity") { chain ->
                 val out = chain.proceed()
                 runCatching {
                     val state = Xp.getObjectField(chain.thisObject, "mState")
@@ -73,7 +74,7 @@ internal object RideCodeExit {
         runCatching {
             // postNotification(Ranking, StatusBarNotification): the collection's own entry for a
             // post (this build has no onNotificationPosted of its own; its handler calls this).
-            Xp.hookAll(Xp.findClass(NOTIF_COLLECTION, cl), "postNotification") { chain ->
+            Xp.hookAll("sysui.ride_exit.notification", Xp.findClass(NOTIF_COLLECTION, cl), "postNotification") { chain ->
                 val out = chain.proceed()
                 val sbn = chain.args.firstOrNull { it is StatusBarNotification } as? StatusBarNotification
                 if (sbn?.packageName == MI_CARD) {

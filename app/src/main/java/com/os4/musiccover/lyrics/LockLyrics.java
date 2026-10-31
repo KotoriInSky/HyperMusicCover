@@ -6,6 +6,7 @@ import com.os4.musiccover.CoverCardLayer;
 import com.os4.musiccover.CoverMorphRoute;
 import com.os4.musiccover.CoverPush;
 import com.os4.musiccover.Main;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.content.Intent;
 import android.media.session.MediaController;
@@ -1292,6 +1293,60 @@ public final class LockLyrics {
         }
     }
 
+    /**
+     * Retirement: the page comes out of wherever it lives, and the tick and the heartbeat stop.
+     *
+     * <p>Not setEnabled(false): that switch is the user's and is written to the state file, and
+     * the next generation reads it again. The lines and their cache stay - they are text, and a
+     * dry run puts the same page straight back up - so the rebuild does not have to go looking
+     * for the lyric again.
+     */
+    public static void retire() {
+        // A lookup still on its thread answers into this generation later; its gen check is what
+        // drops that answer instead of putting the page back up. Not in a dry run: the same
+        // generation comes straight back, and its lookup's answer is still the one it wants.
+        if (!com.os4.musiccover.Gen.live()) sGen++;
+        Main.main().removeCallbacks(TICK);
+        Main.main().removeCallbacks(WATCH);
+        // The display listener is Gen's and goes with the sweep; this latch is what would stop
+        // the next generation from registering its own.
+        sDisplayWatched = false;
+        cancelStillWake();
+        if (sDrawLock != null && sDrawLock.isHeld()) {
+            try {
+                sDrawLock.release();
+            } catch (Throwable ignored) {
+            }
+        }
+        LyricView v = sView;
+        sView = null;
+        if (v != null) {
+            if (sHolding) {
+                sHolding = false;
+                v.setKeepScreenOn(false);
+            }
+            watchProximity(false);
+            if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+        }
+        // With no page up the proximity listener is still Gen's, and the sweep takes it; its
+        // latch has to go with it.
+        sProximity = null;
+        sCovered = false;
+        // The window last: it is a window of its own when the HDR switch is on, and it is not
+        // reachable through the keyguard's tree.
+        LyricWindow.remove();
+        sCard = null;
+        // The blur is a value in the wallpaper process, not a view that goes with the page. The
+        // next generation asks for it again from refresh().
+        try {
+            long blur = setBlurSent(false);
+            CoverPush.sendToWallpaper("lyricblur", false, blur >>> 1);
+            CoverPush.updateVideoCoverBlur(false);
+        } catch (Throwable t) {
+            Xp.w(TAG + "blur release failed: " + t);
+        }
+    }
+
     /** HDR on: the lyrics' own window, so the colour mode is theirs and not the media card's. */
     private static LyricView inWindow(View anchor) {
         LyricView old = sView;
@@ -1320,6 +1375,7 @@ public final class LockLyrics {
             if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
             ((ViewGroup) layer).addView(v, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView((ViewGroup) layer, v);
             Xp.log(TAG + "view attached, " + sLines.size() + " lines");
         }
         return v;
@@ -1806,7 +1862,7 @@ public final class LockLyrics {
         try {
             android.hardware.display.DisplayManager dm = Main.sAppCtx.getSystemService(
                     android.hardware.display.DisplayManager.class);
-            dm.registerDisplayListener(new android.hardware.display.DisplayManager.DisplayListener() {
+            Gen.displayListener(dm, new android.hardware.display.DisplayManager.DisplayListener() {
                 @Override
                 public void onDisplayAdded(int id) {
                 }
@@ -2019,7 +2075,7 @@ public final class LockLyrics {
                 : Main.sAppCtx.getSystemService(android.hardware.SensorManager.class);
         if (sm == null) return;
         if (!on) {
-            sm.unregisterListener(sProximity);
+            Gen.unsensorListener(sm, sProximity);
             sProximity = null;
             sCovered = false;
             return;
@@ -2044,7 +2100,7 @@ public final class LockLyrics {
             public void onAccuracyChanged(android.hardware.Sensor s, int accuracy) {
             }
         };
-        sm.registerListener(sProximity, sensor,
+        Gen.sensorListener(sm, sProximity, sensor,
                 android.hardware.SensorManager.SENSOR_DELAY_NORMAL, Main.main());
     }
 

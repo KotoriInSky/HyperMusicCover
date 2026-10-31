@@ -64,8 +64,7 @@ final class MotionCover {
     /** Copies to the shared directory; never queued behind a lookup on the network. */
     private static synchronized Handler io() {
         if (sIo == null) {
-            sIoThread = new HandlerThread("MCMotionIO");
-            sIoThread.start();
+            sIoThread = Gen.handlerThread("MCMotionIO");
             sIo = new Handler(sIoThread.getLooper());
         }
         return sIo;
@@ -73,8 +72,7 @@ final class MotionCover {
 
     private static synchronized Handler work() {
         if (sWork == null) {
-            sThread = new HandlerThread("MCMotion");
-            sThread.start();
+            sThread = Gen.handlerThread("MCMotion");
             sWork = new Handler(sThread.getLooper());
         }
         return sWork;
@@ -429,6 +427,34 @@ final class MotionCover {
 
     private static boolean sWatching;
     private static boolean sWasUnmetered;
+    private static ConnectivityManager sNetMgr;
+    private static ConnectivityManager.NetworkCallback sNetCb;
+
+    /**
+     * Retirement: the network callback and any motion video. Both are host registrations or a
+     * decoder, not views; Gen takes the callback back, and the video is handed to the same stop
+     * path a track change uses.
+     */
+    static void retire() {
+        if (sPlayingFile != null) {
+            try {
+                stopVideo("hot reload");
+            } catch (Throwable ignored) {
+            }
+        }
+        ConnectivityManager cm = sNetMgr;
+        ConnectivityManager.NetworkCallback cb = sNetCb;
+        sNetMgr = null;
+        sNetCb = null;
+        if (cm != null && cb != null) {
+            try {
+                Gen.unnetworkCallback(cm, cb);
+            } catch (Throwable ignored) {
+            }
+        }
+        sWatching = false;
+        sWasUnmetered = false;
+    }
 
     /**
      * A song that started on mobile data was never looked up, and nothing asked again once Wi-Fi
@@ -443,7 +469,9 @@ final class MotionCover {
         sWasUnmetered = unmetered(ctx);
         try {
             ConnectivityManager cm = ctx.getSystemService(ConnectivityManager.class);
-            cm.registerDefaultNetworkCallback(new ConnectivityManager.NetworkCallback() {
+            if (cm == null) return;
+            sNetMgr = cm;
+            sNetCb = new ConnectivityManager.NetworkCallback() {
                 @Override
                 public void onCapabilitiesChanged(android.net.Network n, NetworkCapabilities nc) {
                     boolean now = nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -462,8 +490,12 @@ final class MotionCover {
                 public void onLost(android.net.Network n) {
                     sWasUnmetered = false;
                 }
-            }, Main.main());
+            };
+            Gen.networkCallback(cm, sNetCb, Main.main());
         } catch (Throwable t) {
+            sWatching = false;
+            sNetMgr = null;
+            sNetCb = null;
             Xp.w(TAG + "cannot watch the network: " + t);
         }
     }

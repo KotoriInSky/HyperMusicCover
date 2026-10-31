@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import com.os4.musiccover.island.MiniPlayerViewKt;
 import com.os4.musiccover.island.MiniPlayerRuntime;
@@ -15,7 +16,8 @@ import android.view.ViewGroup;
 
 /** Temporary, non-interactive artwork shared between the OEM thumbnail and the cover. */
 final class CoverMorphLayer extends View implements Choreographer.FrameCallback {
-    private static CoverMorphLayer sView;
+    /** Volatile: the hot-reload check reads active() from the framework's thread. */
+    private static volatile CoverMorphLayer sView;
 
     private final CoverMorphMotion motion = new CoverMorphMotion();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -33,7 +35,8 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     private long lastFrame, startedAt;
     private boolean awaitArtworkPush;
     private float fullAlpha;
-    private boolean running;
+    /** Volatile: written on the main thread, read by the hot-reload check off it. */
+    private volatile boolean running;
     /** The far end is the mini player's artwork slot, not the OEM card's thumbnail. */
     private boolean mini;
 
@@ -142,6 +145,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
             v = new CoverMorphLayer(root.getContext());
             root.addView(v, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Gen.ownView(root, v);
             sView = v;
         }
         // bringToFront lays the parent out again too: only when something has come above it.
@@ -155,10 +159,15 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         v.setRequestedFrameRate(120f);
         Main.refreshMediaCardForMorph();
         CoverCardLayer.refresh();
-        Choreographer.getInstance().postFrameCallback(v);
+        Gen.frame(v);
     }
 
-    static boolean active() { return sView != null && sView.running; }
+    static boolean active() {
+        // One read: the hot-reload check calls this off the main thread, which can end the
+        // morph (sView = null) between a null check and a second read.
+        CoverMorphLayer v = sView;
+        return v != null && v.running;
+    }
 
     /** How quickly an end catches up with where its live box has moved to, in seconds. */
     private static final double ENDPOINT_TAU = 0.06;
@@ -214,6 +223,29 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
         else Main.main().post(new Runnable() { @Override public void run() { v.finish(); } });
     }
 
+    /**
+     * Retirement: the copy off the tree and the field cleared. cancel() keeps the view for the
+     * next morph - the sweep in a dry run takes it away instead, and a static still pointing at
+     * a detached view is what the next morph would find.
+     */
+    static void retire() {
+        CoverMorphLayer v = sView;
+        sView = null;
+        if (v == null) return;
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            v.finish();
+            if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+        } else {
+            Main.main().post(new Runnable() {
+                @Override
+                public void run() {
+                    v.finish();
+                    if (v.getParent() instanceof ViewGroup) ((ViewGroup) v.getParent()).removeView(v);
+                }
+            });
+        }
+    }
+
     @Override public void doFrame(long nowNs) { android.os.Trace.beginSection("MC coverMorphFrame"); try {
         if (!running) return;
         if (!isAttachedToWindow() || !Main.coverMorphStillEligible()
@@ -264,7 +296,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
                 || SystemClock.uptimeMillis() - startedAt > 2200L)) {
             finish();
         } else {
-            Choreographer.getInstance().postFrameCallback(this);
+            Gen.frame(this);
         }
     } finally { android.os.Trace.endSection(); } }
 
@@ -333,7 +365,7 @@ final class CoverMorphLayer extends View implements Choreographer.FrameCallback 
     private void finish() {
         if (!running) return;
         running = false;
-        Choreographer.getInstance().removeFrameCallback(this);
+        Gen.unframe(this);
         setRequestedFrameRate(0f);
         // Kept for the next morph; see the constructor.
         if (getVisibility() != INVISIBLE) setVisibility(INVISIBLE);

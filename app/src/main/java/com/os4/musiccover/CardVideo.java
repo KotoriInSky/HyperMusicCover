@@ -112,12 +112,23 @@ final class CardVideo {
         sPath = path;
         final int session = ++sSession;
         resetStats();
-        sThread = new HandlerThread("MCCardVideo");
-        sThread.start();
+        sThread = Gen.handlerThread("mc-card-video");
         sGl = new Handler(sThread.getLooper());
         sGl.post(() -> glLoad(path, session));
         registerScreen(ctx);
         CoverCardLayer.refresh();
+    }
+
+    /**
+     * Retirement: the player unloaded, and the guards that say "already registered" cleared.
+     * The receiver itself is Gen's to unregister; left non-null here, registerScreen() would
+     * refuse to put it back on the next generation's first video.
+     */
+    static void retire() {
+        unload("hot reload");
+        sScreen = null;
+        sWanted = false;
+        sRun = false;
     }
 
     static void unload(String why) {
@@ -179,7 +190,7 @@ final class CardVideo {
         };
         IntentFilter f = new IntentFilter(Intent.ACTION_SCREEN_OFF);
         f.addAction(Intent.ACTION_SCREEN_ON);
-        ctx.registerReceiver(sScreen, f);
+        Gen.receiver(ctx, sScreen, f);
     }
 
     /** Main thread: a frame has been drawn into the reader. */

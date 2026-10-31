@@ -1,6 +1,7 @@
 package com.os4.musiccover.app
 import com.os4.musiccover.transit.MetroCodeIsland
 import com.os4.musiccover.island.MiniPlayerConfig
+import com.os4.musiccover.HotReloadPolicy
 import com.os4.musiccover.ProbeGuard
 import com.os4.musiccover.R
 import android.content.BroadcastReceiver
@@ -42,6 +43,11 @@ object ModuleBridge {
 
     data class State(
         val alive: Boolean = false,
+        /**
+         * SystemUI took a hot reload and could not adopt it: hooks pass through until it
+         * restarts. Not [alive] - none of the other values were answered.
+         */
+        val inert: Boolean = false,
         val cover: Boolean = false,
         val auto: Boolean = false,
         /** 启用音乐锁屏封面. On for a module too old to report it: it had no way to turn off. */
@@ -648,10 +654,12 @@ object ModuleBridge {
      * starts the wait over. So for [RESTART_WAIT_MS] after one it keeps asking, and only then
      * counts down the gaps.
      */
-    suspend fun queryAlive(context: Context): State {
+    suspend fun queryAlive(context: Context, onFirst: (State) -> Unit = {}): State {
         var state = query(context)
+        onFirst(state)
         var tries = 0
-        while (!state.alive) {
+        // An inert SystemUI has answered: asking again only delays the card that says restart.
+        while (!state.alive && !state.inert) {
             val gap = if (restarting()) RESTART_POLL_MS
                       else RETRY_GAPS_MS.getOrNull(tries++) ?: return state
             kotlinx.coroutines.delay(gap)
@@ -700,6 +708,9 @@ object ModuleBridge {
     data class Preview(
         /** False when nothing answered - the module is gone, not merely without a picture. */
         val alive: Boolean = true,
+        /** False when no fields came back (a timeout, or the preview failing on the module's
+         *  side): everything below is a default, not the module's answer. */
+        val answered: Boolean = true,
         val track: String = "",
         val art: Bitmap? = null,
         val artUnchanged: Boolean = false,
@@ -747,8 +758,12 @@ object ModuleBridge {
             putExtra("shots", shots)
         })
         // Back without extras is nobody there; not back at all is a SystemUI too busy to answer
-        // within the timeout, which is not a reason to grey the page out.
-        val b = reply?.extras ?: return Preview(alive = reply == null)
+        // within the timeout, which is not a reason to grey the page out. Back with the receipt
+        // but no extras is the module there and the preview failing on its side: called gone,
+        // the page asked again, the query answered, and the poll sent the failing preview
+        // straight back - a loop with no delay on SystemUI's main thread.
+        val b = reply?.extras
+            ?: return Preview(alive = reply == null || reply.code == OP_ACK, answered = false)
         val same = b.getBoolean("same", false)
         return Preview(
             track = if (same) have else (b.getString("track") ?: ""),
@@ -811,6 +826,23 @@ object ModuleBridge {
         op: String,
         extras: Intent.() -> Unit = {},
     ): Bundle? = broadcast(context.applicationContext, intent(op).apply(extras))?.extras
+
+    /**
+     * Which of [pkg]'s processes say their module went inert after a hot reload (see
+     * [HotReloadPolicy.ACTION_INERT]). Only an inert generation has a receiver for it, so a
+     * healthy package answers at once with nothing; a package that does not answer in time is
+     * taken as healthy too - this adds to what LSPosed reports, it never takes away.
+     */
+    suspend fun inertIn(context: Context, pkg: String): List<String> {
+        val intent = Intent(HotReloadPolicy.ACTION_INERT).apply {
+            setPackage(pkg)
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        }
+        val reply = broadcast(context.applicationContext, intent, INERT_TIMEOUT_MS) ?: return emptyList()
+        return reply.extras?.getStringArrayList(HotReloadPolicy.KEY_INERT_PROCS).orEmpty()
+    }
+
+    private const val INERT_TIMEOUT_MS = 1500L
 
     private class Reply(val code: Int, val extras: Bundle?, val data: String? = null)
 
@@ -891,7 +923,9 @@ object ModuleBridge {
     }
 
     private fun fromBundle(b: Bundle?): State {
-        if (b == null || !b.getBoolean("alive", false)) return State()
+        if (b == null || !b.getBoolean("alive", false)) {
+            return State(inert = b?.getBoolean("inert", false) == true)
+        }
         return State(
             alive = true,
             cover = b.getBoolean("cover", false),
@@ -1023,8 +1057,10 @@ object ModuleBridge {
     }
 
     /**
-     * Only the targets still on the old build - the set the home page's card counted when it
-     * offered this.
+     * Only the targets still on the old build, or whose hot reload failed - [set], the reading
+     * the home page's card counted when it offered this. A listed process is killed only if the
+     * framework still lists that pid under that name: one that has gone since needs nothing, and
+     * its pid may by now be someone else's.
      *
      * [restartScope] takes everything the module is loaded into and stays for the top bar's own
      * entry, but an update leaves most of those processes already up to date, and killing a
@@ -1037,12 +1073,26 @@ object ModuleBridge {
      * empty stale list is the opposite case: there is nothing left to restart, so it is a
      * success.
      */
-    fun restartStale(): Boolean {
-        val stale = LsposedService.staleTargets() ?: return false
-        if (stale.isEmpty()) return true
+    fun restartStale(set: LsposedService.StaleSet): Boolean {
+        // An inert SystemUI answered the query itself, so it is known without the service and
+        // is counted then; it is killed by name when no pid lists it.
+        val stale = set.targets
+        if (stale == null) {
+            if (!set.sysuiInert) return false
+            restartingSince = SystemClock.elapsedRealtime()
+            return kill(TARGET)
+        }
+        if (stale.isEmpty() && !set.sysuiUnlisted) return true
+        // The service went between the count and the tap: nothing to check the pids against.
+        val running = LsposedService.runningTargets() ?: return false
+        val live = stale.filter { s ->
+            running.any { it.pid == s.pid && it.processName == s.processName }
+        }
         restartingSince = SystemClock.elapsedRealtime()
-        return stale.map { killPid(it.pid) }.all { it }
+        val killed = live.map { killPid(it.pid) }.all { it }
+        return if (set.sysuiUnlisted) kill(TARGET) && killed else killed
     }
+
 
     /** The packages in the APK's own scope.list, one a line; null when it cannot be read. */
     private fun shippedScope(): List<String>? = runCatching {

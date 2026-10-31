@@ -1,5 +1,6 @@
 package com.os4.musiccover.transit
 import com.os4.musiccover.ProbeGuard
+import com.os4.musiccover.Gen
 import com.os4.musiccover.Xp
 import android.content.Intent
 import android.os.Handler
@@ -86,7 +87,7 @@ internal object AmapTransitShare {
     /** 高德's own walking island, posted every second while its walking navigation runs. */
     private const val WALK_ISLAND_STALE_MS = 5_000L
 
-    private val worker: Handler = Handler(HandlerThread("mc-transit").apply { start() }.looper)
+    private val worker: Handler = Handler(Gen.handlerThread("mc-transit").looper)
 
     /** What a line on rails has in its name, where its type does not say so (AmapTransitScene). */
     private val RAIL = arrayOf("号线", "地铁", "城际", "轨道", "铁路", "有轨", "APM", "轻轨", "磁浮", "云巴")
@@ -94,11 +95,11 @@ internal object AmapTransitShare {
     // ------------------------------------------------------------------ what 高德 has sent
 
     /** Whether 高德's trip card channel is open: a navigation is under way. */
-    private var navigating = false
+    @Volatile private var navigating = false
     /** The last plans 高德 sent, newest first; the one that fits the trip's capsules is used. */
     private val plans = ArrayDeque<JSONObject>()
     /** The trip's legs, one capsule each (the latest card's `planData`). */
-    private var capsules: JSONArray? = null
+    @Volatile private var capsules: JSONArray? = null
     /** The latest card with words, and the latest one for each leg. */
     private var card: JSONObject? = null
     private val cardFor = HashMap<Int, JSONObject>()
@@ -124,6 +125,15 @@ internal object AmapTransitShare {
     private var nearLeg = -1
     /** What the ride last said of its stops left, so each change is logged once. */
     private var lastHeard = ""
+    /**
+     * The ride whose card's count of stops left is believed, and the count its first card came
+     * with. A ride's card can come up still holding the leg before's count - a walk's card carries
+     * a `remainStations` too, 1 on 10-05 - and the last ride's next stop was its end until 高德 said
+     * it again (user, 10-27). Believed once 高德's live data is on the ride or the card's count moves.
+     */
+    private var countLeg = -1
+    private var firstCountLeg = -1
+    private var firstCount = -1
 
     /** A trip being played from its own plan (`transit sim`): 高德's own payloads wait meanwhile. */
     @Volatile private var simulating = false
@@ -158,7 +168,7 @@ internal object AmapTransitShare {
             val module = Xp.findClass(WEARABLE, cl)
             for (name in arrayOf("bizBegin", "bizBeginWithData", "bizEnd", "sendMessage")) {
                 try {
-                    Xp.hookAll(module, name) { chain ->
+                    Xp.hookAll("amap.share." + Xp.slug(name), module, name) { chain ->
                         val a = chain.args
                         val biz = a.firstOrNull { it is Int } as Int?
                         val text = a.firstOrNull { it is String } as String?
@@ -267,6 +277,21 @@ internal object AmapTransitShare {
         }
     }
 
+    /**
+     * Why 高德's process may not be hot reloaded now, or null. A trip is not handed over: its
+     * state is this thread's, and the cards after a navigation is left - the end card, the last
+     * walk - go away on timers the retirement's sweep would take, leaving them up for good. So a
+     * trip, or anything SystemUI still shows of one, refuses; the next install after it lands.
+     */
+    @JvmStatic
+    fun busyReason(): String? = when {
+        simulating -> "a simulated trip is playing"
+        navigating -> "a transit navigation is under way"
+        capsules != null -> "a trip is still being followed"
+        lastSent != null -> "a trip card is still up"
+        else -> null
+    }
+
     /** Runs [r] on the trip's own thread. */
     fun post(r: Runnable) {
         worker.post(r)
@@ -355,6 +380,9 @@ internal object AmapTransitShare {
         walkMsg = null
         nearLeg = -1
         lastHeard = ""
+        countLeg = -1
+        firstCountLeg = -1
+        firstCount = -1
     }
 
     // ------------------------------------------------------------------ the trip
@@ -415,6 +443,15 @@ internal object AmapTransitShare {
             val step = milestones.rideStatus(info.remain, at == n - 1, tip == 48, plan != null, now)
             status = step.status
             wake = step.wakeAt
+            // The last ride's end card was set going, and the ride is plainly still under way: two
+            // stops and more left. A wrong count had it read as over, so the end card is let go.
+            if (finalPending() && at == n - 1 && info.remain >= 2 &&
+                status != AmapTransitCard.ARRIVE_LINE_DESTINATION) {
+                worker.removeCallbacks(finalCard)
+                finalAt = 0L
+                finalOnExit = false
+                Xp.log(TAG + "end card let go: ride $at has ${info.remain} stops left")
+            }
         }
         if (wake > now) worker.postDelayed(tick, wake - now)
         // Near the station the card is still the walk's: its 「(E口)」 is the way in, not the ride's exit.
@@ -475,15 +512,27 @@ internal object AmapTransitShare {
         val cardCount = loc?.optInt("remainStations", -1) ?: -1
         val liveCount = where?.optInt("remainStopNum", -1) ?: -1
         val said = Regex("(\\d+)\\s*站").find(AmapTransitEntity.sentence(c))?.groupValues?.get(1)?.toIntOrNull() ?: -1
-        // A bus counts its own stops more finely than the card; a subway's card is its own count.
-        val remain = listOf(if (bus) liveCount else cardCount, cardCount, liveCount, said)
-            .firstOrNull { it >= 0 } ?: 0
         val cur = where?.optString("curStopName").orEmpty().replace(" ", "").trim()
         val seg = plan?.optJSONArray("segmentlist")?.optJSONObject(rideNumber(caps, at))
         val total = (seg?.optJSONArray("via_st_list")?.length() ?: -1) + 1
+        // The card's count believed only once 高德 has shown it is about this ride ([countLeg]).
+        if (firstCountLeg != at) {
+            firstCountLeg = at
+            firstCount = cardCount
+        } else if (cardCount != firstCount) countLeg = at
+        if (where != null) countLeg = at
+        val believed = countLeg == at || total <= 0
+        // A bus counts its own stops more finely than the card; a subway's card is its own count.
+        // Not yet believed, the ride is all ahead of it, as the plan has it.
+        val counted = if (believed) listOf(if (bus) liveCount else cardCount, cardCount, liveCount, said)
+            .firstOrNull { it >= 0 } else total
+        // No count at all: 0 only once the ride has been counted - seen first with none, it is the
+        // plan's whole ride rather than its end.
+        val remain = counted ?: if (milestones.counted || total <= 0) 0 else total
         // Every count 高德 gives, and the one its stop name implies (named), once per change: the
         // island ran a stop ahead early in a subway ride (user, 10-13) - which count moved first.
-        val heard = "card=$cardCount live=$liveCount said=$said cur=$cur named=${byName(seg, cur)}"
+        val heard = "card=$cardCount live=$liveCount said=$said cur=$cur named=${byName(seg, cur)}" +
+            if (believed) "" else " (card not yet believed)"
         if (heard != lastHeard) {
             lastHeard = heard
             Xp.log(TAG + "ride $at/$total: $heard -> $remain")

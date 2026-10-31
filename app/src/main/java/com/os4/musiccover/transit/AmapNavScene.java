@@ -1,5 +1,6 @@
 package com.os4.musiccover.transit;
 import com.os4.musiccover.immersive.LiveAlertScene;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.ProbeGuard;
 import com.os4.musiccover.Xp;
 import android.content.Context;
@@ -61,7 +62,7 @@ public final class AmapNavScene extends LiveAlertScene {
     /** What 高德's page was last told, and when. The page is 高德's; this is only our side. */
     private boolean mSentOverview;
     private long mSentAt;
-    private final Handler mMain = new Handler(Looper.getMainLooper());
+    private final Handler mMain = Gen.handler();
     private final Runnable mFlush = this::flushOverview;
 
     /**

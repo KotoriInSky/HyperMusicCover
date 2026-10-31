@@ -1,4 +1,5 @@
 package com.os4.musiccover.immersive;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Main;
 import com.os4.musiccover.PageSpring;
 import com.os4.musiccover.Xp;
@@ -438,7 +439,7 @@ public class LiveAlertScene implements ImmersiveScene {
     }
 
     /** The app's replies, on the main thread like the plugin's MsgReceiver. */
-    private final Messenger mReplyTo = new Messenger(new Handler(Looper.getMainLooper()) {
+    private final Messenger mReplyTo = new Messenger(Gen.watchHandler(new Handler(Looper.getMainLooper()) {
         @Override
         public void handleMessage(Message msg) {
             mReplies++;
@@ -467,7 +468,7 @@ public class LiveAlertScene implements ImmersiveScene {
             onPage();
             if (first) ImmersiveHost.contentChanged(LiveAlertScene.this);
         }
-    });
+    }));
 
     /** A page came back (21): the first, or a new one after the app re-rendered. */
     protected void onPage() {

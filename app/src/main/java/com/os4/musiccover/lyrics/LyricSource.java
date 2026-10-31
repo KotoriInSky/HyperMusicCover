@@ -1,5 +1,6 @@
 package com.os4.musiccover.lyrics;
 import com.os4.musiccover.Main;
+import com.os4.musiccover.Gen;
 import com.os4.musiccover.Xp;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
@@ -711,15 +712,8 @@ public final class LyricSource {
      * MIRRORS.length so that adding a mirror widens the pool with it instead of quietly
      * recreating the jam.
      */
-    private static final ExecutorService POOL = Executors.newFixedThreadPool(MIRRORS.length * 3,
-            new ThreadFactory() {
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, "MCLyricFetch");
-                    t.setDaemon(true);
-                    return t;
-                }
-            });
+    private static final ExecutorService POOL = Gen.executor("MCLyricFetch",
+            MIRRORS.length * 3, Thread.NORM_PRIORITY, true);
 
     /**
      * Which lookup is the live one. Only ever the newest.
@@ -895,7 +889,7 @@ public final class LyricSource {
                     "nothing to read from " + pkg, SRC_NONE);
             return;
         }
-        new Thread(new Runnable() {
+        Gen.thread("MCLyricSource", new Runnable() {
             @Override
             public void run() {
                 Rows r = new Rows();
@@ -966,7 +960,7 @@ public final class LyricSource {
                     Xp.w("[MCLyric] borrowing a translation failed: " + t);
                 }
             }
-        }, "MCLyricSource").start();
+        });
     }
 
     /**
@@ -1088,7 +1082,7 @@ public final class LyricSource {
         final BlockingQueue<Integer> done = new LinkedBlockingQueue<>();
         for (int i = 0; i < lenders.size(); i++) {
             final int slot = i;
-            new Thread(new Runnable() {
+            Gen.thread("MCLyricLend", new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -1097,7 +1091,7 @@ public final class LyricSource {
                         done.offer(slot);
                     }
                 }
-            }, "MCLyricLend").start();
+            }, () -> done.offer(slot));
         }
         boolean[] finished = new boolean[lenders.size()];
         int next = 0;
@@ -1244,7 +1238,7 @@ public final class LyricSource {
         int pending = 0;
         if (id != null) {
             pending++;
-            new Thread(new Runnable() {
+            Gen.thread("MCLyricDb", new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -1253,12 +1247,12 @@ public final class LyricSource {
                         done.offer(1);
                     }
                 }
-            }, "MCLyricDb").start();
+            }, () -> done.offer(1));
         }
         // The TTML Hub beside the database: the same kind of file, keyed by the same ids.
         if (id != null && TtmlHub.kindOf(dir) != null) {
             pending++;
-            new Thread(new Runnable() {
+            Gen.thread("MCLyricHub", new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -1267,11 +1261,11 @@ public final class LyricSource {
                         done.offer(3);
                     }
                 }
-            }, "MCLyricHub").start();
+            }, () -> done.offer(3));
         }
         if (q != null) {
             pending++;
-            new Thread(new Runnable() {
+            Gen.thread("MCLyricNcm", new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -1280,7 +1274,7 @@ public final class LyricSource {
                         done.offer(2);
                     }
                 }
-            }, "MCLyricNcm").start();
+            }, () -> done.offer(2));
         }
         boolean haveNcm = false;
         long deadline = android.os.SystemClock.uptimeMillis() + RACE_BUDGET_MS;
@@ -1617,7 +1611,7 @@ public final class LyricSource {
     private static void load(final String id, final String dir, final String who,
                              final Callback cb) {
         final int gen = ++sLoadGen;
-        new Thread(new Runnable() {
+        Gen.thread("MCLyricSource", new Runnable() {
             @Override
             public void run() {
                 Rows r = new Rows();
@@ -1625,7 +1619,7 @@ public final class LyricSource {
                 Xp.log("[MCLyric] " + who + " id=" + id + " -> " + r.why);
                 onMain(cb, r.lines, r.why, r.source);
             }
-        }, "MCLyricSource").start();
+        });
     }
 
     private static void onMain(final Callback cb, final List<LyricLine> lines,

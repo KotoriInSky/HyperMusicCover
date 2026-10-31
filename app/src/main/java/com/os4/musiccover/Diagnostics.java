@@ -1,4 +1,5 @@
 package com.os4.musiccover;
+import com.os4.musiccover.Gen;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
@@ -26,7 +27,7 @@ import java.lang.reflect.Method;
  * ink reports, the geometry and transition traces, the AOD probe, the frame census and the
  * looper/queue dumps. Read-only by intent - nothing here is on the path of drawing the cover.
  *
- * The op dispatch that calls into it is still Main.registerReceiver.
+ * The op dispatch that calls into it is still Main.boot.
  *
  * Carved out of Main as it was (2026-10-14, after PreviewShots): every member moved whole with
  * its comments, references across the line prefixed with Main. or Diagnostics., nothing else
@@ -187,7 +188,7 @@ final class Diagnostics {
     static void dumpGeom() {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "geom: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 try {
@@ -263,7 +264,7 @@ final class Diagnostics {
         View v = Main.sContainer;
         if (v != null) {
             try {
-                v.getViewTreeObserver().addOnPreDrawListener(sGeomTraceL);
+                Gen.preDraw(v, sGeomTraceL);
                 sGeomTraced = v;
             } catch (Throwable t) {
                 Xp.log(Main.TAG + "geomtrace not installed: " + t);
@@ -277,7 +278,7 @@ final class Diagnostics {
         sGeomTraced = null;
         if (v == null) return;
         try {
-            v.getViewTreeObserver().removeOnPreDrawListener(sGeomTraceL);
+            Gen.unpreDraw(v, sGeomTraceL);
         } catch (Throwable ignored) {
         }
     }
@@ -393,7 +394,7 @@ final class Diagnostics {
     static void dumpInk() {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "ink: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 for (View root : Main.clockRoots()) {
@@ -493,7 +494,7 @@ final class Diagnostics {
     static void pokeGlassData(final int idx, final float value) {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "no clock container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 for (View root : Main.clockRoots()) {
@@ -604,7 +605,7 @@ final class Diagnostics {
                 return true;
             }
         };
-        root.getViewTreeObserver().addOnPreDrawListener(sTrace);
+        Gen.preDraw(root, sTrace);
     }
 
     /**
@@ -668,7 +669,7 @@ final class Diagnostics {
         sTrace = null;
         if (on == null || t == null) return;
         try {
-            on.getViewTreeObserver().removeOnPreDrawListener(t);
+            Gen.unpreDraw(on, t);
         } catch (Throwable ignored) {
         }
     }
@@ -746,7 +747,7 @@ final class Diagnostics {
     static void dumpClockViewTypes() {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "viewtypes: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 Class<?> cvt;
@@ -1427,7 +1428,7 @@ final class Diagnostics {
     static void dumpOemTranslation(final float y) {
         final View v = Main.sContainer;
         if (v == null) { Xp.log(Main.TAG + "oemtrans: no container"); return; }
-        v.post(new Runnable() {
+        Gen.postOn(v, new Runnable() {
             @Override
             public void run() {
                 Object helper = null, anim = null, tr = null;
